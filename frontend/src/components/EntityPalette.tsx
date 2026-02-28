@@ -1,0 +1,130 @@
+import { useState, useMemo } from "react";
+import type { LucideProps } from "lucide-react";
+import {
+  User, Globe, Server, Mail, Phone, Building2, Link, AtSign,
+  Hash, FileText, MapPin, Network, Wifi, Search
+} from "lucide-react";
+import { EntityType, ENTITY_TYPE_META } from "../types/entity";
+import type { EntityTypeMeta } from "../types/entity";
+import { api } from "../api/client";
+import { useProjectStore } from "../stores/projectStore";
+import { useGraphStore } from "../stores/graphStore";
+
+const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
+  user: User,
+  globe: Globe,
+  server: Server,
+  mail: Mail,
+  phone: Phone,
+  building: Building2,
+  link: Link,
+  "at-sign": AtSign,
+  hash: Hash,
+  "file-text": FileText,
+  "map-pin": MapPin,
+  network: Network,
+  wifi: Wifi,
+};
+
+export function EntityPalette() {
+  const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState<EntityType | null>(null);
+  const [value, setValue] = useState("");
+  const { currentProject } = useProjectStore();
+  const { addEntity } = useGraphStore();
+
+  const groupedTypes = useMemo(() => {
+    const groups: Record<string, EntityTypeMeta[]> = {};
+    for (const meta of Object.values(ENTITY_TYPE_META)) {
+      if (search && !meta.type.toLowerCase().includes(search.toLowerCase())) continue;
+      if (!groups[meta.category]) groups[meta.category] = [];
+      groups[meta.category].push(meta);
+    }
+    return groups;
+  }, [search]);
+
+  const handleAdd = async () => {
+    if (!adding || !value.trim() || !currentProject) return;
+    try {
+      const entity = await api.entities.create(currentProject.id, {
+        type: adding,
+        value: value.trim(),
+      });
+      addEntity(currentProject.id, entity);
+      setAdding(null);
+      setValue("");
+    } catch (e) {
+      console.error("Failed to add entity:", e);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-3 border-b border-border">
+        <h2 className="text-sm font-semibold text-text mb-2">Entities</h2>
+        <div className="relative">
+          <Search size={14} className="absolute left-2 top-2.5 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Search types..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-7 pr-2 py-1.5 text-sm bg-surface border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-accent"
+          />
+        </div>
+      </div>
+
+      {adding && (
+        <div className="p-3 border-b border-border bg-surface">
+          <p className="text-xs text-text-muted mb-1.5">Add {adding}</p>
+          <input
+            type="text"
+            placeholder="Enter value..."
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            autoFocus
+            className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-accent mb-2"
+          />
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleAdd}
+              className="flex-1 px-2 py-1 text-xs bg-accent text-white rounded hover:bg-accent-hover"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => { setAdding(null); setValue(""); }}
+              className="flex-1 px-2 py-1 text-xs bg-surface border border-border text-text-muted rounded hover:bg-surface-hover"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {Object.entries(groupedTypes).map(([category, types]) => (
+          <div key={category} className="mb-3">
+            <p className="text-[10px] uppercase tracking-wider text-text-muted px-1 mb-1">
+              {category}
+            </p>
+            {types.map((meta) => {
+              const IconComponent = ICON_MAP[meta.icon] ?? Hash;
+              return (
+                <button
+                  key={meta.type}
+                  onClick={() => setAdding(meta.type)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text hover:bg-surface-hover transition-colors"
+                >
+                  <IconComponent size={14} className="shrink-0" style={{ color: meta.color }} />
+                  <span>{meta.type}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
