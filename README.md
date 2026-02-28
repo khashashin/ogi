@@ -1,6 +1,8 @@
 # OGI — OpenGraph Intel
 
-An open source visual link analysis and OSINT framework. An alternative to Maltego.
+An open source visual link analysis and OSINT framework.
+
+![alt text](docs/images/image.png)
 
 ## Architecture
 
