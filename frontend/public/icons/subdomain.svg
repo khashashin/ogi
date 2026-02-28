@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="82 42 286 336" width="286" height="336">
+  <g fill="none" stroke="black" stroke-width="8">
+
+    <!-- Large Globe -->
+    <circle cx="180" cy="140" r="90"/>
+    <ellipse cx="180" cy="140" rx="40" ry="90"/>
+    <line x1="90" y1="140" x2="270" y2="140"/>
+    <ellipse cx="180" cy="140" rx="90" ry="40"/>
+
+    <!-- L Shape -->
+    <line x1="180" y1="230" x2="180" y2="310" stroke-linecap="round"/>
+    <line x1="180" y1="310" x2="250" y2="310" stroke-linecap="round"/>
+
+    <!-- Small Globe -->
+    <circle cx="300" cy="310" r="60"/>
+    <ellipse cx="300" cy="310" rx="25" ry="60"/>
+    <line x1="240" y1="310" x2="360" y2="310"/>
+    <ellipse cx="300" cy="310" rx="60" ry="25"/>
+
+  </g>
+</svg>

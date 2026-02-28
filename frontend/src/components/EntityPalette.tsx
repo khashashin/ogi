@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   User, Globe, Server, Mail, Phone, Building2, Link, AtSign,
-  Hash, FileText, MapPin, Network, Wifi, Search
+  Hash, FileText, MapPin, Network, Wifi, Search, Mailbox,
+  HardDrive, Shield, FileCode
 } from "lucide-react";
 import { EntityType, ENTITY_TYPE_META } from "../types/entity";
 import type { EntityTypeMeta } from "../types/entity";
@@ -21,10 +22,17 @@ const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
   "at-sign": AtSign,
   hash: Hash,
   "file-text": FileText,
+  "file-code": FileCode,
   "map-pin": MapPin,
   network: Network,
   wifi: Wifi,
+  mailbox: Mailbox,
+  "hard-drive": HardDrive,
+  shield: Shield,
 };
+
+/** Custom SVG icons served from /icons/ */
+const CUSTOM_SVG_ICONS = new Set(["subdomain", "nsrecord"]);
 
 export function EntityPalette() {
   const [search, setSearch] = useState("");
@@ -110,6 +118,7 @@ export function EntityPalette() {
               {category}
             </p>
             {types.map((meta) => {
+              const isCustomSvg = CUSTOM_SVG_ICONS.has(meta.icon);
               const IconComponent = ICON_MAP[meta.icon] ?? Hash;
               return (
                 <button
@@ -117,7 +126,17 @@ export function EntityPalette() {
                   onClick={() => setAdding(meta.type)}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text hover:bg-surface-hover transition-colors"
                 >
-                  <IconComponent size={14} className="shrink-0" style={{ color: meta.color }} />
+                  {isCustomSvg ? (
+                    <img
+                      src={`/icons/${meta.icon}.svg`}
+                      alt={meta.type}
+                      width={14}
+                      height={14}
+                      className="shrink-0 invert"
+                    />
+                  ) : (
+                    <IconComponent size={14} className="shrink-0" style={{ color: meta.color }} />
+                  )}
                   <span>{meta.type}</span>
                 </button>
               );

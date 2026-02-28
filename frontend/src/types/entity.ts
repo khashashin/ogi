@@ -43,11 +43,11 @@ export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.Location]: { type: EntityType.Location, icon: "map-pin", color: "#4ade80", category: "Location" },
   [EntityType.ASNumber]: { type: EntityType.ASNumber, icon: "network", color: "#fbbf24", category: "Infrastructure" },
   [EntityType.Network]: { type: EntityType.Network, icon: "wifi", color: "#38bdf8", category: "Infrastructure" },
-  [EntityType.MXRecord]: { type: EntityType.MXRecord, icon: "mail", color: "#c084fc", category: "Infrastructure" },
-  [EntityType.NSRecord]: { type: EntityType.NSRecord, icon: "server", color: "#67e8f9", category: "Infrastructure" },
-  [EntityType.Nameserver]: { type: EntityType.Nameserver, icon: "server", color: "#2dd4bf", category: "Infrastructure" },
+  [EntityType.MXRecord]: { type: EntityType.MXRecord, icon: "mailbox", color: "#c084fc", category: "Infrastructure" },
+  [EntityType.NSRecord]: { type: EntityType.NSRecord, icon: "nsrecord", color: "#67e8f9", category: "Infrastructure" },
+  [EntityType.Nameserver]: { type: EntityType.Nameserver, icon: "hard-drive", color: "#2dd4bf", category: "Infrastructure" },
   [EntityType.SSLCertificate]: { type: EntityType.SSLCertificate, icon: "shield", color: "#10b981", category: "Infrastructure" },
-  [EntityType.Subdomain]: { type: EntityType.Subdomain, icon: "globe", color: "#06b6d4", category: "Infrastructure" },
+  [EntityType.Subdomain]: { type: EntityType.Subdomain, icon: "subdomain", color: "#06b6d4", category: "Infrastructure" },
   [EntityType.HTTPHeader]: { type: EntityType.HTTPHeader, icon: "file-code", color: "#8b5cf6", category: "Forensics" },
 };
 
