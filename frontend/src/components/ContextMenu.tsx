@@ -203,7 +203,7 @@ export function ContextMenu() {
                     {runningTransform === t.name ? (
                       <Loader2 size={12} className="animate-spin text-accent" />
                     ) : (
-                      <Play size={12} className="text-accent" />
+                      <Play size={12} className="text-accent shrink-0" />
                     )}
                     {t.display_name}
                   </button>
@@ -213,7 +213,7 @@ export function ContextMenu() {
                   onClick={() => setShowTransforms(true)}
                   className={itemClass}
                 >
-                  <Play size={12} className="text-accent" />
+                  <Play size={12} className="text-accent shrink-0" />
                   Run Transform...
                 </button>
               )}
