@@ -12,6 +12,7 @@ class GraphEngine:
         self._edges: dict[UUID, Edge] = {}
         self._adjacency: dict[UUID, set[UUID]] = {}  # entity_id -> set of edge_ids
         self._neighbors: dict[UUID, set[UUID]] = {}  # entity_id -> set of neighbor entity_ids
+        self._hydrated: bool = False
 
     @property
     def entities(self) -> dict[UUID, Entity]:
