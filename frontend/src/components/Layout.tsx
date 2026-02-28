@@ -4,8 +4,12 @@ import { EntityPalette } from "./EntityPalette";
 import { EntityInspector } from "./EntityInspector";
 import { TransformPanel } from "./TransformPanel";
 import { Toolbar } from "./Toolbar";
+import { ContextMenu } from "./ContextMenu";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 export function Layout() {
+  useKeyboardShortcuts();
+
   return (
     <div className="flex flex-col h-screen w-screen bg-bg">
       <Toolbar />
@@ -45,6 +49,8 @@ export function Layout() {
           </div>
         </Panel>
       </Group>
+
+      <ContextMenu />
     </div>
   );
 }

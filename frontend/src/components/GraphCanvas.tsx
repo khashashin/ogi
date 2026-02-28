@@ -2,11 +2,23 @@ import { useEffect, useRef, useCallback } from "react";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { useGraphStore } from "../stores/graphStore";
+import { useProjectStore } from "../stores/projectStore";
+import { setSigmaRef } from "../stores/sigmaRef";
 
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectedNodeId } = useGraphStore();
+  const { graph, selectNode, selectEdge, selectedNodeId, persistPositions } = useGraphStore();
+  const { currentProject } = useProjectStore();
+
+  // Drag state refs (avoid re-renders during drag)
+  const dragStateRef = useRef<{
+    dragging: boolean;
+    draggedNode: string | null;
+    startX: number;
+    startY: number;
+    hasMoved: boolean;
+  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false });
 
   const initSigma = useCallback(() => {
     if (!containerRef.current) return;
@@ -25,14 +37,98 @@ export function GraphCanvas() {
       labelColor: { color: "#e1e4ed" },
       labelSize: 12,
       labelRenderedSizeThreshold: 6,
+      enableEdgeEvents: true,
     });
 
+    // --- Node click ---
     renderer.on("clickNode", ({ node }) => {
+      const ds = dragStateRef.current;
+      // Don't fire click if we just finished dragging
+      if (ds.hasMoved) return;
       selectNode(node);
+    });
+
+    // --- Edge click ---
+    renderer.on("clickEdge", ({ edge }) => {
+      selectEdge(edge);
     });
 
     renderer.on("clickStage", () => {
       selectNode(null);
+    });
+
+    // --- Node dragging ---
+    renderer.on("downNode", ({ node, event }) => {
+      const ds = dragStateRef.current;
+      ds.dragging = true;
+      ds.draggedNode = node;
+      ds.hasMoved = false;
+      ds.startX = event.x;
+      ds.startY = event.y;
+
+      // Disable camera on drag
+      renderer.getCamera().disable();
+    });
+
+    renderer.getMouseCaptor().on("mousemovebody", (event: { x: number; y: number }) => {
+      const ds = dragStateRef.current;
+      if (!ds.dragging || !ds.draggedNode) return;
+
+      // Check if user has moved enough to count as drag
+      const dx = event.x - ds.startX;
+      const dy = event.y - ds.startY;
+      if (!ds.hasMoved && Math.sqrt(dx * dx + dy * dy) > 3) {
+        ds.hasMoved = true;
+      }
+
+      // Convert viewport coords to graph coords
+      const pos = renderer.viewportToGraph(event);
+      graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
+      graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
+    });
+
+    renderer.getMouseCaptor().on("mouseup", () => {
+      const ds = dragStateRef.current;
+      if (ds.dragging && ds.hasMoved && currentProject) {
+        // Persist new position
+        persistPositions(currentProject.id);
+      }
+      ds.dragging = false;
+      ds.draggedNode = null;
+
+      // Re-enable camera
+      renderer.getCamera().enable();
+    });
+
+    // --- Right-click: emit custom event for context menu ---
+    renderer.on("rightClickNode", ({ node, event }) => {
+      event.original.preventDefault();
+      const domEvent = event.original as MouseEvent;
+      window.dispatchEvent(
+        new CustomEvent("ogi-context-menu", {
+          detail: { type: "node", id: node, x: domEvent.clientX, y: domEvent.clientY },
+        })
+      );
+    });
+
+    renderer.on("rightClickEdge", ({ edge, event }) => {
+      event.original.preventDefault();
+      const domEvent = event.original as MouseEvent;
+      window.dispatchEvent(
+        new CustomEvent("ogi-context-menu", {
+          detail: { type: "edge", id: edge, x: domEvent.clientX, y: domEvent.clientY },
+        })
+      );
+    });
+
+    renderer.on("rightClickStage", ({ event }) => {
+      event.original.preventDefault();
+      const domEvent = event.original as MouseEvent;
+      window.dispatchEvent(
+        new CustomEvent("ogi-context-menu", {
+          detail: { type: "stage", id: null, x: domEvent.clientX, y: domEvent.clientY },
+        })
+      );
     });
 
     sigmaRef.current = renderer;
@@ -48,7 +144,7 @@ export function GraphCanvas() {
         },
       });
     }
-  }, [graph, selectNode]);
+  }, [graph, selectNode, selectEdge, currentProject, persistPositions]);
 
   useEffect(() => {
     initSigma();
@@ -93,6 +189,12 @@ export function GraphCanvas() {
 
     renderer.refresh();
   }, [selectedNodeId, graph]);
+
+  // Expose sigma ref for zoom controls and context menu
+  useEffect(() => {
+    setSigmaRef(sigmaRef.current);
+    return () => setSigmaRef(null);
+  });
 
   return (
     <div

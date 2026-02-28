@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2 } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus } from "lucide-react";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
+import { getSigmaRef } from "../stores/sigmaRef";
 
 export function Toolbar() {
   const { currentProject, projects, selectProject, createProject } = useProjectStore();
-  const { graph, loadGraph, persistPositions } = useGraphStore();
+  const { graph, loadGraph, entities, edges, persistPositions } = useGraphStore();
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
@@ -43,6 +44,10 @@ export function Toolbar() {
     circular.assign(graph);
     if (currentProject) persistPositions(currentProject.id);
   };
+
+  const handleZoomIn = () => getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
+  const handleZoomOut = () => getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
+  const handleFit = () => getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
 
   return (
     <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
@@ -109,6 +114,38 @@ export function Toolbar() {
       )}
 
       <div className="flex-1" />
+
+      {/* Graph stats */}
+      <span className="text-[10px] text-text-muted">
+        {entities.size} entities, {edges.size} edges
+      </span>
+
+      <div className="w-px h-4 bg-border" />
+
+      {/* Zoom controls */}
+      <button
+        onClick={handleZoomIn}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+        title="Zoom in (+)"
+      >
+        <ZoomIn size={14} />
+      </button>
+      <button
+        onClick={handleZoomOut}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+        title="Zoom out (-)"
+      >
+        <ZoomOut size={14} />
+      </button>
+      <button
+        onClick={handleFit}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+        title="Fit to screen (0)"
+      >
+        <Focus size={14} />
+      </button>
+
+      <div className="w-px h-4 bg-border" />
 
       {/* Layout controls */}
       <button
