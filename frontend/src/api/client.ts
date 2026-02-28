@@ -4,6 +4,19 @@ import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
 
+interface GraphStats {
+  entity_count: number;
+  edge_count: number;
+  density: number;
+  avg_degree: number;
+  connected_components: number;
+}
+
+interface AnalysisResult {
+  scores?: Record<string, number>;
+  communities?: string[][];
+}
+
 interface ImportSummary {
   entities_added: number;
   entities_merged: number;
@@ -88,6 +101,13 @@ export const api = {
       request<GraphData>(`/projects/${projectId}/graph`),
     neighbors: (projectId: string, entityId: string) =>
       request<GraphData>(`/projects/${projectId}/graph/neighbors/${entityId}`),
+    stats: (projectId: string) =>
+      request<GraphStats>(`/projects/${projectId}/graph/stats`),
+    analyze: (projectId: string, algorithm: string) =>
+      request<AnalysisResult>(`/projects/${projectId}/graph/analyze`, {
+        method: "POST",
+        body: JSON.stringify({ algorithm }),
+      }),
   },
 
   export: {
