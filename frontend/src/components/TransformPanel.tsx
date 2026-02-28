@@ -42,7 +42,7 @@ export function TransformPanel() {
   if (!entity) {
     return (
       <div className="flex items-center justify-center h-full p-4">
-        <p className="text-xs text-text-muted">Select an entity to run transforms</p>
+        <p className="text-xs text-text-muted">Select an entity to run transforms and see output</p>
       </div>
     );
   }
@@ -51,8 +51,9 @@ export function TransformPanel() {
     <div className="flex h-full">
       <div className="w-64 border-r border-border overflow-y-auto">
         <div className="p-2 border-b border-border">
-          <p className="text-xs text-text-muted">
-            Transforms for <span className="text-text">{entity.value}</span>
+          <p className="text-xs font-semibold text-text-muted">Run Transform</p>
+          <p className="text-[10px] text-text-muted mt-0.5">
+            on <span className="text-text">{entity.value}</span>
           </p>
         </div>
         {transforms.length === 0 ? (
@@ -84,8 +85,9 @@ export function TransformPanel() {
         {lastRun ? (
           <TransformResults run={lastRun} />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-xs text-text-muted">Run a transform to see results</p>
+          <div className="flex flex-col items-center justify-center h-full gap-1">
+            <p className="text-xs font-semibold text-text-muted">Output</p>
+            <p className="text-[10px] text-text-muted">Run a transform to see discovered entities and connections</p>
           </div>
         )}
       </div>

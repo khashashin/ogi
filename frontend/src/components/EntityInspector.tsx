@@ -139,10 +139,10 @@ export function EntityInspector() {
         </div>
       )}
 
-      {/* Transforms */}
+      {/* Actions — quick-launch transforms for this entity */}
       {transforms.length > 0 && (
         <div className="p-3">
-          <h3 className="text-xs font-semibold text-text-muted mb-2">Transforms</h3>
+          <h3 className="text-xs font-semibold text-text-muted mb-2">Actions</h3>
           <div className="space-y-1">
             {transforms.map((t) => (
               <button
