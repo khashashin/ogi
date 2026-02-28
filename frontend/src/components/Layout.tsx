@@ -5,6 +5,7 @@ import { EntityInspector } from "./EntityInspector";
 import { TransformPanel } from "./TransformPanel";
 import { Toolbar } from "./Toolbar";
 import { ContextMenu } from "./ContextMenu";
+import { SearchBar } from "./SearchBar";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 export function Layout() {
@@ -27,7 +28,10 @@ export function Layout() {
         <Panel defaultSize={65} minSize={30}>
           <Group orientation="vertical">
             <Panel defaultSize={70} minSize={30}>
-              <GraphCanvas />
+              <div className="relative w-full h-full">
+                <GraphCanvas />
+                <SearchBar />
+              </div>
             </Panel>
 
             <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />

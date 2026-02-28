@@ -15,6 +15,9 @@ export const EntityType = {
   MXRecord: "MXRecord",
   NSRecord: "NSRecord",
   Nameserver: "Nameserver",
+  SSLCertificate: "SSLCertificate",
+  Subdomain: "Subdomain",
+  HTTPHeader: "HTTPHeader",
 } as const;
 
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
@@ -43,6 +46,9 @@ export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.MXRecord]: { type: EntityType.MXRecord, icon: "mail", color: "#c084fc", category: "Infrastructure" },
   [EntityType.NSRecord]: { type: EntityType.NSRecord, icon: "server", color: "#67e8f9", category: "Infrastructure" },
   [EntityType.Nameserver]: { type: EntityType.Nameserver, icon: "server", color: "#2dd4bf", category: "Infrastructure" },
+  [EntityType.SSLCertificate]: { type: EntityType.SSLCertificate, icon: "shield", color: "#10b981", category: "Infrastructure" },
+  [EntityType.Subdomain]: { type: EntityType.Subdomain, icon: "globe", color: "#06b6d4", category: "Infrastructure" },
+  [EntityType.HTTPHeader]: { type: EntityType.HTTPHeader, icon: "file-code", color: "#8b5cf6", category: "Forensics" },
 };
 
 export interface Entity {

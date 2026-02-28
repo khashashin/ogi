@@ -22,6 +22,9 @@ class EntityType(str, Enum):
     MX_RECORD = "MXRecord"
     NS_RECORD = "NSRecord"
     NAMESERVER = "Nameserver"
+    SSL_CERTIFICATE = "SSLCertificate"
+    SUBDOMAIN = "Subdomain"
+    HTTP_HEADER = "HTTPHeader"
 
 
 ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
@@ -41,6 +44,9 @@ ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
     EntityType.MX_RECORD: {"icon": "mail", "color": "#c084fc", "category": "Infrastructure"},
     EntityType.NS_RECORD: {"icon": "server", "color": "#67e8f9", "category": "Infrastructure"},
     EntityType.NAMESERVER: {"icon": "server", "color": "#2dd4bf", "category": "Infrastructure"},
+    EntityType.SSL_CERTIFICATE: {"icon": "shield", "color": "#10b981", "category": "Infrastructure"},
+    EntityType.SUBDOMAIN: {"icon": "globe", "color": "#06b6d4", "category": "Infrastructure"},
+    EntityType.HTTP_HEADER: {"icon": "file-code", "color": "#8b5cf6", "category": "Forensics"},
 }
 
 

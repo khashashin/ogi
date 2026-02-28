@@ -20,7 +20,7 @@ def test_auto_discover(engine: TransformEngine):
     assert "domain_to_ns" in names
     assert "ip_to_domain" in names
     assert "whois_lookup" in names
-    assert len(transforms) == 5
+    assert len(transforms) == 15
 
 
 def test_list_for_entity(engine: TransformEngine):

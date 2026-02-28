@@ -77,7 +77,7 @@ async def test_list_transforms(client: AsyncClient):
     resp = await client.get("/api/v1/transforms")
     assert resp.status_code == 200
     transforms = resp.json()
-    assert len(transforms) == 5
+    assert len(transforms) == 15
     names = [t["name"] for t in transforms]
     assert "domain_to_ip" in names
 
@@ -87,4 +87,4 @@ async def test_list_entity_types(client: AsyncClient):
     resp = await client.get("/api/v1/transforms/entity-types")
     assert resp.status_code == 200
     types = resp.json()
-    assert len(types) == 16
+    assert len(types) == 19
