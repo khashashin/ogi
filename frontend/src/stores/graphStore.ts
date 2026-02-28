@@ -5,6 +5,29 @@ import type { Edge } from "../types/edge";
 import { ENTITY_TYPE_META } from "../types/entity";
 import { api } from "../api/client";
 
+interface NodePositions {
+  [nodeId: string]: { x: number; y: number };
+}
+
+function loadPositions(projectId: string): NodePositions {
+  try {
+    const raw = localStorage.getItem(`ogi-positions-${projectId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePositions(projectId: string, graph: Graph): void {
+  const positions: NodePositions = {};
+  graph.forEachNode((node, attrs) => {
+    if (typeof attrs.x === "number" && typeof attrs.y === "number") {
+      positions[node] = { x: attrs.x, y: attrs.y };
+    }
+  });
+  localStorage.setItem(`ogi-positions-${projectId}`, JSON.stringify(positions));
+}
+
 interface GraphState {
   graph: Graph;
   selectedNodeId: string | null;
@@ -22,6 +45,7 @@ interface GraphState {
   selectNode: (nodeId: string | null) => void;
   selectEdge: (edgeId: string | null) => void;
   clearGraph: () => void;
+  persistPositions: (projectId: string) => void;
 }
 
 function createGraph(): Graph {
@@ -44,13 +68,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const graph = createGraph();
       const entities = new Map<string, Entity>();
       const edges = new Map<string, Edge>();
+      const savedPositions = loadPositions(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
+        const pos = savedPositions[entity.id];
         graph.addNode(entity.id, {
           label: entity.value,
-          x: Math.random() * 800,
-          y: Math.random() * 600,
+          x: pos?.x ?? Math.random() * 800,
+          y: pos?.y ?? Math.random() * 600,
           size: 8 + entity.weight * 2,
           color: meta?.color ?? "#6366f1",
           type: "circle",
@@ -146,4 +172,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       entities: new Map(),
       edges: new Map(),
     }),
+
+  persistPositions: (projectId) => {
+    const { graph } = get();
+    savePositions(projectId, graph);
+  },
 }));

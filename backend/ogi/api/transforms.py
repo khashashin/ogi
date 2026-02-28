@@ -11,6 +11,7 @@ from ogi.api.dependencies import (
     get_entity_registry,
     get_edge_store,
     get_graph_engine,
+    get_transform_run_store,
 )
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
@@ -110,13 +111,28 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
             if e.source_id == entity.id or e.target_id == entity.id
         ][-len(run.result.edges):]  # return only the recently added edges
 
+    # Persist the run
+    run_store = get_transform_run_store()
+    await run_store.save(run)
+
     return run
 
 
 @router.get("/runs/{run_id}", response_model=TransformRun)
 async def get_run(run_id: UUID) -> TransformRun:
+    # Try in-memory first, then DB
     engine = get_transform_engine()
     run = engine.get_run(run_id)
+    if run is not None:
+        return run
+    run_store = get_transform_run_store()
+    run = await run_store.get(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Transform run not found")
     return run
+
+
+@router.get("/project/{project_id}/runs", response_model=list[TransformRun])
+async def list_project_runs(project_id: UUID) -> list[TransformRun]:
+    run_store = get_transform_run_store()
+    return await run_store.list_by_project(project_id)

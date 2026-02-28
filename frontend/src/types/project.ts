@@ -10,3 +10,8 @@ export interface ProjectCreate {
   name: string;
   description?: string;
 }
+
+export interface ProjectUpdate {
+  name?: string;
+  description?: string;
+}

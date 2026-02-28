@@ -20,3 +20,9 @@ export interface EdgeCreate {
   bidirectional?: boolean;
   source_transform?: string;
 }
+
+export interface EdgeUpdate {
+  label?: string;
+  weight?: number;
+  properties?: Record<string, string | number | boolean | null>;
+}

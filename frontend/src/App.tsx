@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Toaster } from "sonner";
 import { Layout } from "./components/Layout";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
@@ -17,7 +18,22 @@ function App() {
     }
   }, [currentProject, loadGraph]);
 
-  return <Layout />;
+  return (
+    <>
+      <Layout />
+      <Toaster
+        theme="dark"
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: "#1e1e2e",
+            border: "1px solid #313244",
+            color: "#cdd6f4",
+          },
+        }}
+      />
+    </>
+  );
 }
 
 export default App;

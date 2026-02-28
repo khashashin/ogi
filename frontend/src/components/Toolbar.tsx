@@ -7,7 +7,7 @@ import { useGraphStore } from "../stores/graphStore";
 
 export function Toolbar() {
   const { currentProject, projects, selectProject, createProject } = useProjectStore();
-  const { graph, loadGraph } = useGraphStore();
+  const { graph, loadGraph, persistPositions } = useGraphStore();
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
@@ -35,11 +35,13 @@ export function Toolbar() {
         barnesHutOptimize: graph.order > 50,
       },
     });
+    if (currentProject) persistPositions(currentProject.id);
   };
 
   const runCircularLayout = () => {
     if (graph.order < 2) return;
     circular.assign(graph);
+    if (currentProject) persistPositions(currentProject.id);
   };
 
   return (

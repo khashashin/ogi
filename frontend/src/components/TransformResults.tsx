@@ -1,28 +1,17 @@
-import { CheckCircle2, XCircle, AlertCircle, PlusCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import type { TransformRun } from "../types/transform";
 import { ENTITY_TYPE_META } from "../types/entity";
-import { useGraphStore } from "../stores/graphStore";
-import { useProjectStore } from "../stores/projectStore";
 
 interface TransformResultsProps {
   run: TransformRun;
 }
 
 export function TransformResults({ run }: TransformResultsProps) {
-  const { loadGraph } = useGraphStore();
-  const { currentProject } = useProjectStore();
-
   const statusIcon = {
     completed: <CheckCircle2 size={14} className="text-success" />,
     failed: <XCircle size={14} className="text-danger" />,
     running: <AlertCircle size={14} className="text-warning" />,
     pending: <AlertCircle size={14} className="text-text-muted" />,
-  };
-
-  const handleAddAll = async () => {
-    if (!currentProject || !run.result) return;
-    // Reload graph to pick up persisted entities
-    await loadGraph(currentProject.id);
   };
 
   return (
@@ -64,13 +53,6 @@ export function TransformResults({ run }: TransformResultsProps) {
                 <h4 className="text-[10px] uppercase text-text-muted">
                   Discovered Entities ({run.result.entities.length})
                 </h4>
-                <button
-                  onClick={handleAddAll}
-                  className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-accent text-white rounded hover:bg-accent-hover"
-                >
-                  <PlusCircle size={10} />
-                  Reload Graph
-                </button>
               </div>
               <div className="border border-border rounded overflow-hidden">
                 <table className="w-full text-xs">
