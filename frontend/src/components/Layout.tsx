@@ -21,7 +21,7 @@ export function Layout() {
       <Toolbar />
       <Group orientation="horizontal" className="flex-1">
         {/* Left sidebar: Entity Palette */}
-        <Panel defaultSize={15} minSize={8} maxSize={25}>
+        <Panel defaultSize={10} minSize={2}>
           <div className="h-full bg-surface border-r border-border overflow-hidden">
             <EntityPalette />
           </div>
@@ -30,7 +30,7 @@ export function Layout() {
         <Separator className="w-1 bg-border hover:bg-accent transition-colors cursor-col-resize" />
 
         {/* Center: Graph + Bottom panel */}
-        <Panel defaultSize={65} minSize={30}>
+        <Panel defaultSize={80} minSize={30}>
           <Group orientation="vertical">
             <Panel defaultSize={70} minSize={30}>
               <div className="relative w-full h-full">
@@ -77,7 +77,7 @@ export function Layout() {
         <Separator className="w-1 bg-border hover:bg-accent transition-colors cursor-col-resize" />
 
         {/* Right sidebar: Entity Inspector */}
-        <Panel defaultSize={20} minSize={12} maxSize={30}>
+        <Panel defaultSize={10} minSize={12}>
           <div className="h-full bg-surface border-l border-border overflow-hidden">
             <EntityInspector />
           </div>
