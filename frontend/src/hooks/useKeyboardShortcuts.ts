@@ -66,6 +66,12 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         sigma?.getCamera().animatedReset({ duration: 300 });
       }
+
+      // ? — show keyboard shortcuts
+      if (e.key === "?") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("ogi-toggle-shortcuts"));
+      }
     };
 
     document.addEventListener("keydown", handler);

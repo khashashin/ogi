@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
+import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
@@ -17,6 +18,7 @@ export function Toolbar() {
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
   const [showExportImport, setShowExportImport] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -49,6 +51,13 @@ export function Toolbar() {
     circular.assign(graph);
     if (currentProject) persistPositions(currentProject.id);
   };
+
+  // Listen for keyboard shortcut toggle
+  useEffect(() => {
+    const handler = () => setShowShortcuts((v) => !v);
+    window.addEventListener("ogi-toggle-shortcuts", handler);
+    return () => window.removeEventListener("ogi-toggle-shortcuts", handler);
+  }, []);
 
   const handleZoomIn = () => getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
   const handleZoomOut = () => getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
@@ -199,9 +208,21 @@ export function Toolbar() {
         Export
       </button>
 
+      <button
+        onClick={() => setShowShortcuts(true)}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+        title="Keyboard shortcuts"
+      >
+        <Keyboard size={14} />
+      </button>
+
       <ExportImportDialog
         open={showExportImport}
         onClose={() => setShowExportImport(false)}
+      />
+      <KeyboardShortcutsDialog
+        open={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
       />
     </div>
   );

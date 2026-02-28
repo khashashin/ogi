@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { Search, X } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { Search, X, ChevronUp, ChevronDown } from "lucide-react";
 import { useGraphStore } from "../stores/graphStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function SearchBar() {
   const [query, setQuery] = useState("");
   const [visible, setVisible] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const { graph, entities, selectNode } = useGraphStore();
 
@@ -25,19 +26,11 @@ export function SearchBar() {
     return () => document.removeEventListener("keydown", handler);
   }, [visible]);
 
-  // Apply search highlight via Sigma node reducer
-  useEffect(() => {
-    const sigma = getSigmaRef();
-    if (!sigma || !query.trim()) {
-      // Clear any search highlighting
-      sigma?.setSetting("nodeReducer", (_, data) => data);
-      sigma?.refresh();
-      return;
-    }
-
+  // Compute matches
+  const matchingIds = useMemo(() => {
+    if (!query.trim()) return [];
     const lowerQuery = query.toLowerCase();
-    const matchingIds = new Set<string>();
-
+    const ids: string[] = [];
     entities.forEach((entity, id) => {
       const matches =
         entity.value.toLowerCase().includes(lowerQuery) ||
@@ -47,24 +40,48 @@ export function SearchBar() {
         Object.values(entity.properties).some((v) =>
           String(v).toLowerCase().includes(lowerQuery)
         );
-      if (matches) matchingIds.add(id);
+      if (matches) ids.push(id);
     });
+    return ids;
+  }, [query, entities]);
+
+  // Reset index when matches change
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [matchingIds.length]);
+
+  // Apply search highlight via Sigma node reducer
+  useEffect(() => {
+    const sigma = getSigmaRef();
+    if (!sigma) return;
+
+    if (matchingIds.length === 0 && !query.trim()) {
+      sigma.setSetting("nodeReducer", (_, data) => data);
+      sigma.refresh();
+      return;
+    }
+
+    const matchSet = new Set(matchingIds);
+    const focusedId = matchingIds[currentIndex] ?? null;
 
     sigma.setSetting("nodeReducer", (node, data) => {
-      if (matchingIds.size === 0) return data;
-      if (matchingIds.has(node)) {
+      if (matchSet.size === 0) return data;
+      if (node === focusedId) {
+        return { ...data, highlighted: true, zIndex: 2, size: (data.size as number ?? 8) + 4 };
+      }
+      if (matchSet.has(node)) {
         return { ...data, highlighted: true, zIndex: 1 };
       }
       return { ...data, color: `${data.color}22`, label: "" };
     });
 
     sigma.refresh();
-  }, [query, entities, graph]);
+  }, [matchingIds, currentIndex, query, graph]);
 
   const handleClose = () => {
     setVisible(false);
     setQuery("");
-    // Clear highlighting
+    setCurrentIndex(0);
     const sigma = getSigmaRef();
     if (sigma) {
       sigma.setSetting("nodeReducer", (_, data) => data);
@@ -72,51 +89,81 @@ export function SearchBar() {
     }
   };
 
-  const handleSelectFirst = () => {
-    if (!query.trim()) return;
-    const lowerQuery = query.toLowerCase();
-    for (const [id, entity] of entities) {
-      if (entity.value.toLowerCase().includes(lowerQuery)) {
-        selectNode(id);
-        // Center camera on the node
-        const sigma = getSigmaRef();
-        if (sigma && graph.hasNode(id)) {
-          const attrs = graph.getNodeAttributes(id);
-          sigma.getCamera().animate(
-            { x: attrs.x, y: attrs.y, ratio: 0.5 },
-            { duration: 300 }
-          );
-        }
-        break;
-      }
+  const navigateTo = (index: number) => {
+    const id = matchingIds[index];
+    if (!id) return;
+    setCurrentIndex(index);
+    selectNode(id);
+    const sigma = getSigmaRef();
+    if (sigma && graph.hasNode(id)) {
+      const attrs = graph.getNodeAttributes(id);
+      sigma.getCamera().animate(
+        { x: attrs.x, y: attrs.y, ratio: 0.5 },
+        { duration: 300 }
+      );
     }
+  };
+
+  const handleNext = () => {
+    if (matchingIds.length === 0) return;
+    navigateTo((currentIndex + 1) % matchingIds.length);
+  };
+
+  const handlePrev = () => {
+    if (matchingIds.length === 0) return;
+    navigateTo((currentIndex - 1 + matchingIds.length) % matchingIds.length);
   };
 
   if (!visible) return null;
 
   return (
-    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 bg-surface border border-border rounded shadow-lg px-2 py-1">
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 bg-surface border border-border rounded shadow-lg px-2 py-1 animate-fade-in">
       <Search size={14} className="text-text-muted shrink-0" />
       <input
         ref={inputRef}
         type="text"
-        placeholder="Search entities... (type:Domain, tag:important)"
+        placeholder="Search entities..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") handleSelectFirst();
+          if (e.key === "Enter" && !e.shiftKey) handleNext();
+          if (e.key === "Enter" && e.shiftKey) handlePrev();
           if (e.key === "Escape") handleClose();
         }}
         className="w-64 px-1 py-0.5 text-xs bg-transparent text-text focus:outline-none"
       />
       {query && (
-        <button
-          onClick={handleClose}
-          className="p-0.5 text-text-muted hover:text-text"
-        >
-          <X size={12} />
-        </button>
+        <span className="text-[10px] text-text-muted whitespace-nowrap tabular-nums">
+          {matchingIds.length === 0
+            ? "No matches"
+            : `${currentIndex + 1} / ${matchingIds.length}`}
+        </span>
       )}
+      {matchingIds.length > 1 && (
+        <>
+          <button
+            onClick={handlePrev}
+            className="p-0.5 text-text-muted hover:text-text"
+            title="Previous (Shift+Enter)"
+          >
+            <ChevronUp size={12} />
+          </button>
+          <button
+            onClick={handleNext}
+            className="p-0.5 text-text-muted hover:text-text"
+            title="Next (Enter)"
+          >
+            <ChevronDown size={12} />
+          </button>
+        </>
+      )}
+      <button
+        onClick={handleClose}
+        className="p-0.5 text-text-muted hover:text-text"
+        title="Close (Esc)"
+      >
+        <X size={12} />
+      </button>
     </div>
   );
 }

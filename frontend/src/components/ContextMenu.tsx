@@ -83,6 +83,24 @@ export function ContextMenu() {
     };
   }, [menu.visible]);
 
+  // Adjust menu position to stay within viewport
+  useEffect(() => {
+    if (!menu.visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    let { x, y } = menu;
+    if (rect.right > window.innerWidth) {
+      x = window.innerWidth - rect.width - 8;
+    }
+    if (rect.bottom > window.innerHeight) {
+      y = window.innerHeight - rect.height - 8;
+    }
+    if (x < 0) x = 8;
+    if (y < 0) y = 8;
+    if (x !== menu.x || y !== menu.y) {
+      setMenu((m) => ({ ...m, x, y }));
+    }
+  }, [menu.visible]);
+
   if (!menu.visible) return null;
 
   const close = () => setMenu((m) => ({ ...m, visible: false }));
@@ -152,7 +170,7 @@ export function ContextMenu() {
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-surface border border-border rounded shadow-lg py-1 min-w-[180px]"
+      className="fixed z-50 bg-surface border border-border rounded shadow-lg py-1 min-w-[180px] animate-fade-in"
       style={{ left: menu.x, top: menu.y }}
     >
       {menu.type === "node" && entity && (
