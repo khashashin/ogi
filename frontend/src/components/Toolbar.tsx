@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2 } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
+import { useUndoStore } from "../stores/undoStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function Toolbar() {
   const { currentProject, projects, selectProject, createProject } = useProjectStore();
-  const { graph, loadGraph, entities, edges, persistPositions } = useGraphStore();
+  const { graph, loadGraph, entities, edges, persistPositions, performUndo, performRedo } = useGraphStore();
+  const canUndo = useUndoStore((s) => s.undoStack.length > 0);
+  const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
@@ -121,6 +124,26 @@ export function Toolbar() {
       <span className="text-[10px] text-text-muted">
         {entities.size} entities, {edges.size} edges
       </span>
+
+      <div className="w-px h-4 bg-border" />
+
+      {/* Undo / Redo */}
+      <button
+        onClick={() => currentProject && performUndo(currentProject.id)}
+        disabled={!canUndo}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
+        title="Undo (Ctrl+Z)"
+      >
+        <Undo2 size={14} />
+      </button>
+      <button
+        onClick={() => currentProject && performRedo(currentProject.id)}
+        disabled={!canRedo}
+        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
+        title="Redo (Ctrl+Y)"
+      >
+        <Redo2 size={14} />
+      </button>
 
       <div className="w-px h-4 bg-border" />
 
