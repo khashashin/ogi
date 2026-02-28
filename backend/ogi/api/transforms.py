@@ -102,14 +102,19 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
                 pass
 
         # Update the result to reflect deduplicated IDs so the frontend gets correct data
+        persisted_entity_ids = {id_map.get(e.id, e.id) for e in run.result.entities}
+        # Include the input entity so edges connecting to it are found
+        persisted_entity_ids.add(entity.id)
+
         run.result.entities = [
-            es_entity for eid in {id_map.get(e.id, e.id) for e in run.result.entities}
-            if (es_entity := graph.get_entity(eid)) is not None
+            es_entity for eid in persisted_entity_ids
+            if eid != entity.id and (es_entity := graph.get_entity(eid)) is not None
         ]
+        # Return all edges where both endpoints are in the set of involved entities
         run.result.edges = [
             e for e in graph.edges.values()
-            if e.source_id == entity.id or e.target_id == entity.id
-        ][-len(run.result.edges):]  # return only the recently added edges
+            if e.source_id in persisted_entity_ids and e.target_id in persisted_entity_ids
+        ]
 
     # Persist the run
     run_store = get_transform_run_store()
