@@ -28,7 +28,7 @@ export function Layout() {
 
             <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
 
-            <Panel defaultSize={30} minSize={15} maxSize={50}>
+            <Panel defaultSize={30} minSize={15}>
               <div className="h-full bg-surface border-t border-border overflow-hidden">
                 <TransformPanel />
               </div>
@@ -39,7 +39,7 @@ export function Layout() {
         <Separator className="w-1 bg-border hover:bg-accent transition-colors cursor-col-resize" />
 
         {/* Right sidebar: Entity Inspector */}
-        <Panel defaultSize={120} minSize={15} maxSize={120}>
+        <Panel defaultSize={320} minSize={15} maxSize={320}>
           <div className="h-full bg-surface border-l border-border overflow-hidden">
             <EntityInspector />
           </div>
