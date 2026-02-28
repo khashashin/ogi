@@ -17,8 +17,6 @@ export function GraphCanvas() {
       sigmaRef.current = null;
     }
 
-    if (graph.order === 0) return;
-
     const renderer = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: true,
       defaultEdgeType: "arrow",
@@ -39,7 +37,7 @@ export function GraphCanvas() {
 
     sigmaRef.current = renderer;
 
-    // Run ForceAtlas2 layout for a short burst
+    // Run ForceAtlas2 layout if there are enough nodes
     if (graph.order > 1) {
       forceAtlas2.assign(graph, {
         iterations: 100,
@@ -69,7 +67,6 @@ export function GraphCanvas() {
 
     renderer.setSetting("nodeReducer", (node, data) => {
       if (selectedNodeId && node !== selectedNodeId) {
-        // Check if neighbor
         const isNeighbor = graph.hasNode(selectedNodeId) && graph.areNeighbors(node, selectedNodeId);
         return {
           ...data,

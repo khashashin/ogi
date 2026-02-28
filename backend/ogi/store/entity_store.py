@@ -44,6 +44,31 @@ class EntityStore:
         await self.db.commit()
         return entity
 
+    async def save(self, project_id: UUID, entity: Entity) -> Entity:
+        """Persist an existing Entity, preserving its ID."""
+        entity.project_id = project_id
+        await self.db.execute(
+            """INSERT INTO entities
+               (id, project_id, type, value, properties, icon, weight, notes, tags, source, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(entity.id),
+                str(project_id),
+                entity.type.value,
+                entity.value,
+                json.dumps(entity.properties),
+                entity.icon,
+                entity.weight,
+                entity.notes,
+                json.dumps(entity.tags),
+                entity.source,
+                entity.created_at.isoformat(),
+                entity.updated_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return entity
+
     async def get(self, entity_id: UUID) -> Entity | None:
         cursor = await self.db.execute(
             "SELECT * FROM entities WHERE id = ?", (str(entity_id),)

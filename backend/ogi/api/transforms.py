@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ogi.models import TransformInfo, TransformRun
+from ogi.models import TransformInfo, TransformRun, EdgeCreate
 from ogi.transforms.base import TransformConfig
 from ogi.api.dependencies import (
     get_transform_engine,
@@ -59,23 +59,14 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Persist discovered entities and edges
+    # Persist discovered entities and edges (preserving IDs so edges stay valid)
     if run.result:
         es = get_entity_store()
         edge_s = get_edge_store()
         graph = get_graph_engine(request.project_id)
 
         for new_entity in run.result.entities:
-            new_entity.project_id = request.project_id
-            await es.create(
-                request.project_id,
-                __import__("ogi.models", fromlist=["EntityCreate"]).EntityCreate(
-                    type=new_entity.type,
-                    value=new_entity.value,
-                    properties=new_entity.properties,
-                    source=new_entity.source,
-                ),
-            )
+            await es.save(request.project_id, new_entity)
             graph.add_entity(new_entity)
 
         for new_edge in run.result.edges:
@@ -86,7 +77,7 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
                 pass
             await edge_s.create(
                 request.project_id,
-                __import__("ogi.models", fromlist=["EdgeCreate"]).EdgeCreate(
+                EdgeCreate(
                     source_id=new_edge.source_id,
                     target_id=new_edge.target_id,
                     label=new_edge.label,
