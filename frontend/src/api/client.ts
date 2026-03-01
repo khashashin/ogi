@@ -3,6 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
+import type { RegistryIndex, RegistryTransform, UpdateAvailable, PluginInfoV2 } from "../types/registry";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -69,6 +70,13 @@ interface PluginInfo {
   enabled: boolean;
   transform_count: number;
   transform_names: string[];
+}
+
+interface InstallResult {
+  slug: string;
+  version: string;
+  files_installed: number;
+  message: string;
 }
 
 const BASE_URL = "/api/v1";
@@ -279,6 +287,26 @@ export const api = {
       const params = search ? `?q=${encodeURIComponent(search)}` : "";
       return request<DiscoverProject[]>(`/discover${params}`);
     },
+  },
+
+  registry: {
+    index: () => request<RegistryIndex>("/registry/index"),
+    search: (q?: string, category?: string, tier?: string) => {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (category) params.set("category", category);
+      if (tier) params.set("tier", tier);
+      const qs = params.toString();
+      return request<RegistryTransform[]>(`/registry/search${qs ? `?${qs}` : ""}`);
+    },
+    install: (slug: string) =>
+      request<InstallResult>(`/registry/install/${slug}`, { method: "POST" }),
+    remove: (slug: string) =>
+      request<{ status: string; slug: string }>(`/registry/remove/${slug}`, { method: "DELETE" }),
+    update: (slug: string) =>
+      request<InstallResult>(`/registry/update/${slug}`, { method: "POST" }),
+    checkUpdates: () =>
+      request<UpdateAvailable[]>("/registry/check-updates"),
   },
 };
 

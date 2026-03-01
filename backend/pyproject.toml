@@ -24,7 +24,11 @@ dependencies = [
     "python-multipart>=0.0.22",
     "sqlmodel>=0.0.37",
     "alembic>=1.18.4",
+    "typer>=0.24.1",
 ]
+
+[project.scripts]
+ogi = "ogi.cli.main:main"
 
 [project.optional-dependencies]
 dev = [

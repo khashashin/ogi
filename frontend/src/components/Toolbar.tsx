@@ -5,7 +5,7 @@ import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
-import { PluginManager } from "./PluginManager";
+import { TransformHub } from "./marketplace/TransformHub";
 import { ShareDialog } from "./ShareDialog";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
@@ -233,7 +233,7 @@ export function Toolbar() {
         open={showApiKeys}
         onClose={() => setShowApiKeys(false)}
       />
-      <PluginManager
+      <TransformHub
         open={showPlugins}
         onClose={() => setShowPlugins(false)}
       />

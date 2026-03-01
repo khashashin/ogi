@@ -11,6 +11,8 @@ from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.graph_engine import GraphEngine
 from ogi.engine.transform_engine import TransformEngine
 from ogi.engine.plugin_engine import PluginEngine
+from ogi.cli.registry import RegistryClient
+from ogi.cli.installer import TransformInstaller
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
@@ -20,6 +22,8 @@ from ogi.store.api_key_store import ApiKeyStore
 _transform_engine: TransformEngine | None = None
 _entity_registry: EntityRegistry | None = None
 _plugin_engine: PluginEngine | None = None
+_registry_client: RegistryClient | None = None
+_transform_installer: TransformInstaller | None = None
 _graph_engines: dict[UUID, GraphEngine] = {}
 
 # We still need to fake the init_stores for main.py signature compatibility for now,
@@ -85,6 +89,26 @@ async def get_api_key_store(session: AsyncSession = Depends(get_session)) -> Api
 def get_plugin_engine() -> PluginEngine:
     assert _plugin_engine is not None
     return _plugin_engine
+
+
+def init_registry_client(client: RegistryClient) -> None:
+    global _registry_client
+    _registry_client = client
+
+
+def init_transform_installer(installer: TransformInstaller) -> None:
+    global _transform_installer
+    _transform_installer = installer
+
+
+def get_registry_client() -> RegistryClient:
+    assert _registry_client is not None
+    return _registry_client
+
+
+def get_transform_installer() -> TransformInstaller:
+    assert _transform_installer is not None
+    return _transform_installer
 
 
 def get_graph_engine(project_id: UUID) -> GraphEngine:
