@@ -71,8 +71,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   resetPassword: async (email) => {
     if (!supabase) return "Auth not configured";
+    const redirectUrl = import.meta.env.VITE_SUPABASE_REDIRECT_URL || window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: redirectUrl,
     });
     return error ? error.message : null;
   },

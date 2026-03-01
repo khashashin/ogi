@@ -17,6 +17,7 @@ services:
       args:
         VITE_SUPABASE_URL: ${OGI_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${OGI_SUPABASE_ANON_KEY}
+        VITE_SUPABASE_REDIRECT_URL: ${VITE_SUPABASE_REDIRECT_URL:-https://ogi.khas.app}
     restart: unless-stopped
     ports:
       - "80" # Coolify Traefik proxy will route the configured domain to this port
