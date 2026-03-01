@@ -11,6 +11,7 @@ import { DiscoverPage } from "./components/DiscoverPage";
 import { TermsPage } from "./components/TermsPage";
 import { PrivacyPage } from "./components/PrivacyPage";
 import { CookieConsentBanner } from "./components/CookieConsentBanner";
+import { BetaNoticeDialog } from "./components/BetaNoticeDialog";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
@@ -87,6 +88,7 @@ function App() {
           <Route path="/projects/:projectId" element={<WorkspaceView />} />
         </Route>
       </Routes>
+      <BetaNoticeDialog />
       <CookieConsentBanner />
       <Toaster
         theme="dark"
