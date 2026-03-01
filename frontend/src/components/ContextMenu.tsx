@@ -110,9 +110,11 @@ export function ContextMenu() {
   const handleDelete = async () => {
     if (!currentProject || !menu.id) return;
     if (menu.type === "node") {
+      if (!window.confirm("Are you sure you want to delete this entity?")) return;
       await removeEntity(currentProject.id, menu.id);
       toast.success("Entity deleted");
     } else if (menu.type === "edge") {
+      if (!window.confirm("Are you sure you want to delete this edge?")) return;
       await removeEdge(currentProject.id, menu.id);
       toast.success("Edge deleted");
     }

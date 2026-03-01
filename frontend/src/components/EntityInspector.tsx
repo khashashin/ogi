@@ -53,6 +53,7 @@ export function EntityInspector() {
 
   const handleDelete = async () => {
     if (!currentProject) return;
+    if (!window.confirm("Are you sure you want to delete this entity?")) return;
     await removeEntity(currentProject.id, entity.id);
   };
 

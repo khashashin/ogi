@@ -54,6 +54,7 @@ export function ApiKeySettings({ open, onClose }: ApiKeySettingsProps) {
   };
 
   const handleDelete = async (service: string) => {
+    if (!window.confirm("Are you sure you want to remove this API key?")) return;
     try {
       await api.apiKeys.delete(service);
       await loadKeys();
