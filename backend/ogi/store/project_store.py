@@ -20,8 +20,13 @@ class ProjectStore:
     # Public API
     # ------------------------------------------------------------------
 
-    async def create(self, data: ProjectCreate) -> Project:
-        project = Project(name=data.name, description=data.description)
+    async def create(self, data: ProjectCreate, owner_id: UUID) -> Project:
+        project = Project(
+            name=data.name, 
+            description=data.description,
+            owner_id=owner_id,
+            is_public=data.is_public
+        )
         if self._is_sqlite:
             await self._sqlite_insert(project)
         else:
@@ -33,10 +38,10 @@ class ProjectStore:
             return await self._sqlite_get(project_id)
         return await self._pg_get(project_id)
 
-    async def list_all(self) -> list[Project]:
+    async def list_all(self, user_id: UUID) -> list[Project]:
         if self._is_sqlite:
-            return await self._sqlite_list_all()
-        return await self._pg_list_all()
+            return await self._sqlite_list_all(user_id)
+        return await self._pg_list_all(user_id)
 
     async def update(self, project_id: UUID, data: ProjectUpdate) -> Project | None:
         project = await self.get(project_id)
@@ -48,6 +53,8 @@ class ProjectStore:
             fields["name"] = data.name
         if data.description is not None:
             fields["description"] = data.description
+        if data.is_public is not None:
+            fields["is_public"] = 1 if self._is_sqlite and data.is_public else data.is_public
         if not fields:
             return project
 
@@ -70,11 +77,13 @@ class ProjectStore:
     async def _sqlite_insert(self, project: Project) -> None:
         db: aiosqlite.Connection = self.db  # type: ignore[assignment]
         await db.execute(
-            "INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO projects (id, name, description, owner_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 str(project.id),
                 project.name,
                 project.description,
+                str(project.owner_id) if project.owner_id else None,
+                1 if project.is_public else 0,
                 project.created_at.isoformat(),
                 project.updated_at.isoformat(),
             ),
@@ -89,9 +98,12 @@ class ProjectStore:
             return None
         return self._sqlite_row_to_project(row)
 
-    async def _sqlite_list_all(self) -> list[Project]:
+    async def _sqlite_list_all(self, user_id: UUID) -> list[Project]:
         db: aiosqlite.Connection = self.db  # type: ignore[assignment]
-        cursor = await db.execute("SELECT * FROM projects ORDER BY updated_at DESC")
+        cursor = await db.execute(
+            "SELECT * FROM projects WHERE owner_id = ? OR owner_id IS NULL OR is_public = 1 ORDER BY updated_at DESC",
+            (str(user_id),)
+        )
         rows = await cursor.fetchall()
         return [self._sqlite_row_to_project(row) for row in rows]
 
@@ -117,6 +129,8 @@ class ProjectStore:
             id=UUID(row["id"]),
             name=row["name"],
             description=row["description"],
+            owner_id=UUID(row["owner_id"]) if "owner_id" in row.keys() and row["owner_id"] else None,
+            is_public=bool(row["is_public"]) if "is_public" in row.keys() else False,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
@@ -128,10 +142,12 @@ class ProjectStore:
     async def _pg_insert(self, project: Project) -> None:
         pool = self.db  # asyncpg.Pool
         await pool.execute(  # type: ignore[union-attr]
-            "INSERT INTO projects (id, name, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO projects (id, name, description, owner_id, is_public, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
             project.id,
             project.name,
             project.description,
+            project.owner_id,
+            project.is_public,
             project.created_at,
             project.updated_at,
         )
@@ -143,9 +159,12 @@ class ProjectStore:
             return None
         return self._pg_row_to_project(row)
 
-    async def _pg_list_all(self) -> list[Project]:
+    async def _pg_list_all(self, user_id: UUID) -> list[Project]:
         pool = self.db
-        rows = await pool.fetch("SELECT * FROM projects ORDER BY updated_at DESC")  # type: ignore[union-attr]
+        rows = await pool.fetch(
+            "SELECT * FROM projects WHERE owner_id = $1 OR owner_id IS NULL OR is_public = true ORDER BY updated_at DESC", 
+            user_id
+        )  # type: ignore[union-attr]
         return [self._pg_row_to_project(row) for row in rows]
 
     async def _pg_update(self, project_id: UUID, fields: dict[str, str], now: datetime) -> None:
@@ -177,6 +196,8 @@ class ProjectStore:
             id=row["id"],  # type: ignore[index]
             name=row["name"],  # type: ignore[index]
             description=row["description"],  # type: ignore[index]
+            owner_id=row.get("owner_id"),  # type: ignore[union-attr]
+            is_public=row.get("is_public", False),  # type: ignore[union-attr]
             created_at=row["created_at"],  # type: ignore[index]
             updated_at=row["updated_at"],  # type: ignore[index]
         )

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    owner_id TEXT,
+    is_public INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -70,6 +72,15 @@ CREATE INDEX IF NOT EXISTS idx_transform_runs_project ON transform_runs(project_
 
 async def run_sqlite_migrations(db: aiosqlite.Connection) -> None:
     await db.executescript(SQLITE_SCHEMA)
+    # Idempotent column additions for existing DBs
+    try:
+        await db.execute("ALTER TABLE projects ADD COLUMN owner_id TEXT")
+    except Exception:
+        pass
+    try:
+        await db.execute("ALTER TABLE projects ADD COLUMN is_public INTEGER DEFAULT 0")
+    except Exception:
+        pass
     await db.commit()
 
 
@@ -89,6 +100,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     owner_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    is_public BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -176,6 +188,10 @@ async def run_pg_migrations(pool: "asyncpg.Pool") -> None:  # type: ignore[name-
     async with pool.acquire() as conn:
         conn: _asyncpg.Connection
         await conn.execute(PG_SCHEMA)
+        try:
+            await conn.execute("ALTER TABLE projects ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT false")
+        except Exception:
+            pass
 
 
 # ---------- Unified entry point ----------

@@ -15,7 +15,7 @@ async def create_project(
     current_user: UserProfile = Depends(get_current_user),
 ) -> Project:
     store = get_project_store()
-    return await store.create(data)
+    return await store.create(data, current_user.id)
 
 
 @router.get("", response_model=list[Project])
@@ -23,7 +23,7 @@ async def list_projects(
     current_user: UserProfile = Depends(get_current_user),
 ) -> list[Project]:
     store = get_project_store()
-    return await store.list_all()
+    return await store.list_all(current_user.id)
 
 
 @router.get("/{project_id}", response_model=Project)
@@ -35,6 +35,10 @@ async def get_project(
     project = await store.get(project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+        
+    if project.owner_id and project.owner_id != current_user.id and not project.is_public:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+        
     return project
 
 
@@ -45,6 +49,13 @@ async def update_project(
     current_user: UserProfile = Depends(get_current_user),
 ) -> Project:
     store = get_project_store()
+    project = await store.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    if project.owner_id and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the project owner can update it")
+        
     project = await store.update(project_id, data)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -57,6 +68,13 @@ async def delete_project(
     current_user: UserProfile = Depends(get_current_user),
 ) -> None:
     store = get_project_store()
+    project = await store.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    if project.owner_id and project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the project owner can delete it")
+        
     deleted = await store.delete(project_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")

@@ -7,8 +7,10 @@ import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
 
+import { CreateInitialProject } from "./components/CreateInitialProject";
+
 function AppContent() {
-  const { fetchProjects, currentProject, loading, error } = useProjectStore();
+  const { projects, fetchProjects, currentProject, loading, error } = useProjectStore();
   const { loadGraph, loading: graphLoading } = useGraphStore();
 
   // Subscribe to real-time changes when Supabase is configured
@@ -42,6 +44,8 @@ function AppContent() {
             Retry
           </button>
         </div>
+      ) : projects.length === 0 ? (
+        <CreateInitialProject />
       ) : (
         <Layout />
       )}
