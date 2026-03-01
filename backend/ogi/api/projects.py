@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ogi.models import Project, ProjectCreate, ProjectUpdate, UserProfile, ProjectDiscoverRead
+from ogi.models import Project, ProjectCreate, ProjectUpdate, UserProfile, ProjectDiscoverRead, ProjectWithRole
 from ogi.api.auth import get_current_user, require_project_viewer, require_project_editor, require_project_owner
 from ogi.api.dependencies import get_project_store
 from ogi.store.project_store import ProjectStore
@@ -55,18 +55,18 @@ async def list_my_projects(
     ]
 
 
-@router.get("/{project_id}", response_model=Project)
+@router.get("/{project_id}", response_model=ProjectWithRole)
 async def get_project(
     project_id: UUID,
     role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
     store: ProjectStore = Depends(get_project_store),
-) -> Project:
+) -> ProjectWithRole:
     project = await store.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    return project
+    return ProjectWithRole(**project.model_dump(), role=role)
 
 
 @router.patch("/{project_id}", response_model=Project)

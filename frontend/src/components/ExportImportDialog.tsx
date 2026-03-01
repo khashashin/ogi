@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { api } from "../api/client";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 interface ExportImportDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentProject } = useProjectStore();
   const { loadGraph } = useGraphStore();
+  const isViewer = useIsViewer();
 
   if (!open || !currentProject) return null;
 
@@ -94,15 +96,17 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
             <Download size={12} className="inline mr-1" />
             Export
           </button>
-          <button onClick={() => setTab("import")} className={tabClass("import")}>
-            <Upload size={12} className="inline mr-1" />
-            Import
-          </button>
+          {!isViewer && (
+            <button onClick={() => setTab("import")} className={tabClass("import")}>
+              <Upload size={12} className="inline mr-1" />
+              Import
+            </button>
+          )}
         </div>
 
         {/* Content */}
         <div className="p-4">
-          {tab === "export" ? (
+          {tab === "export" || isViewer ? (
             <div className="space-y-2">
               <p className="text-[10px] text-text-muted mb-3">
                 Export all entities and edges from "{currentProject.name}"

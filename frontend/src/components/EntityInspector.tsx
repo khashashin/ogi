@@ -6,6 +6,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { ENTITY_TYPE_META } from "../types/entity";
 import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 export function EntityInspector() {
   const { selectedNodeId, entities, edges, removeEntity } = useGraphStore();
@@ -20,6 +21,8 @@ export function EntityInspector() {
   const [newPropKey, setNewPropKey] = useState("");
   const [newPropVal, setNewPropVal] = useState("");
   const [showAddProp, setShowAddProp] = useState(false);
+
+  const isViewer = useIsViewer();
 
   const entity = selectedNodeId ? entities.get(selectedNodeId) : null;
   const meta = entity ? ENTITY_TYPE_META[entity.type] : null;
@@ -140,12 +143,14 @@ export function EntityInspector() {
             />
             <span className="text-xs text-text-muted">{entity.type}</span>
           </div>
-          <button
-            onClick={handleDelete}
-            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-danger"
-          >
-            <Trash2 size={14} />
-          </button>
+          {!isViewer && (
+            <button
+              onClick={handleDelete}
+              className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1 group">
           <p className="text-sm font-medium text-text break-all flex-1">{entity.value}</p>
@@ -166,12 +171,14 @@ export function EntityInspector() {
       <div className="p-3 border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-semibold text-text-muted">Properties</h3>
-          <button
-            onClick={() => setShowAddProp(!showAddProp)}
-            className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text"
-          >
-            <Plus size={12} />
-          </button>
+          {!isViewer && (
+            <button
+              onClick={() => setShowAddProp(!showAddProp)}
+              className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text"
+            >
+              <Plus size={12} />
+            </button>
+          )}
         </div>
         {Object.keys(entity.properties).length > 0 && (
           <div className="space-y-1 mb-2">
@@ -180,18 +187,20 @@ export function EntityInspector() {
                 <span className="text-text-muted">{key}</span>
                 <div className="flex items-center gap-1">
                   <span className="text-text">{String(val)}</span>
-                  <button
-                    onClick={() => handleRemoveProperty(key)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-text-muted hover:text-danger"
-                  >
-                    <X size={10} />
-                  </button>
+                  {!isViewer && (
+                    <button
+                      onClick={() => handleRemoveProperty(key)}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 text-text-muted hover:text-danger"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
-        {showAddProp && (
+        {!isViewer && showAddProp && (
           <div className="flex gap-1 mt-1">
             <input
               type="text"
@@ -216,7 +225,7 @@ export function EntityInspector() {
             </button>
           </div>
         )}
-        {Object.keys(entity.properties).length === 0 && !showAddProp && (
+        {!isViewer && Object.keys(entity.properties).length === 0 && !showAddProp && (
           <button
             onClick={() => setShowAddProp(true)}
             className="text-[10px] text-text-muted hover:text-accent cursor-pointer"
@@ -236,31 +245,39 @@ export function EntityInspector() {
               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-surface-hover rounded text-text-muted group"
             >
               {tag}
-              <button
-                onClick={() => handleRemoveTag(tag)}
-                className="opacity-0 group-hover:opacity-100 hover:text-danger"
-              >
-                <X size={8} />
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={() => handleRemoveTag(tag)}
+                  className="opacity-0 group-hover:opacity-100 hover:text-danger"
+                >
+                  <X size={8} />
+                </button>
+              )}
             </span>
           ))}
         </div>
-        <div className="flex gap-1">
-          <input
-            type="text"
-            placeholder="Add tag..."
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
-            className="flex-1 px-1.5 py-1 text-[10px] bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
-          />
-        </div>
+        {!isViewer && (
+          <div className="flex gap-1">
+            <input
+              type="text"
+              placeholder="Add tag..."
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
+              className="flex-1 px-1.5 py-1 text-[10px] bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
+            />
+          </div>
+        )}
       </div>
 
       {/* Notes */}
       <div className="p-3 border-b border-border">
         <h3 className="text-xs font-semibold text-text-muted mb-2">Notes</h3>
-        {editingNotes ? (
+        {isViewer ? (
+          <p className="text-xs text-text-muted min-h-[1.5em] rounded px-1 py-0.5">
+            {entity.notes || "No notes"}
+          </p>
+        ) : editingNotes ? (
           <div>
             <textarea
               value={notesValue}
@@ -308,7 +325,7 @@ export function EntityInspector() {
       )}
 
       {/* Actions — quick-launch transforms for this entity */}
-      {transforms.length > 0 && (
+      {!isViewer && transforms.length > 0 && (
         <div className="p-3">
           <h3 className="text-xs font-semibold text-text-muted mb-2">Actions</h3>
           <div className="space-y-1">

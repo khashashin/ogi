@@ -62,6 +62,8 @@ export function GraphCanvas() {
       // Only drag on left-click (button 0), ignore right-click
       if ((event.original as MouseEvent).button !== 0) return;
 
+      if (currentProject?.role === "viewer") return;
+
       const ds = dragStateRef.current;
       ds.dragging = true;
       ds.draggedNode = node;

@@ -61,12 +61,21 @@ CREATE TABLE IF NOT EXISTS transform_runs (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS project_bookmarks (
+    user_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, project_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
 CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
 CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_transform_runs_project ON transform_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_bookmarks_user ON project_bookmarks(user_id);
 """
 
 
@@ -171,6 +180,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
     UNIQUE(user_id, service_name)
 );
 
+CREATE TABLE IF NOT EXISTS project_bookmarks (
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, project_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
 CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
 CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
@@ -179,6 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_transform_runs_project ON transform_runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_project_bookmarks_user ON project_bookmarks(user_id);
 """
 
 

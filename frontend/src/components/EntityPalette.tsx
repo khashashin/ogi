@@ -10,6 +10,7 @@ import type { EntityTypeMeta } from "../types/entity";
 import { api } from "../api/client";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
   user: User,
@@ -40,6 +41,7 @@ export function EntityPalette() {
   const [value, setValue] = useState("");
   const { currentProject } = useProjectStore();
   const { addEntity } = useGraphStore();
+  const isViewer = useIsViewer();
 
   const groupedTypes = useMemo(() => {
     const groups: Record<string, EntityTypeMeta[]> = {};
@@ -82,7 +84,7 @@ export function EntityPalette() {
         </div>
       </div>
 
-      {adding && (
+      {!isViewer && adding && (
         <div className="p-3 border-b border-border bg-surface">
           <p className="text-xs text-text-muted mb-1.5">Add {adding}</p>
           <input
@@ -123,8 +125,8 @@ export function EntityPalette() {
               return (
                 <button
                   key={meta.type}
-                  onClick={() => setAdding(meta.type)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text hover:bg-surface-hover transition-colors"
+                  onClick={isViewer ? undefined : () => setAdding(meta.type)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text transition-colors ${isViewer ? "cursor-default" : "hover:bg-surface-hover"}`}
                 >
                   {isCustomSvg ? (
                     <img
