@@ -1,24 +1,29 @@
 import { useEffect } from "react";
+import { Routes, Route, useParams } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { Layout } from "./components/Layout";
-import { AuthGuard } from "./components/AuthGuard";
+import { AuthPage } from "./components/AuthPage";
+import { ResetPasswordPage } from "./components/ResetPasswordPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { MyProjectsPage } from "./components/MyProjectsPage";
+import { DiscoverPage } from "./components/DiscoverPage";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
 
-import { CreateInitialProject } from "./components/CreateInitialProject";
-
-function AppContent() {
-  const { projects, fetchProjects, currentProject, loading, error } = useProjectStore();
+function WorkspaceView() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const { currentProject, loadProjectById, loading, error } = useProjectStore();
   const { loadGraph, loading: graphLoading } = useGraphStore();
 
-  // Subscribe to real-time changes when Supabase is configured
   useRealtimeSync(currentProject?.id ?? null);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (projectId && currentProject?.id !== projectId) {
+      loadProjectById(projectId);
+    }
+  }, [projectId, currentProject?.id, loadProjectById]);
 
   useEffect(() => {
     if (currentProject) {
@@ -26,30 +31,28 @@ function AppContent() {
     }
   }, [currentProject, loadGraph]);
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen w-screen bg-bg gap-3">
+        <Loader2 size={24} className="animate-spin text-accent" />
+        <p className="text-sm text-text-muted">Loading project...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen w-screen bg-bg gap-3">
+        <p className="text-sm text-danger">Failed to load project</p>
+        <p className="text-xs text-text-muted max-w-md text-center">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <>
-      {loading ? (
-        <div className="flex flex-col items-center justify-center h-screen w-screen bg-bg gap-3">
-          <Loader2 size={24} className="animate-spin text-accent" />
-          <p className="text-sm text-text-muted">Loading projects...</p>
-        </div>
-      ) : error ? (
-        <div className="flex flex-col items-center justify-center h-screen w-screen bg-bg gap-3">
-          <p className="text-sm text-danger">Failed to connect to backend</p>
-          <p className="text-xs text-text-muted max-w-md text-center">{error}</p>
-          <button
-            onClick={() => fetchProjects()}
-            className="px-3 py-1.5 text-xs bg-accent text-white rounded hover:bg-accent-hover"
-          >
-            Retry
-          </button>
-        </div>
-      ) : projects.length === 0 ? (
-        <CreateInitialProject />
-      ) : (
-        <Layout />
-      )}
-      {graphLoading && !loading && (
+      <Layout />
+      {graphLoading && (
         <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 bg-surface border border-border rounded px-3 py-2 shadow-lg animate-fade-in">
           <Loader2 size={14} className="animate-spin text-accent" />
           <span className="text-xs text-text-muted">Loading graph...</span>
@@ -62,9 +65,20 @@ function AppContent() {
 function App() {
   return (
     <>
-      <AuthGuard>
-        <AppContent />
-      </AuthGuard>
+      <Routes>
+        {/* Public auth routes */}
+        <Route path="/login" element={<AuthPage mode="signin" />} />
+        <Route path="/signup" element={<AuthPage mode="signup" />} />
+        <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/discover" element={<DiscoverPage />} />
+
+        {/* Protected routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<MyProjectsPage />} />
+          <Route path="/projects/:projectId" element={<WorkspaceView />} />
+        </Route>
+      </Routes>
       <Toaster
         theme="dark"
         position="bottom-right"

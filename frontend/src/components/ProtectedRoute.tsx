@@ -1,17 +1,19 @@
-import { Navigate } from "react-router";
-import { useAuthStore } from "../stores/authStore";
+import { useEffect } from "react";
+import { Navigate, Outlet } from "react-router";
 import { Loader2 } from "lucide-react";
-
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-}
+import { useAuthStore } from "../stores/authStore";
 
 /**
  * Route guard: redirects to /login when auth is enabled and no user session exists.
  * In local dev mode (no Supabase), passes through immediately.
+ * Calls initialize() on mount to restore the auth session.
  */
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { authEnabled, user, loading, isRecovery } = useAuthStore();
+export function ProtectedRoute() {
+  const { authEnabled, user, loading, isRecovery, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   if (loading) {
     return (
@@ -21,20 +23,17 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // Recovery flow — redirect to reset password
-  if (authEnabled && isRecovery && user) {
+  if (!authEnabled) {
+    return <Outlet />;
+  }
+
+  if (isRecovery && user) {
     return <Navigate to="/reset-password" replace />;
   }
 
-  // Auth not configured (local dev) → allow through
-  if (!authEnabled) {
-    return <>{children}</>;
-  }
-
-  // No user → redirect to login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Outlet />;
 }

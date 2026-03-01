@@ -5,6 +5,15 @@ from sqlmodel import SQLModel
 
 from ogi.config import settings
 
+# Import all models so SQLModel.metadata knows about them for create_all
+import ogi.models.project  # noqa: F401
+import ogi.models.entity  # noqa: F401
+import ogi.models.edge  # noqa: F401
+import ogi.models.auth  # noqa: F401
+import ogi.models.transform  # noqa: F401
+import ogi.models.api_key  # noqa: F401
+import ogi.models.plugin  # noqa: F401
+
 engine: AsyncEngine | None = None
 async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
@@ -12,14 +21,20 @@ async def init_db() -> None:
     global engine, async_session_maker
 
     if settings.use_sqlite:
-        db_url = f"sqlite+aiosqlite:///{settings.abs_database_path}"
+        if settings.database_path == ":memory:":
+            db_url = "sqlite+aiosqlite:///:memory:"
+        else:
+            db_url = f"sqlite+aiosqlite:///{settings.abs_database_path}"
         engine = create_async_engine(db_url, echo=False)
+        # Create tables from SQLModel metadata (needed for in-memory / fresh SQLite DBs)
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
     else:
         db_url = settings.database_url
         if db_url and db_url.startswith("postgresql://"):
             db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         engine = create_async_engine(
-            db_url, 
+            db_url,
             echo=False,
             pool_size=5,
             max_overflow=10,
