@@ -2,7 +2,7 @@
 
 An open source visual link analysis and OSINT framework. Think Maltego, but free and community-driven.
 
-![OGI Screenshot](docs/images/image.png)
+![OpenGraph Intel Screenshot](docs/images/image.png)
 
 > **Heads up:** This project was largely vibe-coded — built fast with AI assistance to explore what's possible. It works, it's fun to use, but it's rough around the edges. Documentation is thin, there are likely security issues, and it is **not recommended for production use**. Contributions, bug reports, and feedback are very welcome.
 
@@ -44,16 +44,16 @@ docker compose up
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Backend | Python, FastAPI, SQLModel, asyncpg/aiosqlite |
-| Frontend | React, TypeScript, Sigma.js (graphology), Zustand, Tailwind CSS |
-| Auth & Realtime | Supabase (optional — works without it) |
-| Package managers | uv (backend), pnpm (frontend) |
+| Layer            | Tech                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| Backend          | Python, FastAPI, SQLModel, asyncpg/aiosqlite                    |
+| Frontend         | React, TypeScript, Sigma.js (graphology), Zustand, Tailwind CSS |
+| Auth & Realtime  | Supabase (optional — works without it)                          |
+| Package managers | uv (backend), pnpm (frontend)                                   |
 
 ## Transform Hub
 
-OGI has a built-in transform marketplace. Browse, install, and manage transforms from the [community registry](https://github.com/opengraphintel/ogi-transforms).
+OpenGraph Intel has a built-in transform marketplace. Browse, install, and manage transforms from the [community registry](https://github.com/opengraphintel/ogi-transforms).
 
 ```bash
 ogi transform search dns

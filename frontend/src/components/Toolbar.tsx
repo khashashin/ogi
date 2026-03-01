@@ -76,7 +76,7 @@ export function Toolbar() {
         to="/"
         className="text-sm font-semibold text-text hover:text-accent transition-colors"
       >
-        OGI
+        OpenGraph Intel
       </Link>
       {currentProject && (
         <>

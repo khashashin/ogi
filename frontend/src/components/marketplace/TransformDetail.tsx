@@ -78,7 +78,7 @@ export function TransformDetail({
           <p className="text-text">{transform.license || "—"}</p>
         </div>
         <div>
-          <span className="text-text-muted">Min OGI Version</span>
+          <span className="text-text-muted">Min OpenGraph Intel Version</span>
           <p className="text-text">{transform.min_ogi_version || "—"}</p>
         </div>
         {transform.input_types.length > 0 && (

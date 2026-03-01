@@ -126,7 +126,7 @@ export function PrivacyPage() {
               If you have questions about this Privacy Policy or wish to exercise your rights, please
               open an issue on our{" "}
               <a
-                href="https://github.com/nicholasgasior/ogi"
+                href="https://github.com/opengraphintel/ogi"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-accent hover:underline"

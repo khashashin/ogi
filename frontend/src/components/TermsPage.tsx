@@ -4,7 +4,7 @@ export function TermsPage() {
   return (
     <div className="min-h-screen bg-bg">
       <header className="flex items-center h-12 px-4 bg-surface border-b border-border">
-        <span className="text-sm font-semibold text-text mr-6">OGI</span>
+        <span className="text-sm font-semibold text-text mr-6">OpenGraph Intel</span>
         <nav className="flex items-center gap-4">
           <Link to="/" className="text-sm text-text-muted hover:text-text">
             Home
@@ -22,7 +22,7 @@ export function TermsPage() {
           <section>
             <h2 className="text-base font-medium text-text mb-2">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using OpenGraph Intel ("OGI"), you agree to be bound by these Terms of
+              By accessing or using OpenGraph Intel, you agree to be bound by these Terms of
               Use. If you do not agree to these terms, please do not use the service.
             </p>
           </section>
@@ -52,7 +52,7 @@ export function TermsPage() {
           <section>
             <h2 className="text-base font-medium text-text mb-2">4. Intellectual Property</h2>
             <p>
-              OGI is open source software licensed under the GNU Affero General Public License v3
+              OpenGraph Intel is open source software licensed under the GNU Affero General Public License v3
               (AGPLv3). You may use, modify, and distribute the software in accordance with the terms
               of that license. User-generated content remains the property of its respective owners.
             </p>
@@ -71,7 +71,7 @@ export function TermsPage() {
           <section>
             <h2 className="text-base font-medium text-text mb-2">6. Limitation of Liability</h2>
             <p>
-              To the maximum extent permitted by law, OGI and its contributors shall not be liable
+              To the maximum extent permitted by law, OpenGraph Intel and its contributors shall not be liable
               for any indirect, incidental, special, consequential, or punitive damages, or any loss
               of profits or revenues, whether incurred directly or indirectly, or any loss of data,
               use, goodwill, or other intangible losses resulting from your use of the service.
