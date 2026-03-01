@@ -10,13 +10,17 @@ import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
+import { useGraphStore } from "../stores/graphStore";
 
 type BottomTab = "transforms" | "analysis";
 
 export function Layout() {
   useKeyboardShortcuts();
   const isViewer = useIsViewer();
+  const { nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
   const [bottomTab, setBottomTab] = useState<BottomTab>("transforms");
+
+  const hasAnalysisOverlay = nodeOverlay?.type.startsWith("analysis");
 
   return (
     <div className="flex flex-col h-screen w-screen bg-bg">
@@ -52,27 +56,40 @@ export function Layout() {
                 <Panel defaultSize={30} minSize={15}>
                   <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
                     {/* Bottom panel tabs */}
-                    <div className="flex border-b border-border">
-                      <button
-                        onClick={() => setBottomTab("transforms")}
-                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                          bottomTab === "transforms"
-                            ? "text-text border-b-2 border-accent"
-                            : "text-text-muted hover:text-text"
-                        }`}
-                      >
-                        Transforms
-                      </button>
-                      <button
-                        onClick={() => setBottomTab("analysis")}
-                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                          bottomTab === "analysis"
-                            ? "text-text border-b-2 border-accent"
-                            : "text-text-muted hover:text-text"
-                        }`}
-                      >
-                        Analysis
-                      </button>
+                    <div className="flex items-center justify-between border-b border-border pr-2">
+                      <div className="flex">
+                        <button
+                          onClick={() => setBottomTab("transforms")}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            bottomTab === "transforms"
+                              ? "text-text border-b-2 border-accent"
+                              : "text-text-muted hover:text-text"
+                          }`}
+                        >
+                          Transforms
+                        </button>
+                        <button
+                          onClick={() => setBottomTab("analysis")}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            bottomTab === "analysis"
+                              ? "text-text border-b-2 border-accent"
+                              : "text-text-muted hover:text-text"
+                          }`}
+                        >
+                          Analysis
+                        </button>
+                      </div>
+                      {hasAnalysisOverlay && (
+                        <button
+                          onClick={() => {
+                            setNodeOverlay(null);
+                            setAnalysisResults(null);
+                          }}
+                          className="px-2 py-1 text-[10px] text-text-muted border border-border rounded hover:bg-surface-hover transition-colors"
+                        >
+                          Reset View
+                        </button>
+                      )}
                     </div>
                     <div className="flex-1 overflow-hidden">
                       {bottomTab === "transforms" ? <TransformPanel /> : <AnalysisPanel />}

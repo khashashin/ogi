@@ -28,14 +28,9 @@ const COMMUNITY_COLORS = [
 export function AnalysisPanel() {
   const [selected, setSelected] = useState(ALGORITHMS[0].value);
   const [running, setRunning] = useState(false);
-  const [results, setResults] = useState<{
-    type: "scores" | "communities";
-    scores?: Record<string, number>;
-    communities?: string[][];
-  } | null>(null);
 
   const { currentProject } = useProjectStore();
-  const { entities, setNodeOverlay } = useGraphStore();
+  const { entities, setNodeOverlay, analysisResults: results, setAnalysisResults: setResults } = useGraphStore();
 
   const handleRun = async () => {
     if (!currentProject) return;
