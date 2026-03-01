@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ogi.models import Edge, EdgeCreate, EdgeUpdate, UserProfile
 from ogi.api.dependencies import get_edge_store, get_graph_engine
-from ogi.api.auth import get_current_user
+from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
+from ogi.store.edge_store import EdgeStore
 
 router = APIRouter(prefix="/projects/{project_id}/edges", tags=["edges"])
 
@@ -13,9 +14,10 @@ router = APIRouter(prefix="/projects/{project_id}/edges", tags=["edges"])
 async def create_edge(
     project_id: UUID,
     data: EdgeCreate,
+    role: str = Depends(require_project_editor),
     current_user: UserProfile = Depends(get_current_user),
+    store: EdgeStore = Depends(get_edge_store),
 ) -> Edge:
-    store = get_edge_store()
     edge = await store.create(project_id, data)
     engine = get_graph_engine(project_id)
     try:
@@ -28,9 +30,10 @@ async def create_edge(
 @router.get("", response_model=list[Edge])
 async def list_edges(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
+    store: EdgeStore = Depends(get_edge_store),
 ) -> list[Edge]:
-    store = get_edge_store()
     return await store.list_by_project(project_id)
 
 
@@ -39,9 +42,10 @@ async def update_edge(
     project_id: UUID,
     edge_id: UUID,
     data: EdgeUpdate,
+    role: str = Depends(require_project_editor),
     current_user: UserProfile = Depends(get_current_user),
+    store: EdgeStore = Depends(get_edge_store),
 ) -> Edge:
-    store = get_edge_store()
     edge = await store.update(edge_id, data)
     if edge is None:
         raise HTTPException(status_code=404, detail="Edge not found")
@@ -59,9 +63,10 @@ async def update_edge(
 async def delete_edge(
     project_id: UUID,
     edge_id: UUID,
+    role: str = Depends(require_project_editor),
     current_user: UserProfile = Depends(get_current_user),
+    store: EdgeStore = Depends(get_edge_store),
 ) -> None:
-    store = get_edge_store()
     deleted = await store.delete(edge_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Edge not found")

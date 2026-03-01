@@ -192,6 +192,10 @@ async def run_pg_migrations(pool: "asyncpg.Pool") -> None:  # type: ignore[name-
             await conn.execute("ALTER TABLE projects ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT false")
         except Exception:
             pass
+        try:
+            await conn.execute("ALTER TABLE projects ADD COLUMN owner_id UUID REFERENCES profiles(id) ON DELETE SET NULL")
+        except Exception:
+            pass
 
 
 # ---------- Unified entry point ----------

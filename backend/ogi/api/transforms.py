@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from ogi.models import TransformInfo, TransformRun, EdgeCreate, UserProfile
 from ogi.transforms.base import TransformConfig
-from ogi.api.auth import get_current_user
+from ogi.api.auth import get_current_user, require_project_viewer
 from ogi.api.dependencies import (
     get_transform_engine,
     get_entity_store,
@@ -13,7 +13,12 @@ from ogi.api.dependencies import (
     get_edge_store,
     get_graph_engine,
     get_transform_run_store,
+    get_project_store,
 )
+from ogi.store.project_store import ProjectStore
+from ogi.store.entity_store import EntityStore
+from ogi.store.edge_store import EdgeStore
+from ogi.store.transform_run_store import TransformRunStore
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
 
@@ -44,8 +49,8 @@ async def list_entity_types(
 async def list_transforms_for_entity(
     entity_id: UUID,
     current_user: UserProfile = Depends(get_current_user),
+    entity_store: EntityStore = Depends(get_entity_store),
 ) -> list[TransformInfo]:
-    entity_store = get_entity_store()
     entity = await entity_store.get(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -58,8 +63,15 @@ async def run_transform(
     name: str,
     request: RunTransformRequest,
     current_user: UserProfile = Depends(get_current_user),
+    project_store: ProjectStore = Depends(get_project_store),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_s: EdgeStore = Depends(get_edge_store),
+    run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> TransformRun:
-    entity_store = get_entity_store()
+    role = await project_store.get_member_role(request.project_id, current_user.id)
+    if role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="Project editor access required")
+
     entity = await entity_store.get(request.entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -74,8 +86,7 @@ async def run_transform(
 
     # Persist discovered entities and edges, deduplicating by type+value
     if run.result:
-        es = get_entity_store()
-        edge_s = get_edge_store()
+        es = entity_store
         graph = get_graph_engine(request.project_id)
 
         # Map transform-generated IDs to actual persisted IDs (may differ if deduplicated)
@@ -133,7 +144,6 @@ async def run_transform(
         ]
 
     # Persist the run
-    run_store = get_transform_run_store()
     await run_store.save(run)
 
     return run
@@ -143,13 +153,13 @@ async def run_transform(
 async def get_run(
     run_id: UUID,
     current_user: UserProfile = Depends(get_current_user),
+    run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> TransformRun:
     # Try in-memory first, then DB
     engine = get_transform_engine()
     run = engine.get_run(run_id)
     if run is not None:
         return run
-    run_store = get_transform_run_store()
     run = await run_store.get(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Transform run not found")
@@ -159,7 +169,8 @@ async def get_run(
 @router.get("/project/{project_id}/runs", response_model=list[TransformRun])
 async def list_project_runs(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
+    run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> list[TransformRun]:
-    run_store = get_transform_run_store()
     return await run_store.list_by_project(project_id)

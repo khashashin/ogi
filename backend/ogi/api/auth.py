@@ -12,10 +12,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Path, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ogi.config import settings
 from ogi.models import UserProfile
+from ogi.api.dependencies import get_project_store
+from ogi.store.project_store import ProjectStore
+from ogi.db.database import get_session
 
 from supabase import create_client, Client
 
@@ -33,7 +37,10 @@ def get_supabase_client() -> Client | None:
         _supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
     return _supabase_client
 
-async def get_current_user(request: Request) -> UserProfile:
+async def get_current_user(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> UserProfile:
     """FastAPI dependency: extract and intensely verify the authenticated user.
 
     If Supabase credentials are not configured (local dev mode), returns a fixed anonymous profile.
@@ -63,10 +70,22 @@ async def get_current_user(request: Request) -> UserProfile:
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
 
-    return UserProfile(
-        id=UUID(str(user.id)),
-        email=str(user.email or ""),
-    )
+    user_id = UUID(str(user.id))
+    email = str(user.email or "")
+
+    # Ensure the user profile exists in DB (upsert) so FK constraints are satisfied
+    profile = await session.get(UserProfile, user_id)
+    if not profile:
+        profile = UserProfile(id=user_id, email=email)
+        session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+    elif profile.email != email:
+        profile.email = email
+        session.add(profile)
+        await session.commit()
+
+    return profile
 
 async def get_optional_user(request: Request) -> UserProfile | None:
     """Like ``get_current_user`` but returns ``None`` instead of raising."""
@@ -74,3 +93,33 @@ async def get_optional_user(request: Request) -> UserProfile | None:
         return await get_current_user(request)
     except HTTPException:
         return None
+
+async def require_project_viewer(
+    project_id: UUID = Path(...),
+    current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
+) -> str:
+    role = await store.get_member_role(project_id, current_user.id)
+    if role not in ("owner", "editor", "viewer"):
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+    return role
+
+async def require_project_editor(
+    project_id: UUID = Path(...),
+    current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
+) -> str:
+    role = await store.get_member_role(project_id, current_user.id)
+    if role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="Project editor access required")
+    return role
+
+async def require_project_owner(
+    project_id: UUID = Path(...),
+    current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
+) -> str:
+    role = await store.get_member_role(project_id, current_user.id)
+    if role != "owner":
+        raise HTTPException(status_code=403, detail="Project owner access required")
+    return role

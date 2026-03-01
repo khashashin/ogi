@@ -1,8 +1,9 @@
+from typing import Any, Optional
 from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from sqlmodel import Field, SQLModel, Column, JSON, DateTime
 
 from .entity import Entity, EntityType
 from .edge import Edge
@@ -15,26 +16,27 @@ class TransformStatus(str, Enum):
     FAILED = "failed"
 
 
-class TransformResult(BaseModel):
+class TransformResult(SQLModel):
     entities: list[Entity] = Field(default_factory=list)
     edges: list[Edge] = Field(default_factory=list)
     messages: list[str] = Field(default_factory=list)
     ui_messages: list[str] = Field(default_factory=list)
 
 
-class TransformRun(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    project_id: UUID
+class TransformRun(SQLModel, table=True):
+    __tablename__ = "transform_runs"
+    
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", ondelete="CASCADE")
     transform_name: str
     input_entity_id: UUID
     status: TransformStatus = TransformStatus.PENDING
-    result: TransformResult | None = None
+    result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     error: str | None = None
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: datetime | None = None
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column("created_at", DateTime(timezone=True)))
+    completed_at: datetime | None = Field(default=None, sa_column=Column("completed_at", DateTime(timezone=True), nullable=True))
 
-
-class TransformInfo(BaseModel):
+class TransformInfo(SQLModel):
     name: str
     display_name: str
     description: str
