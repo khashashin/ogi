@@ -174,12 +174,16 @@ async def update_member(
 async def remove_member(
     project_id: UUID,
     user_id: UUID,
-    role: str = Depends(require_project_owner),
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     if settings.use_sqlite:
         raise HTTPException(status_code=501, detail="Members not supported in SQLite mode")
+
+    role = await store.get_member_role(project_id, current_user.id)
+    if role != "owner" and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Project owner access required to remove other members")
 
     stmt = select(ProjectMember).where(
         ProjectMember.project_id == project_id,
