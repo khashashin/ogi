@@ -1,8 +1,8 @@
 """initial_schema
 
-Revision ID: cd7b6a14b944
+Revision ID: bcccdd54e922
 Revises: 
-Create Date: 2026-03-01 12:05:20.019272
+Create Date: 2026-03-01 23:07:00.681511
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'cd7b6a14b944'
+revision: str = 'bcccdd54e922'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,6 +31,24 @@ def upgrade() -> None:
     sa.Column('author', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('enabled', sa.Boolean(), nullable=False),
     sa.Column('installed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('schema_version', sa.Integer(), nullable=False),
+    sa.Column('category', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('license', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('author_github', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('homepage', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('repository', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('tags', sa.JSON(), nullable=True),
+    sa.Column('input_types', sa.JSON(), nullable=True),
+    sa.Column('output_types', sa.JSON(), nullable=True),
+    sa.Column('min_ogi_version', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('verification_tier', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('api_keys_required', sa.JSON(), nullable=True),
+    sa.Column('python_dependencies', sa.JSON(), nullable=True),
+    sa.Column('permissions', sa.JSON(), nullable=True),
+    sa.Column('source', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('registry_sha256', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('icon', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('color', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('transform_count', sa.Integer(), nullable=False),
     sa.Column('transform_names', sa.JSON(), nullable=True),
     sa.PrimaryKeyConstraint('id')

@@ -21,8 +21,10 @@ COPY pyproject.toml .
 # Install dependencies into the venv
 RUN uv pip install -e .
 
-# Copy application code
+# Copy application code and migrations
 COPY ogi/ ogi/
+COPY alembic/ alembic/
+COPY alembic.ini .
 
 # Default plugins directory (populated via volume mount at runtime)
 RUN mkdir -p plugins
