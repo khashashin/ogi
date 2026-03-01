@@ -49,6 +49,10 @@ async def init_db() -> None:
             echo=False,
             pool_size=5,
             max_overflow=10,
+            connect_args={
+                "prepared_statement_cache_size": 0,  # Required for PgBouncer/Supabase pooler
+                "statement_cache_size": 0
+            }
         )
 
     async_session_maker = async_sessionmaker(
