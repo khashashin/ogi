@@ -3,7 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
-import type { RegistryIndex, RegistryTransform, UpdateAvailable, PluginInfoV2 } from "../types/registry";
+import type { RegistryIndex, RegistryTransform, UpdateAvailable } from "../types/registry";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
