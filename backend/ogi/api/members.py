@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, delete
+from supabase import create_client
 
 from ogi.models import UserProfile, ProjectMember, ProjectMemberCreate, ProjectMemberUpdate
 from ogi.models.auth import ProjectMemberRead
@@ -13,6 +14,47 @@ from ogi.api.auth import get_current_user, require_project_viewer, require_proje
 from ogi.api.dependencies import get_project_store
 from ogi.db.database import get_session
 from ogi.config import settings
+
+
+async def _find_or_create_profile_by_email(email: str, session: AsyncSession) -> UserProfile | None:
+    """Look up a user profile by email, falling back to Supabase admin API if needed."""
+    # First check local profiles table
+    stmt = select(UserProfile).where(UserProfile.email == email)
+    result = await session.execute(stmt)
+    profile = result.scalar_one_or_none()
+    if profile:
+        return profile
+
+    # Not found locally — try Supabase admin API to find the user
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        return None
+
+    try:
+        admin_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        # List users filtered by email (admin endpoint)
+        users_response = admin_client.auth.admin.list_users()
+        matched_user = None
+        for u in users_response:
+            if u.email == email:
+                matched_user = u
+                break
+
+        if not matched_user:
+            return None
+
+        # Create profile locally so FK constraints work
+        user_id = UUID(str(matched_user.id))
+        profile = UserProfile(
+            id=user_id,
+            email=email,
+            display_name=matched_user.user_metadata.get("display_name", "") if matched_user.user_metadata else "",
+        )
+        session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+        return profile
+    except Exception:
+        return None
 
 router = APIRouter(prefix="/projects/{project_id}/members", tags=["members"])
 
@@ -60,10 +102,8 @@ async def add_member(
     if settings.use_sqlite:
         raise HTTPException(status_code=501, detail="Members not supported in SQLite mode")
 
-    # Look up user by email
-    stmt = select(UserProfile).where(UserProfile.email == data.email)
-    result = await session.execute(stmt)
-    profile = result.scalar_one_or_none()
+    # Look up user by email (checks local DB, then Supabase auth)
+    profile = await _find_or_create_profile_by_email(data.email, session)
     
     if not profile:
         raise HTTPException(status_code=404, detail="User not found")
