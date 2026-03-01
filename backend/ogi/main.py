@@ -12,6 +12,7 @@ from ogi.engine.transform_engine import TransformEngine
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
+from ogi.store.transform_run_store import TransformRunStore
 from ogi.api.dependencies import init_stores, init_transform_engine, init_entity_registry
 from ogi.api.router import api_router
 
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         project_store=ProjectStore(db),
         entity_store=EntityStore(db),
         edge_store=EdgeStore(db),
+        transform_run_store=TransformRunStore(db),
     )
 
     registry = EntityRegistry.instance()

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Trash2, Play } from "lucide-react";
+import { Trash2, Play, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { ENTITY_TYPE_META } from "../types/entity";
@@ -41,8 +42,11 @@ export function EntityInspector() {
     await removeEntity(currentProject.id, entity.id);
   };
 
+  const [runningTransform, setRunningTransform] = useState<string | null>(null);
+
   const handleRunTransform = async (transformName: string) => {
     if (!currentProject) return;
+    setRunningTransform(transformName);
     try {
       const run = await api.transforms.run(
         transformName,
@@ -57,9 +61,16 @@ export function EntityInspector() {
         for (const newEdge of run.result.edges) {
           addEdge(currentProject.id, newEdge);
         }
+        toast.success(`${transformName}: found ${run.result.entities.length} entities`);
+      }
+      if (run.error) {
+        toast.error(`${transformName}: ${run.error}`);
       }
     } catch (e) {
-      console.error("Transform failed:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Transform failed: ${msg}`);
+    } finally {
+      setRunningTransform(null);
     }
   };
 
@@ -148,9 +159,14 @@ export function EntityInspector() {
               <button
                 key={t.name}
                 onClick={() => handleRunTransform(t.name)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-text hover:bg-surface-hover"
+                disabled={runningTransform !== null}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
               >
-                <Play size={12} className="text-accent shrink-0" />
+                {runningTransform === t.name ? (
+                  <Loader2 size={12} className="animate-spin text-accent shrink-0" />
+                ) : (
+                  <Play size={12} className="text-accent shrink-0" />
+                )}
                 <div className="text-left">
                   <p>{t.display_name}</p>
                   <p className="text-[10px] text-text-muted">{t.description}</p>

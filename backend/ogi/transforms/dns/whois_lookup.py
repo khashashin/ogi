@@ -90,16 +90,30 @@ class WhoisLookup(BaseTransform):
                 ))
                 messages.append(f"Email: {email}")
 
-            # Store dates as properties on the domain entity
+            # Store WHOIS dates as properties on a copy of the input entity
             whois_props: dict[str, str] = {}
             if w.creation_date:
                 date = w.creation_date[0] if isinstance(w.creation_date, list) else w.creation_date
-                whois_props["creation_date"] = str(date)
+                whois_props["whois_creation_date"] = str(date)
             if w.expiration_date:
                 date = w.expiration_date[0] if isinstance(w.expiration_date, list) else w.expiration_date
-                whois_props["expiration_date"] = str(date)
+                whois_props["whois_expiration_date"] = str(date)
+            if w.updated_date:
+                date = w.updated_date[0] if isinstance(w.updated_date, list) else w.updated_date
+                whois_props["whois_updated_date"] = str(date)
+            if w.dnssec:
+                whois_props["dnssec"] = str(w.dnssec)
+            if w.status:
+                statuses = w.status if isinstance(w.status, list) else [w.status]
+                whois_props["whois_status"] = ", ".join(str(s) for s in statuses)
+
             if whois_props:
-                messages.append(f"WHOIS dates: {whois_props}")
+                enriched = entity.model_copy(update={
+                    "properties": {**entity.properties, **whois_props},
+                })
+                entities.append(enriched)
+                for key, val in whois_props.items():
+                    messages.append(f"{key}: {val}")
 
         except Exception as e:
             messages.append(f"WHOIS error: {e}")

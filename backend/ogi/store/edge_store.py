@@ -4,7 +4,7 @@ from uuid import UUID
 
 import aiosqlite
 
-from ogi.models import Edge, EdgeCreate
+from ogi.models import Edge, EdgeCreate, EdgeUpdate
 
 
 class EdgeStore:
@@ -58,6 +58,35 @@ class EdgeStore:
         )
         rows = await cursor.fetchall()
         return [self._row_to_edge(row) for row in rows]
+
+    async def update(self, edge_id: UUID, data: EdgeUpdate) -> Edge | None:
+        edge = await self.get(edge_id)
+        if edge is None:
+            return None
+
+        updates: list[str] = []
+        params: list[str | int] = []
+
+        if data.label is not None:
+            updates.append("label = ?")
+            params.append(data.label)
+        if data.weight is not None:
+            updates.append("weight = ?")
+            params.append(data.weight)
+        if data.properties is not None:
+            updates.append("properties = ?")
+            params.append(json.dumps(data.properties))
+
+        if not updates:
+            return edge
+
+        params.append(str(edge_id))
+        await self.db.execute(
+            f"UPDATE edges SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        await self.db.commit()
+        return await self.get(edge_id)
 
     async def delete(self, edge_id: UUID) -> bool:
         cursor = await self.db.execute(

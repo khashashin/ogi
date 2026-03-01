@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
-from ogi.models import Project, ProjectCreate
+from ogi.models import Project, ProjectCreate, ProjectUpdate
 from ogi.api.dependencies import get_project_store
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -24,6 +24,15 @@ async def list_projects() -> list[Project]:
 async def get_project(project_id: UUID) -> Project:
     store = get_project_store()
     project = await store.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.patch("/{project_id}", response_model=Project)
+async def update_project(project_id: UUID, data: ProjectUpdate) -> Project:
+    store = get_project_store()
+    project = await store.update(project_id, data)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project

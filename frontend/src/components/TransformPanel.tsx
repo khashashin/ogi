@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Play, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { TransformInfo, TransformRun } from "../types/transform";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -32,8 +33,27 @@ export function TransformPanel() {
     try {
       const run = await api.transforms.run(name, entity.id, currentProject.id);
       setLastRun(run);
+
+      // Auto-add discovered entities and edges to the graph
+      if (run.result) {
+        const { addEntity, addEdge } = useGraphStore.getState();
+        for (const newEntity of run.result.entities) {
+          addEntity(currentProject.id, newEntity);
+        }
+        for (const newEdge of run.result.edges) {
+          addEdge(currentProject.id, newEdge);
+        }
+        const entityCount = run.result.entities.length;
+        const edgeCount = run.result.edges.length;
+        toast.success(`${name}: found ${entityCount} entities, ${edgeCount} connections`);
+      }
+
+      if (run.error) {
+        toast.error(`${name}: ${run.error}`);
+      }
     } catch (e) {
-      console.error("Transform failed:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Transform failed: ${msg}`);
     } finally {
       setRunning(null);
     }

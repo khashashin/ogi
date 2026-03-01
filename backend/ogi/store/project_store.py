@@ -1,10 +1,9 @@
-import json
 from datetime import datetime, timezone
 from uuid import UUID
 
 import aiosqlite
 
-from ogi.models import Project, ProjectCreate
+from ogi.models import Project, ProjectCreate, ProjectUpdate
 
 
 class ProjectStore:
@@ -41,6 +40,36 @@ class ProjectStore:
         )
         rows = await cursor.fetchall()
         return [self._row_to_project(row) for row in rows]
+
+    async def update(self, project_id: UUID, data: ProjectUpdate) -> Project | None:
+        project = await self.get(project_id)
+        if project is None:
+            return None
+
+        updates: list[str] = []
+        params: list[str] = []
+
+        if data.name is not None:
+            updates.append("name = ?")
+            params.append(data.name)
+        if data.description is not None:
+            updates.append("description = ?")
+            params.append(data.description)
+
+        if not updates:
+            return project
+
+        now = datetime.now(timezone.utc).isoformat()
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(str(project_id))
+
+        await self.db.execute(
+            f"UPDATE projects SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        await self.db.commit()
+        return await self.get(project_id)
 
     async def delete(self, project_id: UUID) -> bool:
         cursor = await self.db.execute(

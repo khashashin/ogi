@@ -1,6 +1,6 @@
-import type { Project, ProjectCreate } from "../types/project";
+import type { Project, ProjectCreate, ProjectUpdate } from "../types/project";
 import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../types/entity";
-import type { Edge, EdgeCreate } from "../types/edge";
+import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
 
@@ -26,6 +26,11 @@ export const api = {
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (data: ProjectCreate) =>
       request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: ProjectUpdate) =>
+      request<Project>(`/projects/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) =>
       request<void>(`/projects/${id}`, { method: "DELETE" }),
   },
@@ -57,6 +62,11 @@ export const api = {
     create: (projectId: string, data: EdgeCreate) =>
       request<Edge>(`/projects/${projectId}/edges`, {
         method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (projectId: string, edgeId: string, data: EdgeUpdate) =>
+      request<Edge>(`/projects/${projectId}/edges/${edgeId}`, {
+        method: "PATCH",
         body: JSON.stringify(data),
       }),
     delete: (projectId: string, edgeId: string) =>

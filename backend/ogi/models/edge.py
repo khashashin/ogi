@@ -25,3 +25,9 @@ class EdgeCreate(BaseModel):
     properties: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     bidirectional: bool = False
     source_transform: str = ""
+
+
+class EdgeUpdate(BaseModel):
+    label: str | None = None
+    weight: int | None = None
+    properties: dict[str, str | int | float | bool | None] | None = None
