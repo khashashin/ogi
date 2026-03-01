@@ -1,15 +1,20 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ogi.models import Entity, EntityCreate, EntityUpdate
+from ogi.models import Entity, EntityCreate, EntityUpdate, UserProfile
 from ogi.api.dependencies import get_entity_store, get_graph_engine
+from ogi.api.auth import get_current_user
 
 router = APIRouter(prefix="/projects/{project_id}/entities", tags=["entities"])
 
 
 @router.post("", response_model=Entity, status_code=201)
-async def create_entity(project_id: UUID, data: EntityCreate) -> Entity:
+async def create_entity(
+    project_id: UUID,
+    data: EntityCreate,
+    current_user: UserProfile = Depends(get_current_user),
+) -> Entity:
     store = get_entity_store()
     entity = await store.create(project_id, data)
     engine = get_graph_engine(project_id)
@@ -18,13 +23,20 @@ async def create_entity(project_id: UUID, data: EntityCreate) -> Entity:
 
 
 @router.get("", response_model=list[Entity])
-async def list_entities(project_id: UUID) -> list[Entity]:
+async def list_entities(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> list[Entity]:
     store = get_entity_store()
     return await store.list_by_project(project_id)
 
 
 @router.get("/{entity_id}", response_model=Entity)
-async def get_entity(project_id: UUID, entity_id: UUID) -> Entity:
+async def get_entity(
+    project_id: UUID,
+    entity_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> Entity:
     store = get_entity_store()
     entity = await store.get(entity_id)
     if entity is None:
@@ -33,7 +45,12 @@ async def get_entity(project_id: UUID, entity_id: UUID) -> Entity:
 
 
 @router.patch("/{entity_id}", response_model=Entity)
-async def update_entity(project_id: UUID, entity_id: UUID, data: EntityUpdate) -> Entity:
+async def update_entity(
+    project_id: UUID,
+    entity_id: UUID,
+    data: EntityUpdate,
+    current_user: UserProfile = Depends(get_current_user),
+) -> Entity:
     store = get_entity_store()
     entity = await store.update(entity_id, data)
     if entity is None:
@@ -44,7 +61,11 @@ async def update_entity(project_id: UUID, entity_id: UUID, data: EntityUpdate) -
 
 
 @router.delete("/{entity_id}", status_code=204)
-async def delete_entity(project_id: UUID, entity_id: UUID) -> None:
+async def delete_entity(
+    project_id: UUID,
+    entity_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> None:
     store = get_entity_store()
     deleted = await store.delete(entity_id)
     if not deleted:

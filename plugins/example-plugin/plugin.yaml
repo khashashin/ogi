@@ -1,0 +1,5 @@
+name: example-plugin
+version: "1.0.0"
+display_name: "Example Plugin"
+description: "A sample plugin demonstrating the OGI plugin system"
+author: "OGI Team"

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ogi.config import settings
-from ogi.db.database import get_db, close_db
+from ogi.db.database import get_sqlite_db, close_db, create_pg_pool
 from ogi.db.migrations import run_migrations
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.transform_engine import TransformEngine
@@ -13,14 +13,19 @@ from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
-from ogi.api.dependencies import init_stores, init_transform_engine, init_entity_registry
+from ogi.store.api_key_store import ApiKeyStore
+from ogi.api.dependencies import init_stores, init_transform_engine, init_entity_registry, init_plugin_engine, init_api_key_store
 from ogi.api.router import api_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Startup
-    db = await get_db()
+    # Startup — choose DB backend
+    if settings.use_sqlite:
+        db = await get_sqlite_db()
+    else:
+        db = await create_pg_pool()
+
     await run_migrations(db)
 
     init_stores(
@@ -35,7 +40,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     transform_engine = TransformEngine()
     transform_engine.auto_discover()
+    plugin_engine = transform_engine.load_plugins(settings.plugin_dirs)
     init_transform_engine(transform_engine)
+    init_plugin_engine(plugin_engine)
+    init_api_key_store(ApiKeyStore(db))
 
     yield
 
@@ -46,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="OGI — OpenGraph Intel",
     description="Open source link analysis and OSINT framework",
-    version="0.1.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 

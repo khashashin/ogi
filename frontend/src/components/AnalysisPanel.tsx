@@ -36,7 +36,7 @@ export function AnalysisPanel() {
   } | null>(null);
 
   const { currentProject } = useProjectStore();
-  const { graph, entities } = useGraphStore();
+  const { entities } = useGraphStore();
 
   const handleRun = async () => {
     if (!currentProject) return;

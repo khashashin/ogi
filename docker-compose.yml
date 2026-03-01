@@ -1,0 +1,44 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "${OGI_PORT:-8000}:8000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./plugins:/app/plugins
+    environment:
+      - OGI_DATABASE_URL=${OGI_DATABASE_URL:-postgresql://postgres:postgres@db:5432/ogi}
+      - OGI_USE_SQLITE=false
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${OGI_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${OGI_SUPABASE_ANON_KEY:-}
+    ports:
+      - "${OGI_FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ogi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

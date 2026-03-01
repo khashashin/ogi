@@ -3,6 +3,8 @@ from .edge import Edge, EdgeCreate, EdgeUpdate
 from .project import Project, ProjectCreate, ProjectUpdate
 from .transform import TransformResult, TransformRun, TransformInfo, TransformStatus
 from .graph import Graph
+from .auth import UserProfile, ProjectMember, ProjectMemberCreate, ProjectMemberUpdate
+from .plugin import PluginInfo
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -10,4 +12,6 @@ __all__ = [
     "Project", "ProjectCreate", "ProjectUpdate",
     "TransformResult", "TransformRun", "TransformInfo", "TransformStatus",
     "Graph",
+    "UserProfile", "ProjectMember", "ProjectMemberCreate", "ProjectMemberUpdate",
+    "PluginInfo",
 ]
