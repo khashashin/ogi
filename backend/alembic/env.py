@@ -37,7 +37,7 @@ else:
             else:
                 db_url = base
 
-config.set_main_option("sqlalchemy.url", db_url)
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # Add your model's MetaData object here for 'autogenerate' support
 target_metadata = SQLModel.metadata
