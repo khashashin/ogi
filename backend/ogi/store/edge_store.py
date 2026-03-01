@@ -14,7 +14,27 @@ class EdgeStore:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def find_existing(
+        self, project_id: UUID, source_id: UUID, target_id: UUID, label: str
+    ) -> Edge | None:
+        """Check if an edge with the same source, target, and label already exists."""
+        stmt = select(Edge).where(
+            Edge.project_id == project_id,
+            Edge.source_id == source_id,
+            Edge.target_id == target_id,
+            Edge.label == label,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(self, project_id: UUID, data: EdgeCreate) -> Edge:
+        # Deduplicate: skip if an identical edge already exists
+        existing = await self.find_existing(
+            project_id, data.source_id, data.target_id, data.label
+        )
+        if existing is not None:
+            return existing
+
         edge = Edge(
             source_id=data.source_id,
             target_id=data.target_id,

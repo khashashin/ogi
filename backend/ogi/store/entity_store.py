@@ -52,6 +52,10 @@ class EntityStore:
             return existing
             
         entity.project_id = project_id
+        # Ensure datetimes are proper objects (not strings from JSON deserialization)
+        now = datetime.now(timezone.utc)
+        entity.created_at = now
+        entity.updated_at = now
         self.session.add(entity)
         await self.session.commit()
         await self.session.refresh(entity)
