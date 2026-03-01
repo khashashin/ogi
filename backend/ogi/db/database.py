@@ -33,6 +33,17 @@ async def init_db() -> None:
         db_url = settings.database_url
         if db_url and db_url.startswith("postgresql://"):
             db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # asyncpg does not support all the connection pooling query arguments
+            # that Supabase provides by default (like ?pgbouncer=true)
+            if "?" in db_url:
+                base, query = db_url.split("?", 1)
+                params = [p for p in query.split("&") if not p.startswith("pgbouncer=")]
+                if params:
+                    db_url = f"{base}?{'&'.join(params)}"
+                else:
+                    db_url = base
+
         engine = create_async_engine(
             db_url,
             echo=False,
