@@ -94,6 +94,19 @@ export function AuthPage({ mode }: AuthPageProps) {
             {error && (
               <p className="text-xs text-danger">{error}</p>
             )}
+            {mode === "signup" && (
+              <p className="text-[11px] text-text-muted text-center">
+                By signing up, you agree to our{" "}
+                <Link to="/terms" className="text-accent hover:underline">
+                  Terms of Use
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="text-accent hover:underline">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            )}
             <button
               type="submit"
               disabled={busy}
