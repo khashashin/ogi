@@ -59,31 +59,56 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Persist discovered entities and edges (preserving IDs so edges stay valid)
+    # Persist discovered entities and edges, deduplicating by type+value
     if run.result:
         es = get_entity_store()
         edge_s = get_edge_store()
         graph = get_graph_engine(request.project_id)
 
+        # Map transform-generated IDs to actual persisted IDs (may differ if deduplicated)
+        id_map: dict[UUID, UUID] = {}
+
         for new_entity in run.result.entities:
-            await es.save(request.project_id, new_entity)
-            graph.add_entity(new_entity)
+            saved = await es.save(request.project_id, new_entity)
+            id_map[new_entity.id] = saved.id
+            if not graph.get_entity(saved.id):
+                graph.add_entity(saved)
 
         for new_edge in run.result.edges:
-            new_edge.project_id = request.project_id
+            # Remap edge endpoints to the actual persisted entity IDs
+            actual_source = id_map.get(new_edge.source_id, new_edge.source_id)
+            actual_target = id_map.get(new_edge.target_id, new_edge.target_id)
+
+            # Skip duplicate edges
+            existing_edges = graph.get_edges_for_entity(actual_source) if graph.get_entity(actual_source) else []
+            is_duplicate = any(
+                e.source_id == actual_source and e.target_id == actual_target and e.label == new_edge.label
+                for e in existing_edges
+            )
+            if is_duplicate:
+                continue
+
+            edge_data = EdgeCreate(
+                source_id=actual_source,
+                target_id=actual_target,
+                label=new_edge.label,
+                source_transform=new_edge.source_transform,
+            )
+            saved_edge = await edge_s.create(request.project_id, edge_data)
             try:
-                graph.add_edge(new_edge)
+                graph.add_edge(saved_edge)
             except ValueError:
                 pass
-            await edge_s.create(
-                request.project_id,
-                EdgeCreate(
-                    source_id=new_edge.source_id,
-                    target_id=new_edge.target_id,
-                    label=new_edge.label,
-                    source_transform=new_edge.source_transform,
-                ),
-            )
+
+        # Update the result to reflect deduplicated IDs so the frontend gets correct data
+        run.result.entities = [
+            es_entity for eid in {id_map.get(e.id, e.id) for e in run.result.entities}
+            if (es_entity := graph.get_entity(eid)) is not None
+        ]
+        run.result.edges = [
+            e for e in graph.edges.values()
+            if e.source_id == entity.id or e.target_id == entity.id
+        ][-len(run.result.edges):]  # return only the recently added edges
 
     return run
 

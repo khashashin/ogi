@@ -11,7 +11,25 @@ class EntityStore:
     def __init__(self, db: aiosqlite.Connection) -> None:
         self.db = db
 
+    async def find_by_type_and_value(
+        self, project_id: UUID, entity_type: EntityType, value: str
+    ) -> Entity | None:
+        """Find an existing entity by type + value within a project."""
+        cursor = await self.db.execute(
+            "SELECT * FROM entities WHERE project_id = ? AND type = ? AND value = ?",
+            (str(project_id), entity_type.value, value),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return self._row_to_entity(row)
+
     async def create(self, project_id: UUID, data: EntityCreate) -> Entity:
+        # Deduplicate: if same type+value already exists, return the existing entity
+        existing = await self.find_by_type_and_value(project_id, data.type, data.value)
+        if existing is not None:
+            return existing
+
         entity = Entity(
             type=data.type,
             value=data.value,
@@ -22,31 +40,21 @@ class EntityStore:
             source=data.source,
             project_id=project_id,
         )
-        await self.db.execute(
-            """INSERT INTO entities
-               (id, project_id, type, value, properties, icon, weight, notes, tags, source, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                str(entity.id),
-                str(project_id),
-                entity.type.value,
-                entity.value,
-                json.dumps(entity.properties),
-                entity.icon,
-                entity.weight,
-                entity.notes,
-                json.dumps(entity.tags),
-                entity.source,
-                entity.created_at.isoformat(),
-                entity.updated_at.isoformat(),
-            ),
-        )
-        await self.db.commit()
+        await self._insert(project_id, entity)
         return entity
 
     async def save(self, project_id: UUID, entity: Entity) -> Entity:
-        """Persist an existing Entity, preserving its ID."""
+        """Persist a transform-produced entity. Deduplicates by type+value,
+        returning the existing entity (and its ID) if one already exists."""
+        existing = await self.find_by_type_and_value(project_id, entity.type, entity.value)
+        if existing is not None:
+            return existing
+
         entity.project_id = project_id
+        await self._insert(project_id, entity)
+        return entity
+
+    async def _insert(self, project_id: UUID, entity: Entity) -> None:
         await self.db.execute(
             """INSERT INTO entities
                (id, project_id, type, value, properties, icon, weight, notes, tags, source, created_at, updated_at)
@@ -67,7 +75,6 @@ class EntityStore:
             ),
         )
         await self.db.commit()
-        return entity
 
     async def get(self, entity_id: UUID) -> Entity | None:
         cursor = await self.db.execute(

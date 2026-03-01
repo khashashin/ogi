@@ -17,19 +17,21 @@ async def get_graph(project_id: UUID) -> dict[str, list[Entity] | list[Edge]]:
     """Get full graph data for a project (loads from DB into engine if needed)."""
     engine = get_graph_engine(project_id)
 
-    # If engine is empty, load from DB
-    if not engine.entities:
+    # Hydrate from DB on first access
+    if not engine._hydrated:
         entity_store = get_entity_store()
         edge_store = get_edge_store()
         entities = await entity_store.list_by_project(project_id)
         edges = await edge_store.list_by_project(project_id)
         for entity in entities:
-            engine.add_entity(entity)
+            if not engine.get_entity(entity.id):
+                engine.add_entity(entity)
         for edge in edges:
             try:
                 engine.add_edge(edge)
             except ValueError:
                 pass
+        engine._hydrated = True
 
     return {
         "entities": list(engine.entities.values()),
