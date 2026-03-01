@@ -8,7 +8,7 @@ export function SearchBar() {
   const [visible, setVisible] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { graph, entities, selectNode } = useGraphStore();
+  const { graph, entities, selectNode, setNodeOverlay } = useGraphStore();
 
   // Ctrl+F to toggle search
   useEffect(() => {
@@ -50,43 +50,29 @@ export function SearchBar() {
     setCurrentIndex(0);
   }, [matchingIds.length]);
 
-  // Apply search highlight via Sigma node reducer
+  // Push search overlay to the centralized store (GraphCanvas owns the nodeReducer)
   useEffect(() => {
-    const sigma = getSigmaRef();
-    if (!sigma) return;
-
-    if (matchingIds.length === 0 && !query.trim()) {
-      sigma.setSetting("nodeReducer", (_, data) => data);
-      sigma.refresh();
+    if (!visible || !query.trim() || matchingIds.length === 0) {
+      // Clear search overlay when not searching
+      if (visible && query.trim() && matchingIds.length === 0) {
+        // Active search with no results — still show the overlay to dim everything
+        setNodeOverlay({ type: "search", matchIds: new Set(), focusId: null });
+      }
       return;
     }
 
-    const matchSet = new Set(matchingIds);
-    const focusedId = matchingIds[currentIndex] ?? null;
-
-    sigma.setSetting("nodeReducer", (node, data) => {
-      if (matchSet.size === 0) return data;
-      if (node === focusedId) {
-        return { ...data, highlighted: true, zIndex: 2, size: (data.size as number ?? 8) + 4 };
-      }
-      if (matchSet.has(node)) {
-        return { ...data, highlighted: true, zIndex: 1 };
-      }
-      return { ...data, color: `${data.color}22`, label: "" };
+    setNodeOverlay({
+      type: "search",
+      matchIds: new Set(matchingIds),
+      focusId: matchingIds[currentIndex] ?? null,
     });
-
-    sigma.refresh();
-  }, [matchingIds, currentIndex, query, graph]);
+  }, [visible, matchingIds, currentIndex, query, setNodeOverlay]);
 
   const handleClose = () => {
     setVisible(false);
     setQuery("");
     setCurrentIndex(0);
-    const sigma = getSigmaRef();
-    if (sigma) {
-      sigma.setSetting("nodeReducer", (_, data) => data);
-      sigma.refresh();
-    }
+    setNodeOverlay(null);
   };
 
   const navigateTo = (index: number) => {

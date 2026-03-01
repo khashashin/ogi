@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { api } from "../api/client";
-import { getSigmaRef } from "../stores/sigmaRef";
 
 interface AlgorithmOption {
   value: string;
@@ -36,7 +35,7 @@ export function AnalysisPanel() {
   } | null>(null);
 
   const { currentProject } = useProjectStore();
-  const { entities } = useGraphStore();
+  const { entities, setNodeOverlay } = useGraphStore();
 
   const handleRun = async () => {
     if (!currentProject) return;
@@ -46,24 +45,11 @@ export function AnalysisPanel() {
       const algo = ALGORITHMS.find((a) => a.value === selected);
       setResults({ type: algo?.type ?? "scores", ...result });
 
-      const sigma = getSigmaRef();
-      if (!sigma) return;
-
       if (result.scores) {
-        // Resize nodes by score
         const maxScore = Math.max(...Object.values(result.scores), 0.001);
-        sigma.setSetting("nodeReducer", (node, data) => {
-          const score = result.scores?.[node] ?? 0;
-          const normalized = score / maxScore;
-          return {
-            ...data,
-            size: 6 + normalized * 20,
-          };
-        });
-        sigma.refresh();
+        setNodeOverlay({ type: "analysis-scores", scores: result.scores, maxScore });
         toast.success(`${algo?.label}: analysis complete`);
       } else if (result.communities) {
-        // Color nodes by community
         const nodeToColor: Record<string, string> = {};
         result.communities.forEach((community, i) => {
           const color = COMMUNITY_COLORS[i % COMMUNITY_COLORS.length];
@@ -71,11 +57,7 @@ export function AnalysisPanel() {
             nodeToColor[nodeId] = color;
           }
         });
-        sigma.setSetting("nodeReducer", (node, data) => ({
-          ...data,
-          color: nodeToColor[node] ?? data.color,
-        }));
-        sigma.refresh();
+        setNodeOverlay({ type: "analysis-communities", colors: nodeToColor });
         toast.success(`Found ${result.communities.length} connected components`);
       }
     } catch (e) {
@@ -88,11 +70,7 @@ export function AnalysisPanel() {
 
   const handleReset = () => {
     setResults(null);
-    const sigma = getSigmaRef();
-    if (sigma) {
-      sigma.setSetting("nodeReducer", (_, data) => data);
-      sigma.refresh();
-    }
+    setNodeOverlay(null);
   };
 
   // Sorted top entities for score results
