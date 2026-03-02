@@ -15,6 +15,7 @@ import ogi.models.transform  # noqa: F401
 import ogi.models.api_key  # noqa: F401
 import ogi.models.plugin  # noqa: F401
 import ogi.models.user_plugin_preference  # noqa: F401
+import ogi.models.transform_settings  # noqa: F401
 
 engine: AsyncEngine | None = None
 async_session_maker: async_sessionmaker[AsyncSession] | None = None

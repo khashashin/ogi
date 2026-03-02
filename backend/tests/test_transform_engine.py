@@ -3,6 +3,7 @@ import pytest
 from ogi.models import Entity, EntityType, TransformStatus
 from ogi.engine.transform_engine import TransformEngine
 from ogi.models import Project
+from ogi.transforms.base import TransformConfig
 
 
 @pytest.fixture
@@ -20,7 +21,8 @@ def test_auto_discover(engine: TransformEngine):
     assert "domain_to_ns" in names
     assert "ip_to_domain" in names
     assert "whois_lookup" in names
-    assert len(transforms) == 15
+    assert "organization_to_team_members" in names
+    assert len(transforms) == 16
 
 
 def test_list_for_entity(engine: TransformEngine):
@@ -52,6 +54,16 @@ def test_get_transform(engine: TransformEngine):
 
 def test_get_nonexistent_transform(engine: TransformEngine):
     assert engine.get_transform("nonexistent") is None
+
+
+@pytest.mark.asyncio
+async def test_organization_to_team_members_requires_openai_key(engine: TransformEngine):
+    transform = engine.get_transform("organization_to_team_members")
+    assert transform is not None
+    org = Entity(type=EntityType.ORGANIZATION, value="Acme")
+    result = await transform.run(org, TransformConfig(settings={}))
+    assert result.messages
+    assert "OpenAI API key required" in result.messages[0]
 
 
 @pytest.mark.asyncio

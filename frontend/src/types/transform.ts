@@ -8,6 +8,20 @@ export interface TransformInfo {
   input_types: EntityType[];
   output_types: EntityType[];
   category: string;
+  settings: TransformSettingSchema[];
+}
+
+export interface TransformSettingSchema {
+  name: string;
+  display_name: string;
+  description: string;
+  required: boolean;
+  default: string;
+  field_type: "string" | "integer" | "number" | "boolean" | "select" | "secret";
+  options: string[];
+  min_value: number | null;
+  max_value: number | null;
+  pattern: string;
 }
 
 export interface TransformResult {
@@ -33,6 +47,16 @@ export interface TransformRun {
 
 export interface TransformConfig {
   settings: Record<string, string>;
+}
+
+export interface TransformSettingsResponse {
+  transform_name: string;
+  settings_schema: TransformSettingSchema[];
+  defaults: Record<string, string>;
+  global_settings: Record<string, string>;
+  user_settings: Record<string, string>;
+  resolved: Record<string, string>;
+  can_manage_global: boolean;
 }
 
 // --- WebSocket message types ---
