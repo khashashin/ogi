@@ -1,6 +1,7 @@
 services:
   backend:
-    build: ./backend
+    image: ${OGI_BACKEND_IMAGE:-ghcr.io/opengraphintel/ogi-backend}:${OGI_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       redis:
@@ -16,7 +17,8 @@ services:
       - OGI_REDIS_URL=redis://redis:6379/0
 
   worker:
-    build: ./backend
+    image: ${OGI_WORKER_IMAGE:-ghcr.io/opengraphintel/ogi-worker}:${OGI_IMAGE_TAG:-latest}
+    pull_policy: always
     command: ["python", "-m", "ogi.worker.run_worker"]
     restart: unless-stopped
     depends_on:
@@ -39,13 +41,8 @@ services:
       retries: 5
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_SUPABASE_URL: ${OGI_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${OGI_SUPABASE_ANON_KEY}
-        VITE_SUPABASE_REDIRECT_URL: ${VITE_SUPABASE_REDIRECT_URL:-https://ogi.khas.app}
-        VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
+    image: ${OGI_FRONTEND_IMAGE:-ghcr.io/opengraphintel/ogi-frontend}:${OGI_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "80" # Coolify Traefik proxy will route the configured domain to this port
