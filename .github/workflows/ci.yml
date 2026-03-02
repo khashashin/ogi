@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   backend:
-    name: Backend Tests
+    name: Backend Lint, Type, Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,6 +30,12 @@ jobs:
 
       - name: Sync dependencies
         run: uv sync --locked --extra dev
+
+      - name: Run backend lint
+        run: uv run --extra dev ruff check ogi/api/router.py ogi/main.py ogi/config.py
+
+      - name: Run backend type checks
+        run: uv run --extra dev mypy --follow-imports=skip ogi/api/router.py
 
       - name: Run backend tests
         run: uv run --extra dev pytest -q
