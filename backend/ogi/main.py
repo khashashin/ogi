@@ -4,7 +4,8 @@ import traceback
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -152,14 +153,66 @@ app.add_middleware(
 app.include_router(api_router)
 
 
+def _error_response(status_code: int, code: str, message: str, details: object | None = None) -> JSONResponse:
+    payload: dict[str, object] = {
+        "error": {
+            "code": code,
+            "message": message,
+        }
+    }
+    if details is not None:
+        payload["error"]["details"] = details  # type: ignore[index]
+    return JSONResponse(status_code=status_code, content=payload)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    detail = exc.detail
+    if exc.status_code == 500 and not settings.expose_error_details:
+        message = "Internal Server Error. Please try again later."
+        details = None
+    elif isinstance(detail, str):
+        message = detail
+        details: object | None = None
+    else:
+        message = "Request failed"
+        details = detail
+    return _error_response(
+        status_code=exc.status_code,
+        code=f"HTTP_{exc.status_code}",
+        message=message,
+        details=details,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return _error_response(
+        status_code=422,
+        code="VALIDATION_ERROR",
+        message="Request validation failed",
+        details=exc.errors(),
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch-all: log the full traceback so 500s are never silent."""
     logger.error("Unhandled exception on %s %s", request.method, request.url)
     logger.error(traceback.format_exc())
-    return JSONResponse(
-        status_code=500, 
-        content={"detail": "Internal Server Error. Please try again later. If the issue persists, contact support."}
+    details: dict[str, str] | None = None
+    if settings.expose_error_details:
+        details = {
+            "type": exc.__class__.__name__,
+            "message": str(exc),
+        }
+    return _error_response(
+        status_code=500,
+        code="INTERNAL_SERVER_ERROR",
+        message="Internal Server Error. Please try again later. If the issue persists, contact support.",
+        details=details,
     )
 
 
