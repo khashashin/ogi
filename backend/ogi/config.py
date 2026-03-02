@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     registry_cache_ttl: int = 3600  # seconds
     # TODO: Remove after official launch and the repository is public
     github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
+    api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
+    admin_emails: list[str] = [
+        email.strip().lower()
+        for email in os.environ.get("OGI_ADMIN_EMAILS", "").split(",")
+        if email.strip()
+    ]
+
+    # Redis / RQ job queue
+    redis_url: str = "redis://localhost:6379/0"
+    transform_timeout: int = 300  # seconds per transform job
+    rq_queue_name: str = "transforms"
 
     # Cloud sandbox
     sandbox_enabled: bool = False  # auto-enabled in cloud mode

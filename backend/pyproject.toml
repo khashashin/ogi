@@ -25,6 +25,9 @@ dependencies = [
     "sqlmodel>=0.0.37",
     "alembic>=1.18.4",
     "typer>=0.24.1",
+    "cryptography>=46.0.0",
+    "rq>=2.3.0",
+    "redis>=6.0.0",
 ]
 
 [project.scripts]

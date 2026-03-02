@@ -10,6 +10,7 @@ unaffected.
 """
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import Request, HTTPException, Path, Depends
@@ -22,6 +23,8 @@ from ogi.store.project_store import ProjectStore
 from ogi.db.database import get_session
 
 from supabase import create_client, Client
+
+logger = logging.getLogger(__name__)
 
 # A fixed anonymous profile returned when auth is disabled (local dev)
 _ANON_USER = UserProfile(
@@ -67,8 +70,9 @@ async def get_current_user(
         if not response or not response.user:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
         user = response.user
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
+    except Exception:
+        logger.exception("Supabase authentication failed")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
     user_id = UUID(str(user.id))
     email = str(user.email or "")
@@ -98,6 +102,21 @@ async def get_optional_user(request: Request) -> UserProfile | None:
         return await get_current_user(request)
     except HTTPException:
         return None
+
+
+async def require_admin_user(
+    current_user: UserProfile = Depends(get_current_user),
+) -> UserProfile:
+    """Restrict endpoints to configured admin users.
+
+    In local/no-auth mode, admin checks are bypassed to keep developer UX intact.
+    """
+    if not settings.supabase_url or not settings.supabase_anon_key:
+        return current_user
+
+    if current_user.email.lower() not in settings.admin_emails:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 async def require_project_viewer(
     project_id: UUID = Path(...),

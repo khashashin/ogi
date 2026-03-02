@@ -4,9 +4,11 @@ from __future__ import annotations
 import base64
 from uuid import UUID
 
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from ogi.config import settings
 from ogi.models.api_key import ApiKey
 
 
@@ -15,6 +17,7 @@ class ApiKeyStore:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self._fernet: Fernet | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -74,13 +77,33 @@ class ApiKeyStore:
         return False
 
     # ------------------------------------------------------------------
-    # Encryption helpers (simple base64 encoding — swap for Fernet/etc.)
+    # Encryption helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _encrypt(plain: str) -> str:
-        return base64.b64encode(plain.encode()).decode()
+    def _get_fernet(self) -> Fernet:
+        if self._fernet is not None:
+            return self._fernet
 
-    @staticmethod
-    def _decrypt(encrypted: str) -> str:
+        if not settings.api_key_encryption_key:
+            raise RuntimeError(
+                "OGI_API_KEY_ENCRYPTION_KEY is required for secure API key storage"
+            )
+
+        self._fernet = Fernet(settings.api_key_encryption_key.encode())
+        return self._fernet
+
+    def _encrypt(self, plain: str) -> str:
+        token = self._get_fernet().encrypt(plain.encode()).decode()
+        return f"v1:{token}"
+
+    def _decrypt(self, encrypted: str) -> str:
+        # Current format
+        if encrypted.startswith("v1:"):
+            token = encrypted.removeprefix("v1:")
+            try:
+                return self._get_fernet().decrypt(token.encode()).decode()
+            except InvalidToken as exc:
+                raise ValueError("Stored API key cannot be decrypted") from exc
+
+        # Legacy format fallback (base64 plaintext)
         return base64.b64decode(encrypted.encode()).decode()

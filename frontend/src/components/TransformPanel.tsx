@@ -1,20 +1,71 @@
-import { useState, useEffect } from "react";
-import { Play, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Play, Loader2, X, Square } from "lucide-react";
 import { toast } from "sonner";
-import type { TransformInfo, TransformRun } from "../types/transform";
+import type { TransformInfo, TransformRun, TransformJobMessage } from "../types/transform";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useTransformJobStore } from "../stores/transformJobStore";
+import type { TransformJob } from "../stores/transformJobStore";
+import { useTransformWebSocket } from "../hooks/useTransformWebSocket";
 import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 
 export function TransformPanel() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
-  const [running, setRunning] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<TransformRun | null>(null);
   const { selectedNodeId, entities } = useGraphStore();
   const { currentProject } = useProjectStore();
+  const { activeJobs, submitJob, handleMessage, recentCompleted } = useTransformJobStore();
 
   const entity = selectedNodeId ? entities.get(selectedNodeId) : null;
+
+  // WebSocket message handler
+  const onWsMessage = useCallback((msg: TransformJobMessage) => {
+    handleMessage(msg);
+
+    if (msg.type === "job_completed" && msg.result) {
+      const { addEntity, addEdge } = useGraphStore.getState();
+      const projectId = msg.project_id;
+
+      for (const newEntity of msg.result.entities) {
+        addEntity(projectId, newEntity);
+      }
+      for (const newEdge of msg.result.edges) {
+        addEdge(projectId, newEdge);
+      }
+
+      const entityCount = msg.result.entities.length;
+      const edgeCount = msg.result.edges.length;
+      toast.success(`${msg.transform_name}: found ${entityCount} entities, ${edgeCount} connections`);
+
+      // Update lastRun for the results panel
+      const completedRun: TransformRun = {
+        id: msg.job_id,
+        project_id: msg.project_id,
+        transform_name: msg.transform_name,
+        input_entity_id: msg.input_entity_id,
+        status: "completed",
+        result: msg.result,
+        error: null,
+        started_at: msg.timestamp,
+        completed_at: msg.timestamp,
+      };
+      setLastRun(completedRun);
+    }
+
+    if (msg.type === "job_failed") {
+      toast.error(`${msg.transform_name}: ${msg.error ?? "Unknown error"}`);
+    }
+
+    if (msg.type === "job_cancelled") {
+      toast.info(`${msg.transform_name}: cancelled`);
+    }
+  }, [handleMessage]);
+
+  const { cancelJob } = useTransformWebSocket({
+    projectId: currentProject?.id ?? null,
+    onMessage: onWsMessage,
+  });
 
   useEffect(() => {
     if (!entity) {
@@ -29,35 +80,41 @@ export function TransformPanel() {
 
   const handleRun = async (name: string) => {
     if (!entity || !currentProject) return;
-    setRunning(name);
     try {
       const run = await api.transforms.run(name, entity.id, currentProject.id);
-      setLastRun(run);
-
-      // Auto-add discovered entities and edges to the graph
-      if (run.result) {
-        const { addEntity, addEdge } = useGraphStore.getState();
-        for (const newEntity of run.result.entities) {
-          addEntity(currentProject.id, newEntity);
-        }
-        for (const newEdge of run.result.edges) {
-          addEdge(currentProject.id, newEdge);
-        }
-        const entityCount = run.result.entities.length;
-        const edgeCount = run.result.edges.length;
-        toast.success(`${name}: found ${entityCount} entities, ${edgeCount} connections`);
-      }
-
-      if (run.error) {
-        toast.error(`${name}: ${run.error}`);
-      }
+      submitJob(run);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Transform failed: ${msg}`);
-    } finally {
-      setRunning(null);
     }
   };
+
+  const handleCancel = async (jobId: string) => {
+    try {
+      await api.transforms.cancel(jobId);
+      cancelJob(jobId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Cancel failed: ${msg}`);
+    }
+  };
+
+  // Check if a specific transform has an active job
+  const isTransformActive = (name: string): boolean => {
+    for (const job of activeJobs.values()) {
+      if (job.transformName === name && (job.status === "pending" || job.status === "running")) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const activeJobsList = Array.from(activeJobs.values()).filter(
+    (j) => j.status === "pending" || j.status === "running"
+  );
+
+  // Use the most recent completed run if we haven't set one via WS yet
+  const displayRun = lastRun ?? (recentCompleted.length > 0 ? recentCompleted[0] : null);
 
   if (!entity) {
     return (
@@ -76,34 +133,50 @@ export function TransformPanel() {
             on <span className="text-text">{entity.value}</span>
           </p>
         </div>
+
+        {/* Active jobs indicator */}
+        {activeJobsList.length > 0 && (
+          <div className="p-2 border-b border-border bg-surface-hover/50">
+            <p className="text-[10px] font-semibold text-text-muted mb-1">
+              Active ({activeJobsList.length})
+            </p>
+            {activeJobsList.map((job) => (
+              <ActiveJobItem key={job.runId} job={job} onCancel={handleCancel} />
+            ))}
+          </div>
+        )}
+
         {transforms.length === 0 ? (
           <p className="p-3 text-xs text-text-muted">No transforms available</p>
         ) : (
           <div className="p-1">
-            {transforms.map((t) => (
-              <button
-                key={t.name}
-                onClick={() => handleRun(t.name)}
-                disabled={running !== null}
-                className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
-              >
-                {running === t.name ? (
-                  <Loader2 size={12} className="animate-spin text-accent shrink-0" />
-                ) : (
-                  <Play size={12} className="text-accent shrink-0" />
-                )}
-                <div className="text-left">
-                  <p className="font-medium">{t.display_name}</p>
-                  <p className="text-[10px] text-text-muted">{t.description}</p>
-                </div>
-              </button>
-            ))}
+            {transforms.map((t) => {
+              const active = isTransformActive(t.name);
+              return (
+                <button
+                  key={t.name}
+                  onClick={() => handleRun(t.name)}
+                  disabled={active}
+                  className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
+                >
+                  {active ? (
+                    <Loader2 size={12} className="animate-spin text-accent shrink-0" />
+                  ) : (
+                    <Play size={12} className="text-accent shrink-0" />
+                  )}
+                  <div className="text-left">
+                    <p className="font-medium">{t.display_name}</p>
+                    <p className="text-[10px] text-text-muted">{t.description}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
       <div className="flex-1 overflow-y-auto">
-        {lastRun ? (
-          <TransformResults run={lastRun} />
+        {displayRun ? (
+          <TransformResults run={displayRun} />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1">
             <p className="text-xs font-semibold text-text-muted">Output</p>
@@ -111,6 +184,23 @@ export function TransformPanel() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ActiveJobItem({ job, onCancel }: { job: TransformJob; onCancel: (id: string) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 px-1 py-1 text-[10px]">
+      <Loader2 size={10} className="animate-spin text-accent shrink-0" />
+      <span className="truncate flex-1 text-text">{job.transformName}</span>
+      <span className="text-text-muted">{job.status}</span>
+      <button
+        onClick={() => onCancel(job.runId)}
+        className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text"
+        title="Cancel"
+      >
+        <Square size={8} />
+      </button>
     </div>
   );
 }

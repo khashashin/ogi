@@ -1,6 +1,8 @@
 """Shared singletons for API route handlers."""
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import Depends
@@ -19,12 +21,18 @@ from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.api_key_store import ApiKeyStore
 
+if TYPE_CHECKING:
+    from redis import Redis as SyncRedis
+    from rq import Queue
+
 _transform_engine: TransformEngine | None = None
 _entity_registry: EntityRegistry | None = None
 _plugin_engine: PluginEngine | None = None
 _registry_client: RegistryClient | None = None
 _transform_installer: TransformInstaller | None = None
 _graph_engines: dict[UUID, GraphEngine] = {}
+_redis_conn: SyncRedis | None = None  # type: ignore[type-arg]
+_rq_queue: Queue | None = None
 
 # We still need to fake the init_stores for main.py signature compatibility for now,
 # but we just ignore the arguments since stores are now request-scoped
@@ -115,3 +123,19 @@ def get_graph_engine(project_id: UUID) -> GraphEngine:
     if project_id not in _graph_engines:
         _graph_engines[project_id] = GraphEngine()
     return _graph_engines[project_id]
+
+
+# --- Redis / RQ ---
+
+def init_redis(conn: SyncRedis, queue: Queue) -> None:  # type: ignore[type-arg]
+    global _redis_conn, _rq_queue
+    _redis_conn = conn
+    _rq_queue = queue
+
+
+def get_redis() -> SyncRedis | None:  # type: ignore[type-arg]
+    return _redis_conn
+
+
+def get_rq_queue() -> Queue | None:
+    return _rq_queue

@@ -17,7 +17,7 @@ export interface TransformResult {
   ui_messages: string[];
 }
 
-export type TransformStatus = "pending" | "running" | "completed" | "failed";
+export type TransformStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export interface TransformRun {
   id: string;
@@ -34,3 +34,36 @@ export interface TransformRun {
 export interface TransformConfig {
   settings: Record<string, string>;
 }
+
+// --- WebSocket message types ---
+
+export type TransformJobMessageType =
+  | "job_submitted"
+  | "job_started"
+  | "job_completed"
+  | "job_failed"
+  | "job_cancelled";
+
+export interface TransformJobMessage {
+  type: TransformJobMessageType;
+  job_id: string;
+  project_id: string;
+  transform_name: string;
+  input_entity_id: string;
+  progress: number | null;
+  message: string | null;
+  result: TransformResult | null;
+  error: string | null;
+  timestamp: string;
+}
+
+export interface TransformWsCancelMessage {
+  type: "cancel";
+  job_id: string;
+}
+
+export interface TransformWsPingMessage {
+  type: "ping";
+}
+
+export type TransformWsOutgoing = TransformWsCancelMessage | TransformWsPingMessage;
