@@ -69,6 +69,7 @@ export interface RegistryIndex {
   generated_at: string;
   repo: string;
   transforms: RegistryTransform[];
+  can_manage?: boolean;
 }
 
 export interface InstalledTransform {
@@ -81,12 +82,6 @@ export interface InstalledTransform {
   source: string;
   python_dependencies: string[];
   files: string[];
-}
-
-export interface UpdateAvailable {
-  slug: string;
-  installed_version: string;
-  latest_version: string;
 }
 
 export interface PluginInfoV2 {

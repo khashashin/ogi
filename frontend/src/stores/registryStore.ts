@@ -3,7 +3,6 @@ import { api } from "../api/client";
 import type {
   RegistryTransform,
   RegistryIndex,
-  UpdateAvailable,
   PluginInfoV2,
 } from "../types/registry";
 
@@ -12,30 +11,29 @@ interface RegistryState {
   index: RegistryIndex | null;
   installedPlugins: PluginInfoV2[];
   searchResults: RegistryTransform[];
-  updates: UpdateAvailable[];
+  canManage: boolean;
 
   // UI state
   loading: boolean;
   installing: string | null;
-  removing: string | null;
+  toggling: string | null;
   error: string | null;
   searchQuery: string;
   selectedCategory: string | null;
   selectedTier: string | null;
-  activeTab: "installed" | "browse" | "updates";
+  activeTab: "enabled" | "catalog";
 
   // Actions
   fetchIndex: () => Promise<void>;
   fetchInstalledPlugins: () => Promise<void>;
   searchTransforms: (query: string, category?: string, tier?: string) => Promise<void>;
   installTransform: (slug: string) => Promise<void>;
-  removeTransform: (slug: string) => Promise<void>;
-  updateTransform: (slug: string) => Promise<void>;
-  checkUpdates: () => Promise<void>;
+  enablePlugin: (name: string) => Promise<void>;
+  disablePlugin: (name: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   setSelectedCategory: (category: string | null) => void;
   setSelectedTier: (tier: string | null) => void;
-  setActiveTab: (tab: "installed" | "browse" | "updates") => void;
+  setActiveTab: (tab: "enabled" | "catalog") => void;
   clearError: () => void;
 }
 
@@ -43,21 +41,21 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
   index: null,
   installedPlugins: [],
   searchResults: [],
-  updates: [],
+  canManage: false,
   loading: false,
   installing: null,
-  removing: null,
+  toggling: null,
   error: null,
   searchQuery: "",
   selectedCategory: null,
   selectedTier: null,
-  activeTab: "browse",
+  activeTab: "catalog",
 
   fetchIndex: async () => {
     set({ loading: true, error: null });
     try {
       const index = await api.registry.index();
-      set({ index, loading: false });
+      set({ index, canManage: Boolean(index.can_manage), loading: false });
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }
@@ -83,6 +81,10 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
   },
 
   installTransform: async (slug: string) => {
+    if (!get().canManage) {
+      set({ error: "Only admins can install transforms." });
+      return;
+    }
     set({ installing: slug, error: null });
     try {
       await api.registry.install(slug);
@@ -96,41 +98,31 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
-  removeTransform: async (slug: string) => {
-    set({ removing: slug, error: null });
+  enablePlugin: async (name: string) => {
+    set({ toggling: name, error: null });
     try {
-      await api.registry.remove(slug);
+      await api.plugins.enable(name);
       await get().fetchInstalledPlugins();
-      set({ removing: null });
+      set({ toggling: null });
     } catch (err) {
-      set({ error: (err as Error).message, removing: null });
+      set({ error: (err as Error).message, toggling: null });
     }
   },
 
-  updateTransform: async (slug: string) => {
-    set({ installing: slug, error: null });
+  disablePlugin: async (name: string) => {
+    set({ toggling: name, error: null });
     try {
-      await api.registry.update(slug);
+      await api.plugins.disable(name);
       await get().fetchInstalledPlugins();
-      await get().checkUpdates();
-      set({ installing: null });
+      set({ toggling: null });
     } catch (err) {
-      set({ error: (err as Error).message, installing: null });
-    }
-  },
-
-  checkUpdates: async () => {
-    try {
-      const updates = await api.registry.checkUpdates();
-      set({ updates });
-    } catch {
-      set({ updates: [] });
+      set({ error: (err as Error).message, toggling: null });
     }
   },
 
   setSearchQuery: (query: string) => set({ searchQuery: query }),
   setSelectedCategory: (category: string | null) => set({ selectedCategory: category }),
   setSelectedTier: (tier: string | null) => set({ selectedTier: tier }),
-  setActiveTab: (tab: "installed" | "browse" | "updates") => set({ activeTab: tab }),
+  setActiveTab: (tab: "enabled" | "catalog") => set({ activeTab: tab }),
   clearError: () => set({ error: null }),
 }));

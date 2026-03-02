@@ -5,21 +5,27 @@ import type { RegistryTransform, VerificationTier } from "../../types/registry";
 
 interface TransformDetailProps {
   transform: RegistryTransform;
-  installed: boolean;
+  available: boolean;
+  enabled: boolean;
+  canManage: boolean;
   installing: boolean;
-  removing: boolean;
+  toggling: boolean;
   onInstall: () => void;
-  onRemove: () => void;
+  onEnable: () => void;
+  onDisable: () => void;
   onBack: () => void;
 }
 
 export function TransformDetail({
   transform,
-  installed,
+  available,
+  enabled,
+  canManage,
   installing,
-  removing,
+  toggling,
   onInstall,
-  onRemove,
+  onEnable,
+  onDisable,
   onBack,
 }: TransformDetailProps) {
   const pop = transform.popularity;
@@ -49,12 +55,15 @@ export function TransformDetail({
           <p className="text-xs text-text-muted mt-1">{transform.description}</p>
         </div>
         <InstallButton
-          installed={installed}
+          available={available}
+          enabled={enabled}
+          canManage={canManage}
           bundled={transform.bundled}
           installing={installing}
-          removing={removing}
+          toggling={toggling}
           onInstall={onInstall}
-          onRemove={onRemove}
+          onEnable={onEnable}
+          onDisable={onDisable}
         />
       </div>
 
