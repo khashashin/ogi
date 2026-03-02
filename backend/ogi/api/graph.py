@@ -25,22 +25,27 @@ async def get_graph(
     entity_store: EntityStore = Depends(get_entity_store),
     edge_store: EdgeStore = Depends(get_edge_store),
 ) -> dict[str, list[Entity] | list[Edge]]:
-    """Get full graph data for a project (loads from DB into engine if needed)."""
+    """Get full graph data for a project.
+
+    Always merge latest DB rows into the in-memory engine. Transform workers
+    persist directly to DB and do not mutate this process-local engine.
+    """
     engine = get_graph_engine(project_id)
 
-    # Hydrate from DB on first access
-    if not engine._hydrated:
-        entities = await entity_store.list_by_project(project_id)
-        edges = await edge_store.list_by_project(project_id)
-        for entity in entities:
-            if not engine.get_entity(entity.id):
-                engine.add_entity(entity)
-        for edge in edges:
-            try:
-                engine.add_edge(edge)
-            except ValueError:
-                pass
-        engine._hydrated = True
+    # Merge from DB each time to avoid stale cache when workers write directly.
+    entities = await entity_store.list_by_project(project_id)
+    edges = await edge_store.list_by_project(project_id)
+    for entity in entities:
+        if not engine.get_entity(entity.id):
+            engine.add_entity(entity)
+    for edge in edges:
+        if edge.id in engine.edges:
+            continue
+        try:
+            engine.add_edge(edge)
+        except ValueError:
+            pass
+    engine._hydrated = True
 
     return {
         "entities": list(engine.entities.values()),

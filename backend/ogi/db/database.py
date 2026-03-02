@@ -28,9 +28,6 @@ async def init_db() -> None:
         else:
             db_url = f"sqlite+aiosqlite:///{settings.abs_database_path}"
         engine = create_async_engine(db_url, echo=False)
-        # Create tables from SQLModel metadata (needed for in-memory / fresh SQLite DBs)
-        async with engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
     else:
         db_url = settings.database_url
         if db_url and db_url.startswith("postgresql://"):
@@ -57,6 +54,11 @@ async def init_db() -> None:
                 "statement_cache_size": 0
             }
         )
+
+    # Ensure baseline schema exists for both SQLite and PostgreSQL.
+    # This is intentionally idempotent and fills missing tables in existing DBs.
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
 
     async_session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False

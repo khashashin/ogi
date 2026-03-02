@@ -17,6 +17,7 @@ class HelloWorldTransform(BaseTransform):
             value=f"Hello from plugin! Input: {entity.value}",
             properties={"source_type": entity.type.value, "source_value": entity.value},
             source="example-plugin",
+            project_id=entity.project_id,
         )
         edge = Edge(
             source_id=entity.id,
