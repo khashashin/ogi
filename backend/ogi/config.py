@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
     api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
     admin_emails: str = ""
+    expose_error_details: bool = False
 
     @field_validator("admin_emails", mode="before")
     @classmethod
