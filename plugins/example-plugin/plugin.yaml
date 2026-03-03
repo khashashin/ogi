@@ -3,3 +3,14 @@ version: "1.0.0"
 display_name: "Example Plugin"
 description: "A sample plugin demonstrating the OGI plugin system"
 author: "OGI Team"
+license: "AGPL-3.0"
+category: "example"
+input_types: ["Domain", "IPAddress", "Person"]
+output_types: ["Document"]
+min_ogi_version: "0.3.0"
+tags: ["example", "demo"]
+permissions:
+  network: false
+  filesystem: false
+  subprocess: false
+enabled: true
