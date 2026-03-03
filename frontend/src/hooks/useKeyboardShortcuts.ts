@@ -4,7 +4,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function useKeyboardShortcuts() {
-  const { selectedNodeId, selectedEdgeId, removeEntity, removeEdge, selectNode } =
+  const { selectedNodeId, selectedEdgeId, removeEntity, removeEdge, selectNode, performUndo, performRedo } =
     useGraphStore();
   const { currentProject } = useProjectStore();
 
@@ -17,6 +17,21 @@ export function useKeyboardShortcuts() {
       }
 
       const sigma = getSigmaRef();
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+Z — undo
+      if (ctrl && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (currentProject) performUndo(currentProject.id);
+        return;
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z — redo
+      if ((ctrl && e.key === "y") || (ctrl && e.key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        if (currentProject) performRedo(currentProject.id);
+        return;
+      }
 
       // Delete / Backspace — delete selected
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -47,7 +62,7 @@ export function useKeyboardShortcuts() {
       }
 
       // 0 — fit to screen
-      if (e.key === "0" && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "0" && !ctrl) {
         e.preventDefault();
         sigma?.getCamera().animatedReset({ duration: 300 });
       }
@@ -55,5 +70,5 @@ export function useKeyboardShortcuts() {
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [selectedNodeId, selectedEdgeId, currentProject, removeEntity, removeEdge, selectNode]);
+  }, [selectedNodeId, selectedEdgeId, currentProject, removeEntity, removeEdge, selectNode, performUndo, performRedo]);
 }
