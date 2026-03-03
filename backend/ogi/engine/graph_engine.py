@@ -22,6 +22,16 @@ class GraphEngine:
     def edges(self) -> dict[UUID, Edge]:
         return self._edges
 
+    @property
+    def is_hydrated(self) -> bool:
+        return self._hydrated
+
+    def mark_hydrated(self) -> None:
+        self._hydrated = True
+
+    def mark_stale(self) -> None:
+        self._hydrated = False
+
     def add_entity(self, entity: Entity) -> None:
         self._entities[entity.id] = entity
         if entity.id not in self._adjacency:
@@ -160,3 +170,4 @@ class GraphEngine:
         self._edges.clear()
         self._adjacency.clear()
         self._neighbors.clear()
+        self._hydrated = False
