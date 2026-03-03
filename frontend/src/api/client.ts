@@ -27,6 +27,10 @@ interface ImportSummary {
   edges_skipped: number;
 }
 
+interface CloudExportResponse {
+  url: string;
+}
+
 interface DiscoverProject {
   id: string;
   name: string;
@@ -197,6 +201,8 @@ export const api = {
       `${BASE_URL}/projects/${projectId}/export/csv`,
     graphml: (projectId: string) =>
       `${BASE_URL}/projects/${projectId}/export/graphml`,
+    cloud: (projectId: string, format: "json" | "csv" | "graphml") =>
+      request<CloudExportResponse>(`/projects/${projectId}/export/${format}?cloud=true`),
   },
 
   import: {
