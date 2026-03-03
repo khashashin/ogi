@@ -16,7 +16,10 @@ export function useTransformWebSocket({ projectId, onMessage }: UseTransformWebS
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   const cleanup = useCallback(() => {
     if (heartbeatTimer.current) {
