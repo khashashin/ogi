@@ -799,6 +799,20 @@ async def test_registry_mutation_requires_admin_when_auth_enabled(
 
 
 @pytest.mark.asyncio
+async def test_project_list_requires_bearer_when_auth_enabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+
+    resp = await client.get("/api/v1/projects")
+    assert resp.status_code == 401
+    assert "Missing or invalid Authorization header" in resp.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_registry_index_can_manage_flag_respects_admin_list(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
