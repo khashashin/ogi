@@ -39,15 +39,12 @@ async def _recover_stale_jobs() -> None:
     complete.  This prevents them from appearing stuck in the UI forever.
     """
     from ogi.db.database import get_session
-    from ogi.store.transform_run_store import TransformRunStore
     from ogi.models import TransformStatus
     from sqlmodel import select, or_
     from datetime import datetime, timezone
 
     try:
         async for session in get_session():
-            stmt = select(TransformRunStore.__class__).where(False)  # unused; manual query below
-            # Direct query on the model
             from ogi.models.transform import TransformRun
             stmt = select(TransformRun).where(
                 or_(
