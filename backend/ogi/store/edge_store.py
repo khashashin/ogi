@@ -28,6 +28,8 @@ class EdgeStore:
         return result.scalar_one_or_none()
 
     async def create(self, project_id: UUID, data: EdgeCreate) -> Edge:
+        await self._validate_edge_endpoints(project_id, data.source_id, data.target_id)
+
         # Deduplicate: skip if an identical edge already exists
         existing = await self.find_existing(
             project_id, data.source_id, data.target_id, data.label
@@ -49,6 +51,19 @@ class EdgeStore:
         await self.session.commit()
         await self.session.refresh(edge)
         return edge
+
+    async def _validate_edge_endpoints(
+        self, project_id: UUID, source_id: UUID, target_id: UUID
+    ) -> None:
+        stmt = select(Entity.id, Entity.project_id).where(Entity.id.in_([source_id, target_id]))
+        result = await self.session.execute(stmt)
+        rows = list(result.all())
+        if len(rows) != 2:
+            raise ValueError("Both source and target entities must exist")
+
+        entity_projects = {row[1] for row in rows}
+        if entity_projects != {project_id}:
+            raise ValueError("Edge endpoints must belong to the same project")
 
     async def get(self, edge_id: UUID) -> Edge | None:
         return await self.session.get(Edge, edge_id)
