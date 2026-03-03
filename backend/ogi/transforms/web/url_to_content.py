@@ -5,12 +5,9 @@ import ipaddress
 import re
 from urllib.parse import urlparse
 
-import httpx
-
 from ogi.models import Edge, Entity, EntityType, TransformResult
 from ogi.transforms.base import BaseTransform, TransformConfig, TransformSetting
 
-DEFAULT_MAX_DOWNLOAD_BYTES = 2_000_000
 ALLOWED_TEXT_CONTENT_TYPES = (
     "text/",
     "application/json",
@@ -24,7 +21,7 @@ ALLOWED_TEXT_CONTENT_TYPES = (
 class URLToContent(BaseTransform):
     name = "url_to_content"
     display_name = "URL to Content"
-    description = "Fetches a URL and extracts readable text content into a Document entity"
+    description = "Fetches a URL via Playwright and extracts readable text content into a Document entity"
     input_types = [EntityType.URL]
     output_types = [EntityType.DOCUMENT]
     category = "Web"
@@ -37,29 +34,6 @@ class URLToContent(BaseTransform):
             field_type="integer",
             min_value=1000,
             max_value=200000,
-        ),
-        TransformSetting(
-            name="max_download_bytes",
-            display_name="Max Download Bytes",
-            description="Maximum HTTP response bytes to download",
-            default=str(DEFAULT_MAX_DOWNLOAD_BYTES),
-            field_type="integer",
-            min_value=50_000,
-            max_value=20_000_000,
-        ),
-        TransformSetting(
-            name="parse_with_bs4",
-            display_name="Parse with BeautifulSoup",
-            description="Use BeautifulSoup parser for HTML if available",
-            default="true",
-            field_type="boolean",
-        ),
-        TransformSetting(
-            name="render_js",
-            display_name="Render JavaScript",
-            description="Use Playwright for dynamic pages if installed",
-            default="false",
-            field_type="boolean",
         ),
         TransformSetting(
             name="allow_local_network",
@@ -94,26 +68,17 @@ class URLToContent(BaseTransform):
             config.settings.get("max_content_chars", "12000"),
             default=12000,
         )
-        max_download = self._parse_positive_int(
-            config.settings.get("max_download_bytes", str(DEFAULT_MAX_DOWNLOAD_BYTES)),
-            default=DEFAULT_MAX_DOWNLOAD_BYTES,
-        )
-        parse_with_bs4 = self._parse_bool(config.settings.get("parse_with_bs4", "true"), default=True)
-        render_js = self._parse_bool(config.settings.get("render_js", "false"), default=False)
 
         try:
-            if render_js:
-                raw, final_url, content_type = await self._fetch_with_playwright(url, max_chars)
-                messages.append("Playwright rendering used")
-            else:
-                raw, final_url, content_type = await self._safe_fetch_http(url, max_download)
+            raw, final_url, content_type = await self._fetch_with_playwright(url, max_chars)
+            messages.append("Playwright rendering used")
 
-            text = self._extract_text(raw, content_type, parse_with_bs4=parse_with_bs4)
+            text = self._extract_text(raw, content_type)
             text = text[:max_chars] if max_chars > 0 else text
             if not text.strip():
                 return TransformResult(messages=[f"No readable content extracted from {final_url}"])
 
-            title = self._extract_title(raw, parse_with_bs4=parse_with_bs4)
+            title = self._extract_title(raw)
             final_host = urlparse(final_url).hostname or urlparse(url).hostname or url
             value = title or final_host
             document = Entity(
@@ -140,14 +105,6 @@ class URLToContent(BaseTransform):
             messages.append(f"Fetched content from {final_url}")
             messages.append(f"Extracted {len(text)} characters")
 
-        except httpx.TimeoutException:
-            messages.append(f"Timeout connecting to {url}")
-        except httpx.ConnectError:
-            messages.append(f"Connection error for {url}")
-        except httpx.HTTPStatusError as err:
-            messages.append(f"HTTP error for {url}: {err.response.status_code}")
-        except httpx.HTTPError as err:
-            messages.append(f"HTTP error for {url}: {err}")
         except Exception as err:
             messages.append(f"Error fetching content from {url}: {err}")
 
@@ -193,33 +150,11 @@ class URLToContent(BaseTransform):
         lower = (content_type or "").lower()
         return any(lower.startswith(prefix) for prefix in ALLOWED_TEXT_CONTENT_TYPES)
 
-    async def _safe_fetch_http(self, url: str, max_download_bytes: int) -> tuple[str, str, str]:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                content_type = (response.headers.get("content-type") or "").lower().split(";")[0].strip()
-                if content_type and not self._is_allowed_content_type(content_type):
-                    raise ValueError(f"Blocked non-text content type: {content_type}")
-
-                size = 0
-                chunks: list[bytes] = []
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > max_download_bytes:
-                        raise ValueError(f"Response exceeded size limit ({max_download_bytes} bytes)")
-                    chunks.append(chunk)
-
-                body = b"".join(chunks)
-                if b"\x00" in body:
-                    raise ValueError("Blocked binary-looking payload")
-                text = body.decode(response.encoding or "utf-8", errors="replace")
-                return text, str(response.url), content_type
-
     async def _fetch_with_playwright(self, url: str, max_chars: int) -> tuple[str, str, str]:
         try:
             from playwright.async_api import async_playwright  # type: ignore
         except Exception as err:
-            raise ValueError(f"Playwright requested but not available: {err}") from err
+            raise ValueError(f"Playwright is required but not available: {err}") from err
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -243,21 +178,10 @@ class URLToContent(BaseTransform):
                 await browser.close()
 
     @staticmethod
-    def _extract_text(raw: str, content_type: str, parse_with_bs4: bool) -> str:
+    def _extract_text(raw: str, content_type: str) -> str:
         lower_ct = (content_type or "").lower()
         if "html" not in lower_ct:
             return URLToContent._normalize_space(raw)
-
-        if parse_with_bs4:
-            try:
-                from bs4 import BeautifulSoup  # type: ignore
-
-                soup = BeautifulSoup(raw, "html.parser")
-                for tag in soup(["script", "style", "noscript"]):
-                    tag.decompose()
-                return URLToContent._normalize_space(soup.get_text(" ", strip=True))
-            except Exception:
-                pass
 
         no_script = re.sub(r"(?is)<script.*?>.*?</script>", " ", raw)
         no_style = re.sub(r"(?is)<style.*?>.*?</style>", " ", no_script)
@@ -265,16 +189,7 @@ class URLToContent(BaseTransform):
         return URLToContent._normalize_space(html.unescape(no_tags))
 
     @staticmethod
-    def _extract_title(raw: str, parse_with_bs4: bool) -> str:
-        if parse_with_bs4:
-            try:
-                from bs4 import BeautifulSoup  # type: ignore
-
-                soup = BeautifulSoup(raw, "html.parser")
-                if soup.title and soup.title.string:
-                    return URLToContent._normalize_space(html.unescape(soup.title.string))
-            except Exception:
-                pass
+    def _extract_title(raw: str) -> str:
         match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
         if not match:
             return ""
