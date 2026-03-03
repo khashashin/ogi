@@ -64,7 +64,7 @@ export function TransformPanel() {
     }
   }, [handleMessage]);
 
-  const { cancelJob } = useTransformWebSocket({
+  useTransformWebSocket({
     projectId: currentProject?.id ?? null,
     onMessage: onWsMessage,
   });
@@ -91,7 +91,6 @@ export function TransformPanel() {
   const handleCancel = async (jobId: string) => {
     try {
       await api.transforms.cancel(jobId);
-      cancelJob(jobId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Cancel failed: ${msg}`);
