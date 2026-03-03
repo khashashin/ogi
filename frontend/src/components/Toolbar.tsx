@@ -117,50 +117,54 @@ export function Toolbar() {
         <Redo2 size={14} />
       </button>
 
-      <div className="w-px h-4 bg-border" />
+      {centerView === "graph" && (
+        <>
+          <div className="w-px h-4 bg-border" />
 
-      {/* Zoom controls */}
-      <button
-        onClick={handleZoomIn}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Zoom in (+)"
-      >
-        <ZoomIn size={14} />
-      </button>
-      <button
-        onClick={handleZoomOut}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Zoom out (-)"
-      >
-        <ZoomOut size={14} />
-      </button>
-      <button
-        onClick={handleFit}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Fit to screen (0)"
-      >
-        <Focus size={14} />
-      </button>
+          {/* Zoom controls */}
+          <button
+            onClick={handleZoomIn}
+            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+            title="Zoom in (+)"
+          >
+            <ZoomIn size={14} />
+          </button>
+          <button
+            onClick={handleZoomOut}
+            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+            title="Zoom out (-)"
+          >
+            <ZoomOut size={14} />
+          </button>
+          <button
+            onClick={handleFit}
+            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+            title="Fit to screen (0)"
+          >
+            <Focus size={14} />
+          </button>
 
-      <div className="w-px h-4 bg-border" />
+          <div className="w-px h-4 bg-border" />
 
-      {/* Layout controls */}
-      <button
-        onClick={runForceLayout}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Force-directed layout"
-      >
-        <LayoutGrid size={14} />
-      </button>
-      <button
-        onClick={runCircularLayout}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Circular layout"
-      >
-        <Maximize2 size={14} />
-      </button>
+          {/* Layout controls */}
+          <button
+            onClick={runForceLayout}
+            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+            title="Force-directed layout"
+          >
+            <LayoutGrid size={14} />
+          </button>
+          <button
+            onClick={runCircularLayout}
+            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+            title="Circular layout"
+          >
+            <Maximize2 size={14} />
+          </button>
 
-      <div className="w-px h-4 bg-border" />
+          <div className="w-px h-4 bg-border" />
+        </>
+      )}
 
       <button
         onClick={() => setCenterView("graph")}
