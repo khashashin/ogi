@@ -108,6 +108,8 @@ class TransformEngine:
         from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
         from ogi.transforms.ip.ip_to_asn import IPToASN
         from ogi.transforms.web.url_to_headers import URLToHeaders
+        from ogi.transforms.web.url_to_content import URLToContent
+        from ogi.transforms.web.content_to_iocs import ContentToIOCs
         from ogi.transforms.web.domain_to_urls import DomainToURLs
         from ogi.transforms.email.email_to_domain import EmailToDomain
         from ogi.transforms.email.domain_to_emails import DomainToEmails
@@ -120,7 +122,7 @@ class TransformEngine:
         for cls in [
             DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
             IPToGeolocation, IPToASN,
-            URLToHeaders, DomainToURLs,
+            URLToHeaders, URLToContent, ContentToIOCs, DomainToURLs,
             EmailToDomain, DomainToEmails,
             DomainToCerts, CertTransparency,
             UsernameSearch, HashLookup,
