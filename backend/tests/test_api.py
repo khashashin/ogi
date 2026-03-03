@@ -1161,6 +1161,77 @@ async def test_import_json(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_import_graphml(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "ImportGraphML"})
+    pid = resp.json()["id"]
+
+    payload = """<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="type" for="node" attr.name="type" attr.type="string"/>
+  <key id="value" for="node" attr.name="value" attr.type="string"/>
+  <key id="label" for="edge" attr.name="label" attr.type="string"/>
+  <graph id="G" edgedefault="directed">
+    <node id="n1"><data key="type">Domain</data><data key="value">graphml.test</data></node>
+    <node id="n2"><data key="type">IPAddress</data><data key="value">1.1.1.1</data></node>
+    <edge id="e1" source="n1" target="n2"><data key="label">resolves to</data></edge>
+  </graph>
+</graphml>
+"""
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/import/graphml",
+        files={"file": ("import.graphml", payload.encode("utf-8"), "application/xml")},
+    )
+    assert resp.status_code == 200
+    summary = resp.json()
+    assert summary["entities_added"] >= 2
+    assert summary["edges_added"] >= 1
+
+    resp = await client.get(f"/api/v1/projects/{pid}/entities")
+    values = {e["value"] for e in resp.json()}
+    assert "graphml.test" in values
+    assert "1.1.1.1" in values
+
+
+@pytest.mark.asyncio
+async def test_import_maltego_mtgx(client: AsyncClient):
+    import io as _io
+    import zipfile as _zipfile
+
+    resp = await client.post("/api/v1/projects", json={"name": "ImportMTGX"})
+    pid = resp.json()["id"]
+
+    graphml = """<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="type" for="node" attr.name="type" attr.type="string"/>
+  <key id="value" for="node" attr.name="value" attr.type="string"/>
+  <key id="label" for="edge" attr.name="label" attr.type="string"/>
+  <graph id="G" edgedefault="directed">
+    <node id="m1"><data key="type">maltego.Domain</data><data key="value">mtgx.test</data></node>
+    <node id="m2"><data key="type">maltego.IPv4Address</data><data key="value">8.8.8.8</data></node>
+    <edge id="me1" source="m1" target="m2"><data key="label">to ip</data></edge>
+  </graph>
+</graphml>
+"""
+    buf = _io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("Graphs/Graph1.graphml", graphml)
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/import/maltego",
+        files={"file": ("sample.mtgx", buf.getvalue(), "application/zip")},
+    )
+    assert resp.status_code == 200
+    summary = resp.json()
+    assert summary["entities_added"] >= 2
+    assert summary["edges_added"] >= 1
+
+    resp = await client.get(f"/api/v1/projects/{pid}/entities")
+    values = {e["value"] for e in resp.json()}
+    assert "mtgx.test" in values
+    assert "8.8.8.8" in values
+
+
+@pytest.mark.asyncio
 async def test_error_envelope_for_422_validation(client: AsyncClient):
     """Invalid payload returns unified 422 error envelope."""
     resp = await client.post("/api/v1/projects", json={})
