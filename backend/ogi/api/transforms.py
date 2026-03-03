@@ -386,13 +386,18 @@ async def run_transform(
 @router.post("/runs/{run_id}/cancel")
 async def cancel_transform(
     run_id: UUID,
-    _current_user: UserProfile = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
+    project_store: ProjectStore = Depends(get_project_store),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> dict[str, str]:
     """Cancel a pending/running transform job."""
     run = await run_store.get(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Transform run not found")
+
+    role = await project_store.get_member_role(run.project_id, current_user.id)
+    if role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="Project editor access required")
 
     if run.status not in (TransformStatus.PENDING, TransformStatus.RUNNING):
         raise HTTPException(status_code=400, detail=f"Cannot cancel a {run.status.value} job")
@@ -434,17 +439,22 @@ async def cancel_transform(
 @router.get("/runs/{run_id}", response_model=TransformRun)
 async def get_run(
     run_id: UUID,
-    _current_user: UserProfile = Depends(get_current_user),
+    current_user: UserProfile = Depends(get_current_user),
+    project_store: ProjectStore = Depends(get_project_store),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> TransformRun:
-    # Try in-memory first, then DB
+    # Try in-memory first, then DB.
     engine = get_transform_engine()
     run = engine.get_run(run_id)
-    if run is not None:
-        return run
-    run = await run_store.get(run_id)
     if run is None:
-        raise HTTPException(status_code=404, detail="Transform run not found")
+        run = await run_store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Transform run not found")
+
+    role = await project_store.get_member_role(run.project_id, current_user.id)
+    if role not in ("owner", "editor", "viewer"):
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+
     return run
 
 
