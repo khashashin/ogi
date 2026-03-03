@@ -15,7 +15,7 @@ from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_IMAGE = "python:3.11-slim"
+SANDBOX_IMAGE = "python:3.14-slim"
 RUNNER_SCRIPT = """\
 import json, sys, importlib, importlib.util, inspect, os
 
