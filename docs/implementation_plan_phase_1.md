@@ -110,7 +110,7 @@ ogi/
 2.1 Project Setup
 
 - pyproject.toml with dependencies: fastapi, uvicorn, pydantic, aiosqlite, python-whois, dnspython
-- Python 3.11+ required
+- Python 3.14+ required
 
   2.2 Models (backend/ogi/models/)
 

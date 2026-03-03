@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2 } from "lucide-react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -145,6 +145,34 @@ export function ContextMenu() {
     close();
   };
 
+  const handleExpandNeighbors = async () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    try {
+      const before = useGraphStore.getState().entities.size;
+      const { entities: neighborEntities, edges: neighborEdges } = await api.graph.neighbors(
+        currentProject.id,
+        menu.id
+      );
+      const { addEntity, addEdge } = useGraphStore.getState();
+      for (const item of neighborEntities) addEntity(currentProject.id, item);
+      for (const item of neighborEdges) addEdge(currentProject.id, item);
+      const after = useGraphStore.getState().entities.size;
+      toast.success(`Expanded neighbors: +${Math.max(0, after - before)} entities`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Failed to expand neighbors: ${msg}`);
+    } finally {
+      close();
+    }
+  };
+
+  const handleEditProperties = () => {
+    if (!menu.id || menu.type !== "node") return;
+    selectNode(menu.id);
+    window.dispatchEvent(new CustomEvent("ogi-edit-properties", { detail: { entityId: menu.id } }));
+    close();
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -191,6 +219,18 @@ export function ContextMenu() {
             <Focus size={12} />
             Select
           </button>
+
+          <button onClick={handleExpandNeighbors} className={itemClass}>
+            <Focus size={12} />
+            Expand Neighbors
+          </button>
+
+          {!isViewer && (
+            <button onClick={handleEditProperties} className={itemClass}>
+              <Pencil size={12} />
+              Edit Properties...
+            </button>
+          )}
 
           <button onClick={handleCopyValue} className={itemClass}>
             <Copy size={12} />

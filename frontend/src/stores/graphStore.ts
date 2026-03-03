@@ -2,6 +2,7 @@ import { create } from "zustand";
 import Graph from "graphology";
 import type { Entity } from "../types/entity";
 import type { Edge } from "../types/edge";
+import type { EdgeUpdate } from "../types/edge";
 import { ENTITY_TYPE_META } from "../types/entity";
 import { api } from "../api/client";
 import { useUndoStore } from "./undoStore";
@@ -75,6 +76,7 @@ interface GraphState {
   removeEntity: (projectId: string, entityId: string) => Promise<void>;
   addEdge: (projectId: string, edge: Edge) => void;
   removeEdge: (projectId: string, edgeId: string) => Promise<void>;
+  updateEdge: (projectId: string, edgeId: string, data: EdgeUpdate) => Promise<Edge | null>;
   selectNode: (nodeId: string | null) => void;
   selectEdge: (edgeId: string | null) => void;
   setNodeOverlay: (overlay: NodeOverlay | null) => void;
@@ -128,7 +130,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
           graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
             label: edge.label,
-            size: 2,
+            size: 3,
             color: "#4b5563",
           });
           edges.set(edge.id, edge);
@@ -207,7 +209,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   addEdge: (_projectId, edge) => {
     const { graph, edges } = get();
-    const edgeAttrs = { label: edge.label, size: 2, color: "#4b5563" };
+    const edgeAttrs = { label: edge.label, size: 3, color: "#4b5563" };
     if (
       graph.hasNode(edge.source_id) &&
       graph.hasNode(edge.target_id) &&
@@ -233,6 +235,25 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     edges.delete(edgeId);
     useUndoStore.getState().push({ type: "remove_edge", edge, edgeAttrs });
     set({ graph, edges: new Map(edges) });
+  },
+
+  updateEdge: async (projectId, edgeId, data) => {
+    const { graph, edges } = get();
+    const existing = edges.get(edgeId);
+    if (!existing) return null;
+
+    const updated = await api.edges.update(projectId, edgeId, data);
+    edges.set(edgeId, updated);
+
+    if (graph.hasEdge(edgeId)) {
+      graph.setEdgeAttribute(edgeId, "label", updated.label);
+      if (typeof updated.weight === "number") {
+        graph.setEdgeAttribute(edgeId, "size", Math.max(1, updated.weight));
+      }
+    }
+
+    set({ graph, edges: new Map(edges) });
+    return updated;
   },
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null }),

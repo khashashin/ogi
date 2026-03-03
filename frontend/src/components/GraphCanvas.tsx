@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { useGraphStore } from "../stores/graphStore";
@@ -8,8 +8,9 @@ import { setSigmaRef } from "../stores/sigmaRef";
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectEdge, selectedNodeId, nodeOverlay, persistPositions } = useGraphStore();
+  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, nodeOverlay, persistPositions } = useGraphStore();
   const { currentProject } = useProjectStore();
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   // Drag state refs (avoid re-renders during drag)
   const dragStateRef = useRef<{
@@ -38,6 +39,9 @@ export function GraphCanvas() {
       labelSize: 12,
       labelRenderedSizeThreshold: 6,
       enableEdgeEvents: true,
+      minEdgeThickness: 2,
+      itemSizesReference: "screen",
+      zIndex: true,
     });
 
     // --- Node click ---
@@ -51,6 +55,16 @@ export function GraphCanvas() {
     // --- Edge click ---
     renderer.on("clickEdge", ({ edge }) => {
       selectEdge(edge);
+    });
+
+    renderer.on("enterEdge", ({ edge }) => {
+      setHoveredEdgeId(edge);
+      if (containerRef.current) containerRef.current.style.cursor = "pointer";
+    });
+
+    renderer.on("leaveEdge", () => {
+      setHoveredEdgeId(null);
+      if (containerRef.current) containerRef.current.style.cursor = "default";
     });
 
     renderer.on("clickStage", () => {
@@ -209,6 +223,24 @@ export function GraphCanvas() {
     });
 
     renderer.setSetting("edgeReducer", (edge, data) => {
+      if (selectedEdgeId && edge === selectedEdgeId) {
+        return {
+          ...data,
+          color: "#60a5fa",
+          size: Math.max((data.size ?? 2) * 2.2, 4),
+          zIndex: 3,
+        };
+      }
+
+      if (hoveredEdgeId && edge === hoveredEdgeId) {
+        return {
+          ...data,
+          color: "#93c5fd",
+          size: Math.max((data.size ?? 2) * 2, 3.5),
+          zIndex: 2,
+        };
+      }
+
       if (selectedNodeId && !nodeOverlay) {
         const src = graph.source(edge);
         const tgt = graph.target(edge);
@@ -220,7 +252,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, nodeOverlay, graph]);
+  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {
