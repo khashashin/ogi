@@ -96,6 +96,23 @@ class TransformEngine:
         from ogi.transforms.dns.domain_to_ns import DomainToNS
         from ogi.transforms.dns.ip_to_domain import IPToDomain
         from ogi.transforms.dns.whois_lookup import WhoisLookup
+        from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
+        from ogi.transforms.ip.ip_to_asn import IPToASN
+        from ogi.transforms.web.url_to_headers import URLToHeaders
+        from ogi.transforms.web.domain_to_urls import DomainToURLs
+        from ogi.transforms.email.email_to_domain import EmailToDomain
+        from ogi.transforms.email.domain_to_emails import DomainToEmails
+        from ogi.transforms.cert.domain_to_certs import DomainToCerts
+        from ogi.transforms.cert.cert_transparency import CertTransparency
+        from ogi.transforms.social.username_search import UsernameSearch
+        from ogi.transforms.hash.hash_lookup import HashLookup
 
-        for cls in [DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup]:
+        for cls in [
+            DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
+            IPToGeolocation, IPToASN,
+            URLToHeaders, DomainToURLs,
+            EmailToDomain, DomainToEmails,
+            DomainToCerts, CertTransparency,
+            UsernameSearch, HashLookup,
+        ]:
             self.register(cls())

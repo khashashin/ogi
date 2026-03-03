@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download } from "lucide-react";
+import { ExportImportDialog } from "./ExportImportDialog";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
@@ -12,6 +13,7 @@ export function Toolbar() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
+  const [showExportImport, setShowExportImport] = useState(false);
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -162,6 +164,22 @@ export function Toolbar() {
       >
         <Maximize2 size={14} />
       </button>
+
+      <div className="w-px h-4 bg-border" />
+
+      <button
+        onClick={() => setShowExportImport(true)}
+        className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-surface-hover rounded"
+        title="Export / Import"
+      >
+        <Download size={12} />
+        Export
+      </button>
+
+      <ExportImportDialog
+        open={showExportImport}
+        onClose={() => setShowExportImport(false)}
+      />
     </div>
   );
 }

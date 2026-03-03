@@ -4,6 +4,14 @@ import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
 
+interface ImportSummary {
+  entities_added: number;
+  entities_merged: number;
+  entities_skipped: number;
+  edges_added: number;
+  edges_skipped: number;
+}
+
 const BASE_URL = "/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -80,6 +88,38 @@ export const api = {
       request<GraphData>(`/projects/${projectId}/graph`),
     neighbors: (projectId: string, entityId: string) =>
       request<GraphData>(`/projects/${projectId}/graph/neighbors/${entityId}`),
+  },
+
+  export: {
+    json: (projectId: string) =>
+      `${BASE_URL}/projects/${projectId}/export/json`,
+    csv: (projectId: string) =>
+      `${BASE_URL}/projects/${projectId}/export/csv`,
+    graphml: (projectId: string) =>
+      `${BASE_URL}/projects/${projectId}/export/graphml`,
+  },
+
+  import: {
+    json: async (projectId: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/projects/${projectId}/import/json`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      return res.json() as Promise<ImportSummary>;
+    },
+    csv: async (projectId: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/projects/${projectId}/import/csv`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      return res.json() as Promise<ImportSummary>;
+    },
   },
 
   transforms: {
