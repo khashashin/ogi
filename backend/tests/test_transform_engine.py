@@ -1,6 +1,8 @@
 import pytest
+import sys
+from types import ModuleType
 
-from ogi.models import Entity, EntityType, TransformStatus
+from ogi.models import Entity, EntityType
 from ogi.engine.transform_engine import TransformEngine
 from ogi.models import Project
 from ogi.transforms.base import TransformConfig
@@ -22,7 +24,9 @@ def test_auto_discover(engine: TransformEngine):
     assert "ip_to_domain" in names
     assert "whois_lookup" in names
     assert "organization_to_team_members" in names
-    assert len(transforms) == 16
+    assert "url_to_content" in names
+    assert "content_to_iocs" in names
+    assert len(transforms) == 18
 
 
 def test_list_for_entity(engine: TransformEngine):
@@ -43,6 +47,88 @@ def test_list_for_ip_entity(engine: TransformEngine):
     names = [t.name for t in transforms]
     assert "ip_to_domain" in names
     assert "domain_to_ip" not in names
+
+
+@pytest.mark.asyncio
+async def test_content_to_iocs_extracts_common_indicators(engine: TransformEngine):
+    transform = engine.get_transform("content_to_iocs")
+    assert transform is not None
+    document = Entity(
+        type=EntityType.DOCUMENT,
+        value="Security report",
+        properties={
+            "content": (
+                "Indicators: admin@example.org 8.8.8.8 https://evil.example/path "
+                "d41d8cd98f00b204e9800998ecf8427e and evil.example."
+            )
+        },
+    )
+
+    result = await transform.run(document, TransformConfig(settings={}))
+    out_types = {entity.type for entity in result.entities}
+    out_values = {entity.value for entity in result.entities}
+
+    assert EntityType.EMAIL_ADDRESS in out_types
+    assert EntityType.IP_ADDRESS in out_types
+    assert EntityType.URL in out_types
+    assert EntityType.HASH in out_types
+    assert EntityType.DOMAIN in out_types
+    assert "admin@example.org" in out_values
+    assert "8.8.8.8" in out_values
+    assert "https://evil.example/path" in out_values
+    assert "d41d8cd98f00b204e9800998ecf8427e" in out_values
+    assert "evil.example" in out_values
+
+
+@pytest.mark.asyncio
+async def test_content_to_iocs_uses_iocsearcher_when_available(engine: TransformEngine):
+    transform = engine.get_transform("content_to_iocs")
+    assert transform is not None
+
+    fake_searcher_module = ModuleType("iocsearcher.searcher")
+
+    class FakeIOC:
+        def __init__(self, name: str, value: str):
+            self.name = name
+            self.value = value
+
+    class FakeSearcher:
+        def search_data(self, text: str):
+            assert "8.8.4.4" in text
+            return [
+                FakeIOC("ipv4", "8.8.4.4"),
+                FakeIOC("email", "ioc@example.org"),
+                FakeIOC("url", "https://ioc.example/path"),
+            ]
+
+    fake_searcher_module.Searcher = FakeSearcher
+    sys.modules["iocsearcher"] = ModuleType("iocsearcher")
+    sys.modules["iocsearcher.searcher"] = fake_searcher_module
+
+    try:
+        document = Entity(
+            type=EntityType.DOCUMENT,
+            value="IOC doc",
+            properties={"content": "Data: 8.8.4.4 ioc@example.org https://ioc.example/path"},
+        )
+        result = await transform.run(document, TransformConfig(settings={}))
+        out_values = {entity.value for entity in result.entities}
+        assert "8.8.4.4" in out_values
+        assert "ioc@example.org" in out_values
+        assert "https://ioc.example/path" in out_values
+        assert any("iocsearcher" in msg.lower() for msg in result.messages)
+    finally:
+        sys.modules.pop("iocsearcher.searcher", None)
+        sys.modules.pop("iocsearcher", None)
+
+
+def test_url_to_content_blocks_localhost_by_default(engine: TransformEngine):
+    transform = engine.get_transform("url_to_content")
+    assert transform is not None
+    assert transform._is_blocked_host("localhost") is True
+    assert transform._is_blocked_host("127.0.0.1") is True
+    assert transform._is_blocked_host("10.1.2.3") is True
+    assert transform._is_blocked_host("example.org") is False
 
 
 def test_get_transform(engine: TransformEngine):
