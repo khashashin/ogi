@@ -224,6 +224,30 @@ export const api = {
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
       return res.json() as Promise<ImportSummary>;
     },
+    graphml: async (projectId: string, file: File) => {
+      const authHeaders = await getAuthHeaders();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/projects/${projectId}/import/graphml`, {
+        method: "POST",
+        headers: { ...authHeaders },
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      return res.json() as Promise<ImportSummary>;
+    },
+    maltego: async (projectId: string, file: File) => {
+      const authHeaders = await getAuthHeaders();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/projects/${projectId}/import/maltego`, {
+        method: "POST",
+        headers: { ...authHeaders },
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      return res.json() as Promise<ImportSummary>;
+    },
   },
 
   transforms: {
