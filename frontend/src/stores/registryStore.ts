@@ -3,13 +3,13 @@ import { api } from "../api/client";
 import type {
   RegistryTransform,
   RegistryIndex,
-  PluginInfoV2,
+  PluginInfo,
 } from "../types/registry";
 
 interface RegistryState {
   // Data
   index: RegistryIndex | null;
-  installedPlugins: PluginInfoV2[];
+  installedPlugins: PluginInfo[];
   searchResults: RegistryTransform[];
   canManage: boolean;
 
@@ -63,7 +63,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
 
   fetchInstalledPlugins: async () => {
     try {
-      const plugins = await api.plugins.list() as PluginInfoV2[];
+      const plugins = await api.plugins.list() as PluginInfo[];
       set({ installedPlugins: plugins });
     } catch {
       set({ installedPlugins: [] });

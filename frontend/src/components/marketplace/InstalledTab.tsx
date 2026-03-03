@@ -1,11 +1,11 @@
 import { ToggleLeft, ToggleRight } from "lucide-react";
 import { VerificationBadge } from "./VerificationBadge";
-import type { PluginInfoV2, VerificationTier } from "../../types/registry";
+import type { PluginInfo, VerificationTier } from "../../types/registry";
 import { api } from "../../api/client";
 import { useState } from "react";
 
 interface InstalledTabProps {
-  plugins: PluginInfoV2[];
+  plugins: PluginInfo[];
   onRefresh: () => void;
 }
 
