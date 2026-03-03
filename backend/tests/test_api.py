@@ -9,6 +9,7 @@ os.environ["OGI_SUPABASE_URL"] = ""
 os.environ["OGI_SUPABASE_ANON_KEY"] = ""
 os.environ["OGI_SUPABASE_SERVICE_ROLE_KEY"] = ""
 os.environ["OGI_SUPABASE_JWT_SECRET"] = ""
+os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7LrD0WBE="
 
 from ogi.main import app
 
