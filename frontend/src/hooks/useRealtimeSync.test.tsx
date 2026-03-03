@@ -6,7 +6,35 @@ import { useRealtimeSync } from "./useRealtimeSync";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-type PayloadHandler = (payload: any) => void;
+interface StubEntity {
+  id: string;
+  value?: string;
+  [key: string]: unknown;
+}
+
+interface StubEdge {
+  id: string;
+  source_id?: string;
+  target_id?: string;
+  label?: string;
+  [key: string]: unknown;
+}
+
+interface GraphState {
+  graph: ReturnType<typeof createGraphStub>;
+  entities: Map<string, StubEntity>;
+  edges: Map<string, StubEdge>;
+  addEntity: ReturnType<typeof vi.fn>;
+  addEdge: ReturnType<typeof vi.fn>;
+}
+
+interface RealtimePayload {
+  eventType: string;
+  new: Record<string, unknown>;
+  old: Record<string, unknown>;
+}
+
+type PayloadHandler = (payload: RealtimePayload) => void;
 
 const hoisted = vi.hoisted(() => {
   const handlers: Record<string, PayloadHandler> = {};
@@ -26,7 +54,7 @@ const hoisted = vi.hoisted(() => {
     channelMock,
     removeChannelMock,
     channelFactoryMock,
-    state: null as any,
+    state: null as unknown as GraphState,
   };
 });
 
@@ -98,18 +126,18 @@ describe("useRealtimeSync", () => {
     hoisted.channelMock.subscribe.mockClear();
 
     const graph = createGraphStub();
-    const entities = new Map<string, any>();
-    const edges = new Map<string, any>();
+    const entities = new Map<string, StubEntity>();
+    const edges = new Map<string, StubEdge>();
 
     hoisted.state = {
       graph,
       entities,
       edges,
-      addEntity: vi.fn((_projectId: string, entity: any) => {
+      addEntity: vi.fn((_projectId: string, entity: StubEntity) => {
         entities.set(entity.id, entity);
         graph.__seedNode(entity.id);
       }),
-      addEdge: vi.fn((_projectId: string, edge: any) => {
+      addEdge: vi.fn((_projectId: string, edge: StubEdge) => {
         edges.set(edge.id, edge);
         graph.__seedEdge(edge.id);
       }),
