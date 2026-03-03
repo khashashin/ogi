@@ -512,7 +512,7 @@ async def test_graph_get(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_graph_get_refreshes_entities_written_outside_engine(client: AsyncClient):
-    """Graph endpoint should include entities written directly to DB (worker path)."""
+    """Graph endpoint refresh mode should include entities written directly to DB."""
     from uuid import UUID
 
     from ogi.db.database import get_session
@@ -540,12 +540,50 @@ async def test_graph_get_refreshes_entities_written_outside_engine(client: Async
         )
         break
 
-    # Before fix this stayed at 1 due to stale engine cache.
-    resp = await client.get(f"/api/v1/projects/{pid}/graph")
+    # Explicit refresh picks up out-of-band DB writes.
+    resp = await client.get(f"/api/v1/projects/{pid}/graph?refresh=true")
     assert resp.status_code == 200
     values = {e["value"] for e in resp.json()["entities"]}
     assert "seed.test" in values
     assert "from-worker" in values
+
+
+@pytest.mark.asyncio
+async def test_graph_get_uses_hydration_gate_for_empty_project(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    """An empty project should hydrate once unless explicit refresh is requested."""
+    from ogi.store.entity_store import EntityStore
+    from ogi.store.edge_store import EdgeStore
+
+    resp = await client.post("/api/v1/projects", json={"name": "HydrationGate"})
+    pid = resp.json()["id"]
+
+    entity_calls = {"count": 0}
+    edge_calls = {"count": 0}
+    original_list_entities = EntityStore.list_by_project
+    original_list_edges = EdgeStore.list_by_project
+
+    async def wrapped_list_entities(self, project_id):  # type: ignore[no-untyped-def]
+        entity_calls["count"] += 1
+        return await original_list_entities(self, project_id)
+
+    async def wrapped_list_edges(self, project_id):  # type: ignore[no-untyped-def]
+        edge_calls["count"] += 1
+        return await original_list_edges(self, project_id)
+
+    monkeypatch.setattr(EntityStore, "list_by_project", wrapped_list_entities)
+    monkeypatch.setattr(EdgeStore, "list_by_project", wrapped_list_edges)
+
+    resp = await client.get(f"/api/v1/projects/{pid}/graph")
+    assert resp.status_code == 200
+    resp = await client.get(f"/api/v1/projects/{pid}/graph")
+    assert resp.status_code == 200
+    assert entity_calls["count"] == 1
+    assert edge_calls["count"] == 1
+
+    resp = await client.get(f"/api/v1/projects/{pid}/graph?refresh=true")
+    assert resp.status_code == 200
+    assert entity_calls["count"] == 2
+    assert edge_calls["count"] == 2
 
 
 @pytest.mark.asyncio
@@ -1027,6 +1065,63 @@ async def test_entity_with_properties(client: AsyncClient):
     assert entity["properties"]["country"] == "US"
     assert "suspect" in entity["tags"]
     assert entity["notes"] == "important person"
+
+
+@pytest.mark.asyncio
+async def test_entity_store_save_upserts_existing_entity(client: AsyncClient):
+    from uuid import UUID
+
+    from ogi.db.database import get_session
+    from ogi.models import Entity, EntityType
+    from ogi.store.entity_store import EntityStore
+
+    resp = await client.post("/api/v1/projects", json={"name": "EntityUpsert"})
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={
+            "type": "Domain",
+            "value": "upsert.example",
+            "properties": {"first_seen": "yes"},
+            "notes": "initial",
+            "tags": ["seed"],
+            "source": "manual",
+            "weight": 1,
+        },
+    )
+    assert resp.status_code == 201
+    original = resp.json()
+
+    async for session in get_session():
+        store = EntityStore(session)
+        incoming = Entity(
+            type=EntityType.DOMAIN,
+            value="upsert.example",
+            properties={"whois_creation_date": "2025-01-01"},
+            notes="enriched",
+            tags=["seed", "whois"],
+            source="whois_lookup",
+            weight=3,
+            project_id=UUID(pid),
+        )
+        saved = await store.save(UUID(pid), incoming)
+        break
+
+    assert str(saved.id) == original["id"]
+
+    resp = await client.get(f"/api/v1/projects/{pid}/entities")
+    assert resp.status_code == 200
+    entities = [e for e in resp.json() if e["value"] == "upsert.example" and e["type"] == "Domain"]
+    assert len(entities) == 1
+    entity = entities[0]
+    assert entity["properties"]["first_seen"] == "yes"
+    assert entity["properties"]["whois_creation_date"] == "2025-01-01"
+    assert "seed" in entity["tags"]
+    assert "whois" in entity["tags"]
+    assert entity["notes"] == "enriched"
+    assert entity["source"] == "whois_lookup"
+    assert entity["weight"] == 3
 
 
 # ---------------------------------------------------------------------------
