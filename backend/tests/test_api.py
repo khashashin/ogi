@@ -1081,6 +1081,104 @@ async def test_transform_settings_user_defaults_are_applied_on_run(
     assert settings.get("openai_api_key") == "sk-test"
 
 
+@pytest.mark.asyncio
+async def test_get_transform_run_forbidden_for_non_member(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api import transforms as transforms_api
+    from ogi.api.auth import get_current_user
+    from ogi.models import UserProfile
+
+    class DummyQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: DummyQueue())
+
+    owner = UserProfile(id=uuid4(), email="owner-runs@test.com")
+    outsider = UserProfile(id=uuid4(), email="outsider-runs@test.com")
+
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        resp = await client.post("/api/v1/projects", json={"name": "RunReadScope"})
+        assert resp.status_code == 201
+        pid = resp.json()["id"]
+
+        resp = await client.post(
+            f"/api/v1/projects/{pid}/entities",
+            json={"type": "Domain", "value": "scope.test"},
+        )
+        assert resp.status_code == 201
+        eid = resp.json()["id"]
+
+        resp = await client.post(
+            "/api/v1/transforms/domain_to_ip/run",
+            json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+        )
+        assert resp.status_code == 200
+        run_id = resp.json()["id"]
+    finally:
+        app.dependency_overrides.clear()
+
+    app.dependency_overrides[get_current_user] = lambda: outsider
+    try:
+        resp = await client.get(f"/api/v1/transforms/runs/{run_id}")
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_cancel_transform_run_forbidden_for_non_member(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api import transforms as transforms_api
+    from ogi.api.auth import get_current_user
+    from ogi.models import UserProfile
+
+    class DummyQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: DummyQueue())
+
+    owner = UserProfile(id=uuid4(), email="owner-cancel@test.com")
+    outsider = UserProfile(id=uuid4(), email="outsider-cancel@test.com")
+
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        resp = await client.post("/api/v1/projects", json={"name": "RunCancelScope"})
+        assert resp.status_code == 201
+        pid = resp.json()["id"]
+
+        resp = await client.post(
+            f"/api/v1/projects/{pid}/entities",
+            json={"type": "Domain", "value": "cancel-scope.test"},
+        )
+        assert resp.status_code == 201
+        eid = resp.json()["id"]
+
+        resp = await client.post(
+            "/api/v1/transforms/domain_to_ip/run",
+            json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+        )
+        assert resp.status_code == 200
+        run_id = resp.json()["id"]
+    finally:
+        app.dependency_overrides.clear()
+
+    app.dependency_overrides[get_current_user] = lambda: outsider
+    try:
+        resp = await client.post(f"/api/v1/transforms/runs/{run_id}/cancel")
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
 # ---------------------------------------------------------------------------
 # Entity edge cases
 # ---------------------------------------------------------------------------
