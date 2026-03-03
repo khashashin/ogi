@@ -42,7 +42,6 @@ dev = [
     "mypy>=1.18.2",
 ]
 web_extract = [
-    "beautifulsoup4>=4.12.0",
     "iocsearcher>=1.0.0",
     "playwright>=1.55.0",
 ]
