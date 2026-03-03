@@ -8,6 +8,8 @@ import { AnalysisPanel } from "./AnalysisPanel";
 import { Toolbar } from "./Toolbar";
 import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
+import { FilterPanel } from "./FilterPanel";
+import { TableView } from "./TableView";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { useGraphStore } from "../stores/graphStore";
@@ -17,7 +19,7 @@ type BottomTab = "transforms" | "analysis";
 export function Layout() {
   useKeyboardShortcuts();
   const isViewer = useIsViewer();
-  const { nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
+  const { centerView, nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
   const [bottomTab, setBottomTab] = useState<BottomTab>("transforms");
 
   const hasAnalysisOverlay = nodeOverlay?.type.startsWith("analysis");
@@ -44,8 +46,9 @@ export function Layout() {
           <Group orientation="vertical">
             <Panel defaultSize={70} minSize={30}>
               <div className="relative w-full h-full">
-                <GraphCanvas />
+                {centerView === "graph" ? <GraphCanvas /> : <TableView />}
                 <SearchBar />
+                {centerView === "graph" && <FilterPanel mode="overlay" />}
               </div>
             </Panel>
 
