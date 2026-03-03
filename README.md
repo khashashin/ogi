@@ -53,6 +53,22 @@ docker compose -f docker-compose.prod.yml up -d
 
 Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (for example `v0.1.0`). By default, `latest` is used.
 
+### Boot-Time Plugin Dependencies
+
+If you use prebuilt images and a plugin needs extra Python libraries, add a requirements file mounted into the container:
+
+```bash
+plugins/requirements.txt
+```
+
+On container start, the backend/worker image will install that file automatically (hash-cached per container lifecycle).
+
+Optional env vars:
+
+- `OGI_BOOT_REQUIREMENTS_ENABLE=true|false` (default: `true`)
+- `OGI_BOOT_REQUIREMENTS_FILE=/app/plugins/requirements.txt`
+- `OGI_BOOT_REQUIREMENTS_STRICT=true|false` (default: `false`; fail startup if file missing)
+
 ## Tech Stack
 
 | Layer            | Tech                                                            |
