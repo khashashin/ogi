@@ -59,7 +59,6 @@ async def list_my_projects(
 async def get_project(
     project_id: UUID,
     role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
     store: ProjectStore = Depends(get_project_store),
 ) -> ProjectWithRole:
     project = await store.get(project_id)
@@ -73,8 +72,7 @@ async def get_project(
 async def update_project(
     project_id: UUID,
     data: ProjectUpdate,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: ProjectStore = Depends(get_project_store),
 ) -> Project:
     project = await store.get(project_id)
@@ -90,8 +88,7 @@ async def update_project(
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(
     project_id: UUID,
-    role: str = Depends(require_project_owner),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_owner),
     store: ProjectStore = Depends(get_project_store),
 ) -> None:
     project = await store.get(project_id)
@@ -134,4 +131,3 @@ async def unbookmark_project(
     removed = await store.remove_bookmark(current_user.id, project_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Bookmark not found")
-

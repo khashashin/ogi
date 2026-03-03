@@ -62,8 +62,7 @@ router = APIRouter(prefix="/projects/{project_id}/members", tags=["members"])
 @router.get("", response_model=list[ProjectMemberRead])
 async def list_members(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     session: AsyncSession = Depends(get_session),
 ) -> list[ProjectMemberRead]:
     if settings.use_sqlite:
@@ -95,8 +94,7 @@ async def list_members(
 async def add_member(
     project_id: UUID,
     data: ProjectMemberCreate,
-    role: str = Depends(require_project_owner),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_owner),
     session: AsyncSession = Depends(get_session),
 ) -> ProjectMemberRead:
     if settings.use_sqlite:
@@ -135,8 +133,7 @@ async def update_member(
     project_id: UUID,
     user_id: UUID,
     data: ProjectMemberUpdate,
-    role: str = Depends(require_project_owner),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_owner),
     session: AsyncSession = Depends(get_session),
 ) -> ProjectMemberRead:
     if settings.use_sqlite:

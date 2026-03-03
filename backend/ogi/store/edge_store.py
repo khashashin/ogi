@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from ogi.models import Edge, EdgeCreate, EdgeUpdate
+from ogi.models import Edge, EdgeCreate, EdgeUpdate, Entity
 
 
 class EdgeStore:

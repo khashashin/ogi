@@ -2,9 +2,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ogi.models import Edge, EdgeCreate, EdgeUpdate, UserProfile
+from ogi.models import Edge, EdgeCreate, EdgeUpdate
 from ogi.api.dependencies import get_edge_store, get_graph_engine
-from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
+from ogi.api.auth import require_project_editor, require_project_viewer
 from ogi.store.edge_store import EdgeStore
 
 router = APIRouter(prefix="/projects/{project_id}/edges", tags=["edges"])
@@ -14,8 +14,7 @@ router = APIRouter(prefix="/projects/{project_id}/edges", tags=["edges"])
 async def create_edge(
     project_id: UUID,
     data: EdgeCreate,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EdgeStore = Depends(get_edge_store),
 ) -> Edge:
     try:
@@ -33,8 +32,7 @@ async def create_edge(
 @router.get("", response_model=list[Edge])
 async def list_edges(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     store: EdgeStore = Depends(get_edge_store),
 ) -> list[Edge]:
     return await store.list_by_project(project_id)
@@ -45,8 +43,7 @@ async def update_edge(
     project_id: UUID,
     edge_id: UUID,
     data: EdgeUpdate,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EdgeStore = Depends(get_edge_store),
 ) -> Edge:
     edge = await store.update(edge_id, data)
@@ -66,8 +63,7 @@ async def update_edge(
 async def delete_edge(
     project_id: UUID,
     edge_id: UUID,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EdgeStore = Depends(get_edge_store),
 ) -> None:
     deleted = await store.delete(edge_id)

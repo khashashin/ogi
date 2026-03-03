@@ -6,8 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
-from ogi.models import Entity, EntityType, Edge, EdgeCreate, UserProfile
-from ogi.api.auth import get_current_user, require_project_editor
+from ogi.models import Entity, EntityType, Edge, EdgeCreate
+from ogi.api.auth import require_project_editor
 from ogi.api.dependencies import get_entity_store, get_edge_store, get_graph_engine
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
@@ -27,8 +27,7 @@ class ImportSummary(BaseModel):
 async def import_json(
     project_id: UUID,
     file: UploadFile = File(...),
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     es: EntityStore = Depends(get_entity_store),
     edge_s: EdgeStore = Depends(get_edge_store),
 ) -> ImportSummary:
@@ -93,8 +92,7 @@ async def import_json(
 async def import_csv(
     project_id: UUID,
     file: UploadFile = File(...),
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     es: EntityStore = Depends(get_entity_store),
 ) -> ImportSummary:
     """Import entities from a CSV file. Expected columns: type, value, properties (JSON), weight, notes, tags, source"""

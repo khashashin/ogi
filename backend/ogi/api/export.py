@@ -8,8 +8,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
-from ogi.models import UserProfile
-from ogi.api.auth import get_current_user, require_project_viewer
+from ogi.api.auth import require_project_viewer
 from ogi.api.dependencies import get_entity_store, get_edge_store, get_project_store
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
@@ -50,8 +49,7 @@ async def _upload_to_storage(
 @router.get("/json")
 async def export_json(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
     project_store: ProjectStore = Depends(get_project_store),
     entity_store: EntityStore = Depends(get_entity_store),
@@ -95,8 +93,7 @@ async def export_json(
 @router.get("/csv")
 async def export_csv(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
     project_store: ProjectStore = Depends(get_project_store),
     entity_store: EntityStore = Depends(get_entity_store),
@@ -156,8 +153,7 @@ async def export_csv(
 @router.get("/graphml")
 async def export_graphml(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
     entity_store: EntityStore = Depends(get_entity_store),
     edge_store: EdgeStore = Depends(get_edge_store),
