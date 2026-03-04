@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Trash2, Play, Loader2, Plus, X } from "lucide-react";
+import { Trash2, Play, Loader2, Plus, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -147,7 +147,19 @@ export function EntityInspector() {
             <Trash2 size={14} />
           </button>
         </div>
-        <p className="text-sm font-medium text-text break-all">{entity.value}</p>
+        <div className="flex items-center gap-1 group">
+          <p className="text-sm font-medium text-text break-all flex-1">{entity.value}</p>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(entity.value);
+              toast.success("Copied to clipboard");
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text shrink-0"
+            title="Copy value"
+          >
+            <Copy size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Properties */}
@@ -205,7 +217,12 @@ export function EntityInspector() {
           </div>
         )}
         {Object.keys(entity.properties).length === 0 && !showAddProp && (
-          <p className="text-[10px] text-text-muted">No properties</p>
+          <button
+            onClick={() => setShowAddProp(true)}
+            className="text-[10px] text-text-muted hover:text-accent cursor-pointer"
+          >
+            + Add a property
+          </button>
         )}
       </div>
 
@@ -250,8 +267,8 @@ export function EntityInspector() {
               onChange={(e) => setNotesValue(e.target.value)}
               onBlur={handleSaveNotes}
               autoFocus
-              rows={3}
-              className="w-full px-2 py-1 text-xs bg-bg border border-border rounded text-text focus:outline-none focus:border-accent resize-none"
+              rows={5}
+              className="w-full px-2 py-1 text-xs bg-bg border border-border rounded text-text focus:outline-none focus:border-accent resize-y min-h-[60px]"
             />
           </div>
         ) : (
@@ -322,7 +339,21 @@ export function EntityInspector() {
         <div className="space-y-1 text-[10px] text-text-muted">
           <p>Source: {entity.source}</p>
           <p>Weight: {entity.weight}</p>
-          <p>ID: {entity.id.slice(0, 8)}...</p>
+          <div className="flex items-center gap-1 group">
+            <span>ID: {entity.id.slice(0, 8)}...</span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(entity.id);
+                toast.success("ID copied");
+              }}
+              className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-text"
+              title="Copy full ID"
+            >
+              <Copy size={9} />
+            </button>
+          </div>
+          {entity.created_at && <p>Created: {new Date(entity.created_at).toLocaleString()}</p>}
+          {entity.updated_at && <p>Updated: {new Date(entity.updated_at).toLocaleString()}</p>}
         </div>
       </div>
     </div>
