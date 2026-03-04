@@ -271,9 +271,10 @@ class RegistryClient:
     def compute_sha256(directory: Path) -> str:
         """Compute a deterministic SHA256 over all files in *directory*."""
         hasher = hashlib.sha256()
-        for file_path in sorted(directory.rglob("*")):
-            if file_path.is_file():
-                rel = file_path.relative_to(directory)
-                hasher.update(str(rel).encode())
-                hasher.update(file_path.read_bytes())
+        files = [p for p in directory.rglob("*") if p.is_file()]
+        for file_path in sorted(files, key=lambda p: p.relative_to(directory).as_posix()):
+            rel = file_path.relative_to(directory)
+            # Normalize separators and sorting key for cross-platform stability.
+            hasher.update(rel.as_posix().encode())
+            hasher.update(file_path.read_bytes())
         return hasher.hexdigest()
