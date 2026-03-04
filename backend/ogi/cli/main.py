@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import typer
 
+from ogi.cli.commands.config import app as config_app
 from ogi.cli.commands.transform import app as transform_app
 
 app = typer.Typer(
@@ -22,6 +23,7 @@ app = typer.Typer(
 )
 
 app.add_typer(transform_app, name="transform")
+app.add_typer(config_app, name="config")
 
 
 def main() -> None:
