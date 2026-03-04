@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle (Optional for GitHub Profile) -->
+  <rect width="512" height="512" rx="128" fill="#0F1117"/>
+  <!-- Network Graph Connections -->
+  <path d="M256 160V256L340 300" stroke="#6366F1" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 256L172 300" stroke="#6366F1" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Nodes -->
+  <circle cx="256" cy="256" r="40" fill="#6366F1"/> <!-- Central Node -->
+  <circle cx="256" cy="160" r="24" fill="#E1E4ED"/> <!-- Top Node -->
+  <circle cx="340" cy="300" r="24" fill="#E1E4ED"/> <!-- Right Node -->
+  <circle cx="172" cy="300" r="24" fill="#E1E4ED"/> <!-- Left Node -->
+  <!-- Abstract "O" Ring -->
+  <circle cx="256" cy="256" r="180" stroke="#8B8FA3" stroke-width="12" stroke-dasharray="40 20" opacity="0.3"/>
+</svg>
