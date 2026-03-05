@@ -93,6 +93,10 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PAT }}
           branch: release/v${{ github.event.inputs.version }}
+          add-paths: |
+            backend/pyproject.toml
+            backend/uv.lock
+            frontend/package.json
           commit-message: "chore(release): bump version to ${{ github.event.inputs.version }}"
           title: "chore(release): bump version to ${{ github.event.inputs.version }}"
           body: |
