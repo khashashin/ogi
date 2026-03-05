@@ -1,0 +1,94 @@
+name: Prepare Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Version must match X.Y.Z"
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Update version files
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+          import os
+          import sys
+
+          version = os.environ["VERSION"].strip()
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+              print(f"Invalid version format: {version}")
+              sys.exit(1)
+
+          pyproject = Path("backend/pyproject.toml")
+          lines = pyproject.read_text(encoding="utf-8").splitlines()
+          in_project = False
+          replaced = False
+          for idx, line in enumerate(lines):
+              stripped = line.strip()
+              if stripped == "[project]":
+                  in_project = True
+                  continue
+              if in_project and stripped.startswith("[") and stripped != "[project]":
+                  in_project = False
+              if in_project and re.match(r"^version\s*=\s*\".*\"$", stripped):
+                  lines[idx] = f'version = "{version}"'
+                  replaced = True
+                  break
+          if not replaced:
+              print("Could not find [project] version in backend/pyproject.toml")
+              sys.exit(1)
+          pyproject.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          package_json = Path("frontend/package.json")
+          package_data = json.loads(package_json.read_text(encoding="utf-8"))
+          package_data["version"] = version
+          package_json.write_text(json.dumps(package_data, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Create release PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/v${{ github.event.inputs.version }}
+          commit-message: chore(release): bump version to ${{ github.event.inputs.version }}
+          title: chore(release): bump version to ${{ github.event.inputs.version }}
+          body: |
+            Release preparation PR.
+
+            - Bumps `backend/pyproject.toml` version
+            - Bumps `frontend/package.json` version
+
+            Merge this PR into `main`, then run **Cut Release** with version `${{ github.event.inputs.version }}`.
+          labels: release
+          delete-branch: true
