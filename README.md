@@ -79,19 +79,25 @@ Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (for example `
 
 ### Boot-Time Plugin Dependencies
 
-If you use prebuilt images and a plugin needs extra Python libraries, add a requirements file mounted into the container:
+If you use prebuilt images and a plugin needs extra Python libraries, OGI installs plugin dependencies at container startup from:
+
+1. `plugins/requirements.txt` (preferred), or
+2. auto-generated requirements derived from `plugins/ogi-lock.json` when `requirements.txt` is missing.
+
+Preferred manual file:
 
 ```bash
 plugins/requirements.txt
 ```
 
-On container start, the backend/worker image will install that file automatically (hash-cached per container lifecycle).
+On container start, backend/worker install dependencies automatically (hash-cached per container lifecycle).
 
 Optional env vars:
 
 - `OGI_BOOT_REQUIREMENTS_ENABLE=true|false` (default: `true`)
 - `OGI_BOOT_REQUIREMENTS_FILE=/app/plugins/requirements.txt`
-- `OGI_BOOT_REQUIREMENTS_STRICT=true|false` (default: `false`; fail startup if file missing)
+- `OGI_BOOT_LOCK_FILE=/app/plugins/ogi-lock.json`
+- `OGI_BOOT_REQUIREMENTS_STRICT=true|false` (default: `false`; fail startup if requirements file is missing/empty)
 
 ## Tech Stack
 
