@@ -7,7 +7,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./plugins:/app/plugins
+      - ogi_plugins:/app/plugins
     environment:
       - OGI_DATABASE_URL=${OGI_DATABASE_URL}
       - OGI_USE_SQLITE=false
@@ -37,7 +37,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./plugins:/app/plugins
+      - ogi_plugins:/app/plugins
     environment:
       - OGI_DATABASE_URL=${OGI_DATABASE_URL}
       - OGI_USE_SQLITE=false
@@ -71,3 +71,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+volumes:
+  ogi_plugins:
