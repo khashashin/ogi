@@ -137,8 +137,6 @@ Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.2.6`
 | `db`       | PostgreSQL 16              | 5432 |
 | `redis`    | Redis 7 (job queue)        | 6379 |
 
-</details>
-
 <details>
 <summary><strong>Boot-time plugin dependencies</strong></summary>
 
