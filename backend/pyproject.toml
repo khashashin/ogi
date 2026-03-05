@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogi"
-version = "0.2.7"
+version = "0.2.8"
 description = "OpenGraph Intel — open source link analysis and OSINT framework"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
