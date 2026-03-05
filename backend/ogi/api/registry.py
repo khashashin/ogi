@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ogi.api.auth import get_current_user, require_admin_user
-from ogi.api.dependencies import get_registry_client, get_transform_installer
+from ogi.api.dependencies import (
+    get_plugin_engine,
+    get_registry_client,
+    get_transform_engine,
+    get_transform_installer,
+)
 from ogi.cli.registry import RegistryClient, RegistryTransform
 from ogi.cli.installer import TransformInstaller, InstallError
 from ogi.config import settings
@@ -25,6 +30,40 @@ class UpdateCheckItem(BaseModel):
     slug: str
     installed_version: str
     latest_version: str
+
+
+def _reload_plugin_runtime(name: str) -> int:
+    """Best-effort in-process plugin load so UI reflects install immediately."""
+    plugin_engine = get_plugin_engine()
+    transform_engine = get_transform_engine()
+
+    # Ensure plugin metadata exists in memory for newly installed plugins.
+    plugin = plugin_engine.get_plugin(name)
+    if plugin is None:
+        for discovered in plugin_engine.discover():
+            if discovered.name == name:
+                plugin_engine.plugins[name] = discovered
+                plugin = discovered
+                break
+
+    # Remove previously loaded transforms from this plugin.
+    old_names = plugin_engine._plugin_transforms.get(name, [])
+    for transform_name in old_names:
+        transform_engine._transforms.pop(transform_name, None)
+
+    # Load and register current transforms from disk.
+    transforms = plugin_engine.load_transforms(name)
+    new_names: list[str] = []
+    for transform in transforms:
+        transform_engine.register(transform)
+        new_names.append(transform.name)
+    plugin_engine._plugin_transforms[name] = new_names
+
+    if plugin is not None:
+        plugin.transform_count = len(transforms)
+        plugin.transform_names = new_names
+
+    return len(transforms)
 
 
 # -------------------------------------------------------------------
@@ -97,12 +136,22 @@ async def install_transform(
 
     meta = registry.get_transform(slug)
     version = meta.get("version", "") if meta else ""
+    loaded_count = 0
+    load_warning = ""
+    try:
+        loaded_count = _reload_plugin_runtime(slug)
+    except Exception:
+        load_warning = " Installed on disk; restart backend if it does not appear immediately."
 
     return InstallResult(
         slug=slug,
         version=version,
         files_installed=len(files),
-        message=f"'{slug}' v{version} installed successfully",
+        message=(
+            f"'{slug}' v{version} installed successfully"
+            f"{' and loaded' if loaded_count > 0 else ''}."
+            f"{load_warning}"
+        ),
     )
 
 
