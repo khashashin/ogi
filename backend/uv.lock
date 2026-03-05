@@ -830,7 +830,7 @@ wheels = [
 
 [[package]]
 name = "ogi"
-version = "0.2.6"
+version = "0.2.7"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
