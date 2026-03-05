@@ -14,6 +14,7 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
     activeTab,
     setActiveTab,
     installedPlugins,
+    canManage,
     error,
     clearError,
     fetchIndex,
@@ -90,6 +91,7 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
           {activeTab === "enabled" && (
             <InstalledTab
               plugins={installedPlugins}
+              canManage={canManage}
               onRefresh={fetchInstalledPlugins}
             />
           )}
