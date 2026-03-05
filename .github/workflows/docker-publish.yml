@@ -66,30 +66,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy-coolify:
-    name: Deploy to Coolify (release tags)
-    needs: publish
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    steps:
-      - name: Trigger Coolify deploy webhook
-        env:
-          WEBHOOK_URL: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
-          WEBHOOK_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "COOLIFY_DEPLOY_WEBHOOK is not set; skipping Coolify deploy."
-            exit 0
-          fi
-
-          if [ -n "$WEBHOOK_TOKEN" ]; then
-            curl --fail --silent --show-error \
-              -X POST \
-              -H "Authorization: Bearer $WEBHOOK_TOKEN" \
-              "$WEBHOOK_URL"
-          else
-            curl --fail --silent --show-error -X POST "$WEBHOOK_URL"
-          fi
-
-          echo "Coolify deploy triggered."
