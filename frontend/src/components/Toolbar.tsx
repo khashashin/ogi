@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network } from "lucide-react";
+import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -179,6 +179,13 @@ export function Toolbar() {
         title="Table view"
       >
         <Table size={14} />
+      </button>
+      <button
+        onClick={() => setCenterView("map")}
+        className={`p-1.5 rounded ${centerView === "map" ? "text-accent bg-surface-hover" : "text-text-muted hover:text-text hover:bg-surface-hover"}`}
+        title="Map view"
+      >
+        <MapIcon size={14} />
       </button>
 
       <div className="w-px h-4 bg-border" />
