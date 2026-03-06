@@ -1523,3 +1523,68 @@ async def test_locations_endpoint_aggregates_normalized_locations(client: AsyncC
     assert top["entity_count"] == 2
     assert top["lat"] == 40.7128
     assert top["lon"] == -74.006
+
+
+@pytest.mark.asyncio
+async def test_timeline_endpoint_returns_buckets(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "TimelineProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "timeline-1.example"},
+    )
+    await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "timeline-2.example"},
+    )
+    await client.post(
+        f"/api/v1/projects/{project_id}/audit-logs",
+        json={"action": "timeline.checked", "resource_type": "project", "details": {}},
+    )
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/timeline?interval=day")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["interval"] == "day"
+    assert data["total_events"] >= 3
+    assert len(data["buckets"]) >= 1
+    assert data["buckets"][0]["count"] >= 1
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/timeline?interval=minute")
+    assert resp.status_code == 200
+    minute_data = resp.json()
+    assert minute_data["interval"] == "minute"
+
+
+@pytest.mark.asyncio
+async def test_graph_window_filters_by_time_range(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "GraphWindowProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "window.example"},
+    )
+    assert resp.status_code == 201
+    entity_id = resp.json()["id"]
+
+    future_from = "2100-01-01T00:00:00Z"
+    future_to = "2100-01-02T00:00:00Z"
+    resp = await client.get(
+        f"/api/v1/projects/{project_id}/graph/window?from={future_from}&to={future_to}"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["entities"] == []
+    assert resp.json()["edges"] == []
+
+    past_from = "2000-01-01T00:00:00Z"
+    past_to = "2100-01-01T00:00:00Z"
+    resp = await client.get(
+        f"/api/v1/projects/{project_id}/graph/window?from={past_from}&to={past_to}"
+    )
+    assert resp.status_code == 200
+    values = {e["id"] for e in resp.json()["entities"]}
+    assert entity_id in values
