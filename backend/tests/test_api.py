@@ -1425,3 +1425,101 @@ async def test_error_envelope_for_500_internal_in_debug_mode(
     )
     body = assert_error_envelope(resp, 500, code="INTERNAL_SERVER_ERROR")
     assert body["error"].get("details", {}).get("type") == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_audit_log_create_and_list(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "AuditProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    payload = {
+        "action": "entity.redacted",
+        "resource_type": "entity",
+        "resource_id": "abc-123",
+        "details": {"reason": "sensitive"},
+    }
+    resp = await client.post(f"/api/v1/projects/{project_id}/audit-logs", json=payload)
+    assert resp.status_code == 201
+    created = resp.json()
+    assert created["action"] == "entity.redacted"
+    assert created["resource_type"] == "entity"
+    assert created["details"]["reason"] == "sensitive"
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/audit-logs")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert any(r["action"] == "entity.redacted" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_project_events_endpoint_returns_conventions_and_items(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "EventsProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={
+            "type": "Domain",
+            "value": "events.example",
+            "properties": {
+                "observed_at": "2026-03-01T12:00:00Z",
+                "valid_from": "2026-03-01T00:00:00Z",
+                "valid_to": "2026-04-01T00:00:00Z",
+                "lat": 47.3769,
+                "lon": 8.5417,
+                "location_label": "Zurich, CH",
+                "geo_confidence": 0.9,
+            },
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = await client.post(
+        f"/api/v1/projects/{project_id}/audit-logs",
+        json={"action": "timeline.reviewed", "resource_type": "project", "details": {}},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/events")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "conventions" in data
+    assert "observed_at" in data["conventions"]
+    assert isinstance(data["items"], list)
+    assert any(item["event_type"] == "entity_created" for item in data["items"])
+    assert any(item["event_type"] == "audit_log" for item in data["items"])
+
+
+@pytest.mark.asyncio
+async def test_locations_endpoint_aggregates_normalized_locations(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "LocationsProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    for value in ("asset-1.example", "asset-2.example"):
+        resp = await client.post(
+            f"/api/v1/projects/{project_id}/entities",
+            json={
+                "type": "Domain",
+                "value": value,
+                "properties": {
+                    "lat": 40.7128,
+                    "lon": -74.0060,
+                    "location_label": "New York, US",
+                    "geo_confidence": 0.8,
+                },
+            },
+        )
+        assert resp.status_code == 201
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/locations")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) >= 1
+    top = rows[0]
+    assert top["location_label"] == "New York, US"
+    assert top["entity_count"] == 2
+    assert top["lat"] == 40.7128
+    assert top["lon"] == -74.006
