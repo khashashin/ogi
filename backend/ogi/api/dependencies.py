@@ -22,6 +22,8 @@ from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.api_key_store import ApiKeyStore
 from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 from ogi.store.transform_settings_store import TransformSettingsStore
+from ogi.store.audit_log_store import AuditLogStore
+from ogi.store.project_event_store import ProjectEventStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -106,6 +108,18 @@ async def get_transform_settings_store(
     session: AsyncSession = Depends(get_session),
 ) -> TransformSettingsStore:
     return TransformSettingsStore(session)
+
+
+async def get_audit_log_store(
+    session: AsyncSession = Depends(get_session),
+) -> AuditLogStore:
+    return AuditLogStore(session)
+
+
+async def get_project_event_store(
+    session: AsyncSession = Depends(get_session),
+) -> ProjectEventStore:
+    return ProjectEventStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:
