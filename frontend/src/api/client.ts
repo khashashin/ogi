@@ -4,6 +4,7 @@ import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
 import type { RegistryIndex, RegistryTransform } from "../types/registry";
+import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -326,6 +327,15 @@ export const api = {
       request<void>(`/projects/${projectId}/members/${userId}`, {
         method: "DELETE",
       }),
+  },
+
+  eventing: {
+    events: (projectId: string) =>
+      request<ProjectEventsResponse>(`/projects/${projectId}/events`),
+    locations: (projectId: string) =>
+      request<LocationAggregate[]>(`/projects/${projectId}/locations`),
+    auditLogs: (projectId: string) =>
+      request<AuditLogEntry[]>(`/projects/${projectId}/audit-logs`),
   },
 
   discover: {
