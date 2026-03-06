@@ -78,6 +78,7 @@ async def get_index(
     """Return the full cached registry index."""
     registry = get_registry_client()
     index = await registry.fetch_index()
+    index = await registry.apply_dynamic_popularity(index)
     can_manage = (
         (not settings.supabase_url or not settings.supabase_anon_key)
         or current_user.email.lower() in settings.admin_emails
@@ -96,8 +97,23 @@ async def search_transforms(
 ) -> list[RegistryTransform]:
     """Search transforms in the registry."""
     registry = get_registry_client()
-    await registry.fetch_index()
-    return registry.search(q, category=category, tier=tier)
+    index = await registry.fetch_index()
+    index = await registry.apply_dynamic_popularity(index)
+    return registry.search_in_index(index, q, category=category, tier=tier)
+
+
+@router.get("/popularity")
+async def get_popularity(
+    force: bool = Query(False, description="Force refresh of dynamic popularity cache"),
+    current_user: UserProfile = Depends(get_current_user),
+) -> dict[str, dict[str, object]]:
+    """Return dynamic per-transform popularity map keyed by transform slug."""
+    registry = get_registry_client()
+    index = await registry.fetch_index()
+    transforms = index.get("transforms", [])
+    slugs = {t.get("slug", "") for t in transforms if t.get("slug")}
+    popularity = await registry.get_dynamic_popularity(slugs, force=force)
+    return {slug: dict(values) for slug, values in popularity.items()}
 
 
 # -------------------------------------------------------------------
