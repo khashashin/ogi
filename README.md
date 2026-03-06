@@ -14,7 +14,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.134-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-![Version](https://img.shields.io/badge/version-0.2.6-green)
+![Version](https://img.shields.io/github/v/release/khashashin/ogi?display_name=tag&color=green)
 
 [Features](#features) &bull; [Screenshots](#screenshots) &bull; [Quick Start](#quick-start) &bull; [Docker](#docker) &bull; [Transform Hub](#transform-hub) &bull; [Architecture](#architecture) &bull; [Contributing](#contributing)
 
