@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+
+  <!-- Globe -->
+  <g stroke="black" stroke-width="28" fill="none" stroke-linecap="round">
+
+    <!-- Outer Circle -->
+    <circle cx="256" cy="256" r="240"/>
+
+    <!-- Vertical Meridian -->
+    <line x1="256" y1="20" x2="256" y2="180"
+        stroke="black"
+        stroke-width="28"
+        stroke-linecap="round"/>
+
+    <!-- Vertical Meridian -->
+    <line x1="256" y1="480" x2="256" y2="360"
+        stroke="black"
+        stroke-width="28"
+        stroke-linecap="round"/>
+
+    <!-- Horizontal Bands -->
+    <line x1="40" y1="188" x2="472" y2="188"/>
+    <line x1="40" y1="338" x2="472" y2="338"/>
+
+    <!-- Upper Arc -->
+    <path d="M120 60 Q256 310 392 60"/>
+
+    <!-- Lower Arc -->
+    <path d="M120 452 Q256 228 392 452"/>
+
+  </g>
+
+  <!-- DNS Text (drawn last so it stays on top) -->
+  <text x="256"
+        y="320"
+        text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-weight="700"
+        font-size="160"
+        fill="black">
+    DNS
+  </text>
+
+</svg>
