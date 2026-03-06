@@ -26,6 +26,7 @@ from ogi.store.audit_log_store import AuditLogStore
 from ogi.store.project_event_store import ProjectEventStore
 from ogi.store.timeline_store import TimelineStore
 from ogi.store.map_store import MapStore
+from ogi.store.location_search_store import LocationSearchStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -134,6 +135,12 @@ async def get_map_store(
     session: AsyncSession = Depends(get_session),
 ) -> MapStore:
     return MapStore(session)
+
+
+async def get_location_search_store(
+    session: AsyncSession = Depends(get_session),
+) -> LocationSearchStore:
+    return LocationSearchStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

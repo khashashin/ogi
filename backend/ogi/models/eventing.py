@@ -150,3 +150,19 @@ class MapRoute(SQLModel):
 
 class MapRoutesResponse(SQLModel):
     routes: list[MapRoute] = Field(default_factory=list)
+
+
+class LocationSuggestion(SQLModel):
+    label: str
+    display_name: str
+    lat: float
+    lon: float
+    source: str = "cache"
+
+
+class LocationSuggestResponse(SQLModel):
+    query: str
+    suggestions: list[LocationSuggestion] = Field(default_factory=list)
+    source: str = "cache"
+    rate_limited: bool = False
+    retry_after_seconds: int | None = None
