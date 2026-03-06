@@ -26,7 +26,7 @@ export const DEFAULT_FILTER_STATE: GraphFilterState = {
   hideFiltered: true,
 };
 
-type CenterView = "graph" | "table";
+type CenterView = "graph" | "table" | "map";
 
 interface NodePositions {
   [nodeId: string]: { x: number; y: number };
