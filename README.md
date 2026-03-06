@@ -5,7 +5,7 @@
 # OpenGraph Intel (OGI)
 
 **Open-source visual link analysis and OSINT framework.**
-**Think Maltego, but free and community-driven.**
+**Free, self-hostable, and community-driven.**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![CI](https://github.com/khashashin/ogi/actions/workflows/ci.yml/badge.svg)](https://github.com/khashashin/ogi/actions/workflows/ci.yml)
@@ -29,7 +29,7 @@
 - **Visual graph investigation** — drag-and-drop entities, explore connections interactively
 - **20+ built-in transforms** — DNS, WHOIS, SSL certs, geolocation, web/email/hash/social enrichment, and more
 - **Transform Hub** — browse and install community transforms from the [registry](https://github.com/opengraphintel/ogi-transforms)
-- **Import / Export** — JSON, CSV, GraphML, and Maltego MTGX import
+- **Import / Export** — JSON, CSV, GraphML, and MTGX format import
 - **Graph analysis** — centrality, community detection, shortest paths
 - **Real-time collaboration** — projects, sharing, and live sync via Supabase Realtime
 - **Async transform jobs** — Redis/RQ queue with WebSocket progress updates
@@ -335,6 +335,17 @@ For new transforms, contribute to [ogi-transforms](https://github.com/opengraphi
 3. Make your changes
 4. Run tests and linting
 5. Submit a pull request
+
+## Legal & Responsible Use
+
+OGI is a general-purpose OSINT and graph analysis tool. **You are solely responsible for how you use it.** See [LEGAL.md](LEGAL.md) for the full legal notice.
+
+- **Comply with third-party Terms of Service.** Transforms that query external services (DNS, WHOIS, web scraping, username lookups, etc.) must be used in accordance with the ToS of those services. Automated or bulk querying of sites that prohibit it may violate their terms.
+- **Respect data protection law.** If you are in the EU or processing data about EU residents, GDPR applies to you as the data controller. Collecting, storing, or processing personal data (names, email addresses, IP addresses, etc.) requires a lawful basis. OGI itself does not store data beyond your local instance — you are responsible for what you collect and retain.
+- **Use for lawful purposes only.** OGI is intended for legitimate security research, investigations, threat intelligence, and educational use. Do not use it to harass individuals, conduct unauthorized access, or violate applicable law.
+- **File format compatibility.** OGI supports import of the MTGX graph exchange format. This is provided purely for data interoperability and does not imply any affiliation with or endorsement by the makers of tools that use this format.
+
+> **Disclaimer:** OGI is provided "as is" without warranty of any kind. The authors are not liable for any misuse or damages arising from use of this software.
 
 ## License
 
