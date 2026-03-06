@@ -156,6 +156,7 @@ interface GraphState {
   analysisResults: AnalysisResults | null;
 
   loadGraph: (projectId: string) => Promise<void>;
+  loadGraphWindow: (projectId: string, fromTs?: string, toTs?: string) => Promise<void>;
   addEntity: (projectId: string, entity: Entity) => void;
   removeEntity: (projectId: string, entityId: string) => Promise<void>;
   addEdge: (projectId: string, edge: Edge) => void;
@@ -198,7 +199,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   loadGraph: async (projectId) => {
     set({ loading: true, error: null });
     try {
-      const data = await api.graph.get(projectId);
+      const data = await api.graph.get(projectId, true);
       const graph = createGraph();
       const entities = new Map<string, Entity>();
       const edges = new Map<string, Edge>();
@@ -244,6 +245,59 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selectedEdgeId: null,
         nodeOverlay: null,
         analysisResults: null,
+      });
+    } catch (e) {
+      set({ error: String(e), loading: false });
+    }
+  },
+
+  loadGraphWindow: async (projectId, fromTs, toTs) => {
+    set({ loading: true, error: null });
+    try {
+      const data = await api.graph.window(projectId, fromTs, toTs);
+      const graph = createGraph();
+      const entities = new Map<string, Entity>();
+      const edges = new Map<string, Edge>();
+      const savedPositions = loadPositions(projectId);
+      const filterState = get().filterState;
+
+      for (const entity of data.entities) {
+        const meta = ENTITY_TYPE_META[entity.type];
+        const pos = savedPositions[entity.id];
+        graph.addNode(entity.id, {
+          label: entity.value,
+          x: pos?.x ?? Math.random() * 800,
+          y: pos?.y ?? Math.random() * 600,
+          size: 8 + entity.weight * 2,
+          color: meta?.color ?? "#6366f1",
+          type: "circle",
+          entityType: entity.type,
+        });
+        entities.set(entity.id, entity);
+      }
+
+      for (const edge of data.edges) {
+        if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
+          graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
+            label: edge.label,
+            size: 3,
+            color: "#4b5563",
+          });
+          edges.set(edge.id, edge);
+        }
+      }
+
+      const hiddenNodeIds = computeHiddenNodeIds(entities, filterState);
+      set({
+        graph,
+        entities,
+        edges,
+        hiddenNodeIds,
+        currentProjectId: projectId,
+        loading: false,
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        nodeOverlay: null,
       });
     } catch (e) {
       set({ error: String(e), loading: false });
