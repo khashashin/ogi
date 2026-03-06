@@ -88,9 +88,9 @@ export function TransformPanel() {
                 className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
               >
                 {running === t.name ? (
-                  <Loader2 size={12} className="animate-spin text-accent" />
+                  <Loader2 size={12} className="animate-spin text-accent shrink-0" />
                 ) : (
-                  <Play size={12} className="text-accent" />
+                  <Play size={12} className="text-accent shrink-0" />
                 )}
                 <div className="text-left">
                   <p className="font-medium">{t.display_name}</p>
