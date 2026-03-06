@@ -10,17 +10,18 @@ import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
 import { FilterPanel } from "./FilterPanel";
 import { TableView } from "./TableView";
+import { EventingPanel } from "./EventingPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { useGraphStore } from "../stores/graphStore";
 
-type BottomTab = "transforms" | "analysis";
+type BottomTab = "transforms" | "analysis" | "events";
 
 export function Layout() {
   useKeyboardShortcuts();
   const isViewer = useIsViewer();
   const { centerView, nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
-  const [bottomTab, setBottomTab] = useState<BottomTab>("transforms");
+  const [bottomTab, setBottomTab] = useState<BottomTab>(isViewer ? "events" : "transforms");
 
   const hasAnalysisOverlay = nodeOverlay?.type.startsWith("analysis");
 
@@ -52,15 +53,16 @@ export function Layout() {
               </div>
             </Panel>
 
-            {!isViewer && (
-              <>
-                <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
+            <>
+              <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
 
-                <Panel defaultSize={30} minSize={15}>
-                  <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
-                    {/* Bottom panel tabs */}
-                    <div className="flex items-center justify-between border-b border-border pr-2">
-                      <div className="flex">
+              <Panel defaultSize={30} minSize={15}>
+                <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
+                  {/* Bottom panel tabs */}
+                  <div className="flex items-center justify-between border-b border-border pr-2">
+                    <div className="flex">
+                      {!isViewer && (
+                        <>
                         <button
                           onClick={() => setBottomTab("transforms")}
                           className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -81,8 +83,20 @@ export function Layout() {
                         >
                           Analysis
                         </button>
-                      </div>
-                      {hasAnalysisOverlay && (
+                        </>
+                      )}
+                        <button
+                          onClick={() => setBottomTab("events")}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            bottomTab === "events"
+                              ? "text-text border-b-2 border-accent"
+                              : "text-text-muted hover:text-text"
+                          }`}
+                        >
+                          Events
+                        </button>
+                    </div>
+                    {hasAnalysisOverlay && !isViewer && (
                         <button
                           onClick={() => {
                             setNodeOverlay(null);
@@ -92,15 +106,16 @@ export function Layout() {
                         >
                           Reset View
                         </button>
-                      )}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      {bottomTab === "transforms" ? <TransformPanel /> : <AnalysisPanel />}
-                    </div>
+                    )}
                   </div>
-                </Panel>
-              </>
-            )}
+                  <div className="flex-1 overflow-hidden">
+                    {bottomTab === "transforms" && !isViewer && <TransformPanel />}
+                    {bottomTab === "analysis" && !isViewer && <AnalysisPanel />}
+                    {bottomTab === "events" && <EventingPanel />}
+                  </div>
+                </div>
+              </Panel>
+            </>
           </Group>
         </Panel>
 
