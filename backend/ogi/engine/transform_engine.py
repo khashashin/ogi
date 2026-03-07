@@ -11,6 +11,17 @@ from ogi.models import (
 from ogi.transforms.base import BaseTransform, TransformConfig
 
 
+def _api_key_services(transform: BaseTransform) -> list[str]:
+    services: list[str] = []
+    for setting in getattr(transform, "settings", []):
+        name = getattr(setting, "name", "")
+        if isinstance(name, str) and name.endswith("_api_key"):
+            service = name.removesuffix("_api_key").strip()
+            if service:
+                services.append(service)
+    return services
+
+
 class TransformEngine:
     def __init__(self) -> None:
         self._transforms: dict[str, BaseTransform] = {}
@@ -31,6 +42,7 @@ class TransformEngine:
                 input_types=t.input_types,
                 output_types=t.output_types,
                 category=t.category,
+                api_key_services=_api_key_services(t),
                 settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
             )
             for t in self._transforms.values()
@@ -45,6 +57,7 @@ class TransformEngine:
                 input_types=t.input_types,
                 output_types=t.output_types,
                 category=t.category,
+                api_key_services=_api_key_services(t),
                 settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
             )
             for t in self._transforms.values()
@@ -121,6 +134,7 @@ class TransformEngine:
         from ogi.transforms.org.organization_to_team_members import OrganizationToTeamMembers
         from ogi.transforms.location.location_to_geocode import LocationToGeocode
         from ogi.transforms.location.location_to_timezone import LocationToTimezone
+        from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 
         for cls in [
             DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
@@ -132,5 +146,6 @@ class TransformEngine:
             OrganizationToTeamMembers,
             LocationToGeocode,
             LocationToTimezone,
+            LocationToWeatherSnapshot,
         ]:
             self.register(cls())

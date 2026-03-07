@@ -59,4 +59,5 @@ class TransformInfo(SQLModel):
     input_types: list[EntityType]
     output_types: list[EntityType]
     category: str
+    api_key_services: list[str] = Field(default_factory=list)
     settings: list[dict[str, object]] = Field(default_factory=list)

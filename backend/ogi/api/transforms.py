@@ -54,6 +54,32 @@ class TransformSettingsResponse(BaseModel):
     can_manage_global: bool
 
 
+def _managed_api_key_names(transform: object) -> set[str]:
+    return {
+        s.name
+        for s in getattr(transform, "settings", [])
+        if isinstance(s, TransformSetting) and s.name.endswith("_api_key")
+    }
+
+
+def _strip_managed_api_key_settings(transform: object, values: dict[str, str]) -> dict[str, str]:
+    blocked = _managed_api_key_names(transform)
+    return {key: value for key, value in values.items() if key not in blocked}
+
+
+def _reject_managed_api_key_settings(transform: object, values: dict[str, str]) -> None:
+    blocked = _managed_api_key_names(transform)
+    attempted = sorted(key for key in values if key in blocked)
+    if attempted:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"API key settings must be configured in API Keys, not transform settings: "
+                f"{', '.join(attempted)}"
+            ),
+        )
+
+
 def _transform_visible_to_user(
     transform_name: str,
     plugin_enabled_map: dict[str, bool],
@@ -143,8 +169,8 @@ async def _resolve_settings(
     store: TransformSettingsStore,
 ) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
     defaults = _base_default_settings(transform)
-    global_settings = await store.get_global(transform_name)
-    user_settings = await store.get_user(current_user.id, transform_name)
+    global_settings = _strip_managed_api_key_settings(transform, await store.get_global(transform_name))
+    user_settings = _strip_managed_api_key_settings(transform, await store.get_user(current_user.id, transform_name))
     resolved = {**defaults, **global_settings, **user_settings}
     return defaults, global_settings, user_settings, _sanitize_settings(transform, resolved)
 
@@ -201,6 +227,7 @@ async def save_user_transform_settings(
     if transform is None:
         raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
     sanitized = _sanitize_settings(transform, data.settings)
+    _reject_managed_api_key_settings(transform, sanitized)
     await store.set_user(current_user.id, name, sanitized)
     defaults, global_settings, user_settings, resolved = await _resolve_settings(
         transform, name, current_user, store
@@ -231,6 +258,7 @@ async def save_global_transform_settings(
     if transform is None:
         raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
     sanitized = _sanitize_settings(transform, data.settings)
+    _reject_managed_api_key_settings(transform, sanitized)
     await store.set_global(name, sanitized)
     defaults, global_settings, user_settings, resolved = await _resolve_settings(
         transform, name, current_user, store
