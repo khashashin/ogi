@@ -905,7 +905,7 @@ wheels = [
 
 [[package]]
 name = "ogi"
-version = "0.3.5"
+version = "0.3.6"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
