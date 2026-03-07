@@ -17,6 +17,8 @@ services:
       - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
+      - OGI_RUN_DB_MIGRATIONS=true
+      - OGI_AUTO_RUN_MIGRATIONS=false
     healthcheck:
       test:
         [
@@ -35,6 +37,8 @@ services:
     command: ["python", "-m", "ogi.worker.run_worker"]
     env_file: .env
     depends_on:
+      backend:
+        condition: service_healthy
       db:
         condition: service_healthy
       redis:
@@ -46,6 +50,8 @@ services:
       - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
+      - OGI_RUN_DB_MIGRATIONS=false
+      - OGI_AUTO_RUN_MIGRATIONS=false
 
   frontend:
     build:
