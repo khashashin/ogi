@@ -11,6 +11,12 @@ import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 import { TransformSettingsDialog } from "./TransformSettingsDialog";
 
+function hasVisibleSettings(transform: TransformInfo): boolean {
+  return transform.settings.some(
+    (setting) => !(setting.field_type === "secret" && setting.name.endsWith("_api_key"))
+  );
+}
+
 export function TransformPanel() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
   const [lastRun, setLastRun] = useState<TransformRun | null>(null);
@@ -165,10 +171,15 @@ export function TransformPanel() {
                     <div className="text-left">
                       <p className="font-medium">{t.display_name}</p>
                       <p className="text-[10px] text-text-muted">{t.description}</p>
+                      {t.api_key_services.length > 0 && (
+                        <p className="text-[10px] text-warning">
+                          Requires API key: {t.api_key_services.join(", ")}
+                        </p>
+                      )}
                     </div>
                   </button>
                   <div className="px-2 pb-2">
-                    {t.settings && t.settings.length > 0 && (
+                    {hasVisibleSettings(t) && (
                       <button
                         onClick={() => setSettingsTransform(t)}
                         className="text-[10px] text-text-muted hover:text-text flex items-center gap-1"

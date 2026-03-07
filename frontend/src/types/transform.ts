@@ -8,6 +8,7 @@ export interface TransformInfo {
   input_types: EntityType[];
   output_types: EntityType[];
   category: string;
+  api_key_services: string[];
   settings: TransformSettingSchema[];
 }
 

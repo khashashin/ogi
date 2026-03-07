@@ -534,6 +534,11 @@ export function EntityInspector() {
                 <div className="text-left">
                   <p>{t.display_name}</p>
                   <p className="text-[10px] text-text-muted">{t.description}</p>
+                  {t.api_key_services.length > 0 && (
+                    <p className="text-[10px] text-warning">
+                      Requires API key: {t.api_key_services.join(", ")}
+                    </p>
+                  )}
                 </div>
               </button>
             ))}
@@ -543,7 +548,8 @@ export function EntityInspector() {
 
       <div className="p-3 mt-auto border-t border-border">
         <div className="space-y-1 text-[10px] text-text-muted">
-          <p>Source: {entity.source}</p>
+          <p>Origin: {entity.origin_source}</p>
+          <p>{formatEntitySourceLabel(entity.source)}: {entity.source}</p>
           <p>Weight: {entity.weight}</p>
           <div className="flex items-center gap-1 group">
             <span>ID: {entity.id.slice(0, 8)}...</span>
@@ -564,4 +570,11 @@ export function EntityInspector() {
       </div>
     </div>
   );
+}
+
+function formatEntitySourceLabel(source: string): string {
+  if (source.startsWith("import")) {
+    return "Imported via";
+  }
+  return "Last updated by";
 }
