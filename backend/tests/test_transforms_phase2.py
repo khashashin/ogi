@@ -124,6 +124,7 @@ async def test_url_to_headers_with_mocked_http(monkeypatch: pytest.MonkeyPatch):
     entity = Entity(type=EntityType.URL, value="https://example.com")
 
     def fake_client(*args, **kwargs):
+        assert "verify" not in kwargs
         return _FakeHTTPClient(
             head_response=_FakeResponse(
                 status_code=200,
@@ -154,6 +155,7 @@ async def test_url_to_links_extracts_outbound_links(monkeypatch: pytest.MonkeyPa
     """
 
     def fake_client(*args, **kwargs):
+        assert "verify" not in kwargs
         return _FakeHTTPClient(
             get_response=_FakeResponse(text=html, url="https://source.test/base")
         )
@@ -176,6 +178,7 @@ async def test_domain_to_urls_with_mocked_robots(monkeypatch: pytest.MonkeyPatch
     robots = "Sitemap: https://example.com/sitemap.xml\nDisallow: /admin\n"
 
     def fake_client(*args, **kwargs):
+        assert "verify" not in kwargs
         return _FakeHTTPClient(get_response=_FakeResponse(status_code=200, text=robots))
 
     monkeypatch.setattr("ogi.transforms.web.domain_to_urls.httpx.AsyncClient", fake_client)
