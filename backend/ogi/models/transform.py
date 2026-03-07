@@ -60,4 +60,8 @@ class TransformInfo(SQLModel):
     output_types: list[EntityType]
     category: str
     api_key_services: list[str] = Field(default_factory=list)
+    plugin_name: str | None = None
+    plugin_verification_tier: str | None = None
+    plugin_permissions: dict[str, bool] = Field(default_factory=dict)
+    plugin_source: str | None = None
     settings: list[dict[str, object]] = Field(default_factory=list)
