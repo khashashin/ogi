@@ -1,6 +1,13 @@
+import asyncio
+import json
 import os
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
+
 import pytest
+from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
+from starlette.websockets import WebSocketDisconnect
 
 # Use in-memory SQLite DB for tests and disable Supabase auth
 os.environ["OGI_DB_PATH"] = ":memory:"
@@ -39,6 +46,12 @@ async def client():
         # Trigger lifespan startup manually
         async with app.router.lifespan_context(app):
             yield c
+
+
+@pytest.fixture
+def sync_client():
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.mark.asyncio
@@ -1179,6 +1192,213 @@ async def test_cancel_transform_run_forbidden_for_non_member(
         app.dependency_overrides.clear()
 
 
+def test_ws_transforms_rejects_unauthorized_client(
+    sync_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from ogi.api import websocket as websocket_api
+
+    async def deny_user(_token: str | None):
+        return None
+
+    monkeypatch.setattr(websocket_api, "_resolve_ws_user", deny_user)
+
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with sync_client.websocket_connect(f"/api/v1/ws/transforms/{uuid4()}"):
+            pass
+
+    assert exc.value.code == 4001
+
+
+def test_ws_transforms_rejects_forbidden_project_member(
+    sync_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from ogi.api import websocket as websocket_api
+    from ogi.models import UserProfile
+
+    project = sync_client.post("/api/v1/projects", json={"name": "WS Private"}).json()
+    outsider = UserProfile(id=uuid4(), email="ws-outsider@test.com")
+
+    async def resolve_user(_token: str | None):
+        return outsider
+
+    monkeypatch.setattr(websocket_api, "_resolve_ws_user", resolve_user)
+
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with sync_client.websocket_connect(f"/api/v1/ws/transforms/{project['id']}?token=test-token"):
+            pass
+
+    assert exc.value.code == 4003
+
+
+def test_ws_transforms_fans_out_per_project_and_isolates_other_projects(
+    sync_client: TestClient,
+):
+    from ogi.api import websocket as websocket_api
+
+    project_a = sync_client.post("/api/v1/projects", json={"name": "WS A"}).json()
+    project_b = sync_client.post("/api/v1/projects", json={"name": "WS B"}).json()
+
+    event_a = {
+        "type": "job_started",
+        "job_id": str(uuid4()),
+        "project_id": project_a["id"],
+        "transform_name": "domain_to_ip",
+        "input_entity_id": str(uuid4()),
+        "progress": None,
+        "message": None,
+        "result": None,
+        "error": None,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    event_b = {
+        **event_a,
+        "job_id": str(uuid4()),
+        "project_id": project_b["id"],
+    }
+
+    with sync_client.websocket_connect(f"/api/v1/ws/transforms/{project_a['id']}") as ws_a1:
+        with sync_client.websocket_connect(f"/api/v1/ws/transforms/{project_a['id']}") as ws_a2:
+            with sync_client.websocket_connect(f"/api/v1/ws/transforms/{project_b['id']}") as ws_b:
+                asyncio.run(
+                    websocket_api.ws_manager.broadcast_to_project(
+                        UUID(project_a["id"]),
+                        json.dumps(event_a),
+                    )
+                )
+                asyncio.run(
+                    websocket_api.ws_manager.broadcast_to_project(
+                        UUID(project_b["id"]),
+                        json.dumps(event_b),
+                    )
+                )
+
+                assert ws_a1.receive_json() == event_a
+                assert ws_a2.receive_json() == event_a
+                assert ws_b.receive_json() == event_b
+
+
+@pytest.mark.asyncio
+async def test_redis_pubsub_listener_bridges_project_messages(monkeypatch: pytest.MonkeyPatch):
+    from ogi.api import websocket as websocket_api
+
+    project_id = uuid4()
+    payload = {
+        "type": "job_completed",
+        "job_id": str(uuid4()),
+        "project_id": str(project_id),
+        "transform_name": "domain_to_ip",
+        "input_entity_id": str(uuid4()),
+        "progress": None,
+        "message": None,
+        "result": {"entities": [], "edges": [], "messages": [], "ui_messages": []},
+        "error": None,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    captured: list[tuple[UUID, str]] = []
+
+    class FakePubSub:
+        def __init__(self) -> None:
+            self.subscribed: list[str] = []
+            self.unsubscribed: list[str] = []
+
+        async def psubscribe(self, pattern: str) -> None:
+            self.subscribed.append(pattern)
+
+        async def listen(self):
+            yield {
+                "type": "pmessage",
+                "channel": f"ogi:transform_events:{project_id}",
+                "data": json.dumps(payload),
+            }
+
+        async def punsubscribe(self, pattern: str) -> None:
+            self.unsubscribed.append(pattern)
+
+    class FakeRedisConn:
+        def __init__(self) -> None:
+            self.pubsub_instance = FakePubSub()
+            self.closed = False
+
+        def pubsub(self) -> FakePubSub:
+            return self.pubsub_instance
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    fake_conn = FakeRedisConn()
+
+    async def fake_broadcast(pid: UUID, message: str) -> None:
+        captured.append((pid, message))
+
+    monkeypatch.setattr(websocket_api.ws_manager, "broadcast_to_project", fake_broadcast)
+    monkeypatch.setattr("redis.asyncio.from_url", lambda *args, **kwargs: fake_conn)
+
+    await websocket_api.redis_pubsub_listener()
+
+    assert fake_conn.pubsub_instance.subscribed == ["ogi:transform_events:*"]
+    assert fake_conn.pubsub_instance.unsubscribed == ["ogi:transform_events:*"]
+    assert fake_conn.closed is True
+    assert captured == [(project_id, json.dumps(payload))]
+
+
+def test_ws_cancel_is_idempotent(
+    sync_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from ogi.api import dependencies
+    from ogi.api import transforms as transforms_api
+    from rq.job import Job
+
+    class DummyQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.published: list[tuple[str, str]] = []
+
+        def publish(self, channel: str, message: str) -> None:
+            self.published.append((channel, message))
+
+    class FakeJob:
+        def __init__(self) -> None:
+            self.cancel_calls = 0
+
+        def cancel(self) -> None:
+            self.cancel_calls += 1
+
+    fake_redis = FakeRedis()
+    fake_job = FakeJob()
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: DummyQueue())
+    monkeypatch.setattr(transforms_api, "get_redis", lambda: None)
+    monkeypatch.setattr(dependencies, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(Job, "fetch", classmethod(lambda cls, job_id, connection: fake_job))
+
+    project = sync_client.post("/api/v1/projects", json={"name": "WS Cancel"}).json()
+    entity = sync_client.post(
+        f"/api/v1/projects/{project['id']}/entities",
+        json={"type": "Domain", "value": "cancel.test"},
+    ).json()
+    run = sync_client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": entity["id"], "project_id": project["id"], "config": {"settings": {}}},
+    ).json()
+
+    with sync_client.websocket_connect(f"/api/v1/ws/transforms/{project['id']}") as ws:
+        ws.send_json({"type": "cancel", "job_id": run["id"]})
+        ws.send_json({"type": "cancel", "job_id": run["id"]})
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+    assert fake_job.cancel_calls == 1
+    assert len(fake_redis.published) == 1
+    channel, message = fake_redis.published[0]
+    assert channel == f"ogi:transform_events:{project['id']}"
+    assert json.loads(message)["type"] == "job_cancelled"
+
 # ---------------------------------------------------------------------------
 # Entity edge cases
 # ---------------------------------------------------------------------------
@@ -1346,6 +1566,29 @@ async def test_import_graphml(client: AsyncClient):
     values = {e["value"] for e in resp.json()}
     assert "graphml.test" in values
     assert "1.1.1.1" in values
+
+
+@pytest.mark.asyncio
+async def test_import_graphml_rejects_unsafe_xml(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "ImportGraphMLUnsafe"})
+    pid = resp.json()["id"]
+
+    payload = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE graphml [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <graph id="G" edgedefault="directed">
+    <node id="n1"><data key="value">&xxe;</data></node>
+  </graph>
+</graphml>
+"""
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/import/graphml",
+        files={"file": ("unsafe.graphml", payload.encode("utf-8"), "application/xml")},
+    )
+    assert resp.status_code == 400
+    assert "Invalid GraphML" in resp.json()["error"]["message"]
 
 
 @pytest.mark.asyncio
