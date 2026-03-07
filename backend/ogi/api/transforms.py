@@ -69,6 +69,10 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
         # Map transform-generated IDs to actual persisted IDs (may differ if deduplicated)
         id_map: dict[UUID, UUID] = {}
 
+        # Ensure the input entity is in the graph engine so edges can reference it
+        if not graph.get_entity(entity.id):
+            graph.add_entity(entity)
+
         for new_entity in run.result.entities:
             saved = await es.save(request.project_id, new_entity)
             id_map[new_entity.id] = saved.id
