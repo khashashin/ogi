@@ -3,7 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
-import type { RegistryIndex, RegistryTransform } from "../types/registry";
+import type { RegistryIndex, RegistryTransform, PluginInfo } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import type { TimelineResponse } from "../types/timeline";
 import type { MapPointsResponse, MapRoutesResponse } from "../types/map";
@@ -67,17 +67,6 @@ interface ProjectMemberCreate {
 
 interface ProjectMemberUpdate {
   role: string;
-}
-
-interface PluginInfo {
-  name: string;
-  version: string;
-  display_name: string;
-  description: string;
-  author: string;
-  enabled: boolean;
-  transform_count: number;
-  transform_names: string[];
 }
 
 interface InstallResult {

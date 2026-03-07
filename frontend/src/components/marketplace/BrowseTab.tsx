@@ -5,6 +5,7 @@ import { TransformDetail } from "./TransformDetail";
 import { CategoryFilter } from "./CategoryFilter";
 import { useRegistryStore } from "../../stores/registryStore";
 import type { RegistryTransform } from "../../types/registry";
+import { buildInstallRiskWarning } from "../../lib/pluginRisk";
 
 export function BrowseTab() {
   const {
@@ -44,6 +45,14 @@ export function BrowseTab() {
 
   const pluginBySlug = new Map(installedPlugins.map((plugin) => [plugin.name, plugin]));
 
+  const handleInstall = (transform: RegistryTransform) => {
+    const warning = buildInstallRiskWarning(transform);
+    if (warning && !window.confirm(warning)) {
+      return;
+    }
+    installTransform(transform);
+  };
+
   if (selectedTransform) {
     const installedPlugin = pluginBySlug.get(selectedTransform.slug);
     return (
@@ -55,7 +64,7 @@ export function BrowseTab() {
           canManage={canManage}
           installing={installing === selectedTransform.slug}
           toggling={toggling === selectedTransform.slug}
-          onInstall={() => installTransform(selectedTransform.slug)}
+          onInstall={() => handleInstall(selectedTransform)}
           onEnable={() => enablePlugin(selectedTransform.slug)}
           onDisable={() => disablePlugin(selectedTransform.slug)}
           onBack={() => setSelectedTransform(null)}
@@ -114,7 +123,7 @@ export function BrowseTab() {
                 canManage={canManage}
                 installing={installing === t.slug}
                 toggling={toggling === t.slug}
-                onInstall={() => installTransform(t.slug)}
+                onInstall={() => handleInstall(t)}
                 onEnable={() => enablePlugin(t.slug)}
                 onDisable={() => disablePlugin(t.slug)}
                 onClick={() => setSelectedTransform(t)}

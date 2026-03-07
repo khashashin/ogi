@@ -1,9 +1,10 @@
-import { RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
 import { VerificationBadge } from "./VerificationBadge";
 import type { PluginInfo, VerificationTier } from "../../types/registry";
 import { api } from "../../api/client";
 import { useState } from "react";
 import { toast } from "sonner";
+import { hasNetworkAndSecretRisk } from "../../lib/pluginRisk";
 
 interface InstalledTabProps {
   plugins: PluginInfo[];
@@ -59,10 +60,7 @@ export function InstalledTab({ plugins, canManage, onRefresh }: InstalledTabProp
   return (
     <div className="space-y-2 p-1">
       {enabledPlugins.map((plugin) => (
-        <div
-          key={plugin.name}
-          className="p-3 rounded bg-bg border border-border"
-        >
+        <div key={plugin.name} className="p-3 rounded bg-bg border border-border">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -94,6 +92,32 @@ export function InstalledTab({ plugins, canManage, onRefresh }: InstalledTabProp
                   )}
                 </span>
               </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap text-[10px]">
+                <span className={plugin.permissions.network ? "text-green-400" : "text-text-muted"}>
+                  Network {plugin.permissions.network ? "on" : "off"}
+                </span>
+                <span className={plugin.permissions.filesystem ? "text-yellow-400" : "text-text-muted"}>
+                  Filesystem {plugin.permissions.filesystem ? "on" : "off"}
+                </span>
+                <span className={plugin.permissions.subprocess ? "text-red-400" : "text-text-muted"}>
+                  Subprocess {plugin.permissions.subprocess ? "on" : "off"}
+                </span>
+              </div>
+              {plugin.api_keys_required.length > 0 && (
+                <p className="flex items-center gap-1 mt-1 text-[10px] text-yellow-400">
+                  <Key size={10} />
+                  Requires API key: {plugin.api_keys_required.map((item) => item.service).join(", ")}
+                </p>
+              )}
+              {hasNetworkAndSecretRisk(
+                plugin.api_keys_required.map((item) => item.service),
+                plugin.permissions
+              ) && (
+                <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-300">
+                  <AlertTriangle size={10} />
+                  Privileged plugin: network access + API keys
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">

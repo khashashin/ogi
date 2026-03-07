@@ -1,7 +1,8 @@
-import { Key } from "lucide-react";
+import { AlertTriangle, Key, ShieldAlert } from "lucide-react";
 import { VerificationBadge } from "./VerificationBadge";
 import { InstallButton } from "./InstallButton";
 import type { RegistryTransform, VerificationTier } from "../../types/registry";
+import { hasNetworkAndSecretRisk, isUnverifiedTier } from "../../lib/pluginRisk";
 
 interface TransformCardProps {
   transform: RegistryTransform;
@@ -29,6 +30,12 @@ export function TransformCard({
   onClick,
 }: TransformCardProps) {
   const score = transform.popularity?.computed_score ?? 0;
+  const hasSecretNetworkRisk = hasNetworkAndSecretRisk(
+    transform.api_keys_required.map((item) => item.service),
+    transform.permissions
+  );
+  const isSecretUsingUnverified =
+    transform.api_keys_required.length > 0 && isUnverifiedTier(transform.verification_tier);
 
   return (
     <div
@@ -56,7 +63,30 @@ export function TransformCard({
           {transform.api_keys_required.length > 0 && (
             <div className="flex items-center gap-1 mt-1 text-[10px] text-yellow-400">
               <Key size={10} />
-              API key needed
+              Requires API key: {transform.api_keys_required.map((item) => item.service).join(", ")}
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-1 flex-wrap text-[10px]">
+            <span className={transform.permissions.network ? "text-green-400" : "text-text-muted"}>
+              Network {transform.permissions.network ? "on" : "off"}
+            </span>
+            <span className={transform.permissions.filesystem ? "text-yellow-400" : "text-text-muted"}>
+              Filesystem {transform.permissions.filesystem ? "on" : "off"}
+            </span>
+            <span className={transform.permissions.subprocess ? "text-red-400" : "text-text-muted"}>
+              Subprocess {transform.permissions.subprocess ? "on" : "off"}
+            </span>
+          </div>
+          {hasSecretNetworkRisk && (
+            <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-300">
+              <AlertTriangle size={10} />
+              Network + secrets: privileged plugin
+            </div>
+          )}
+          {isSecretUsingUnverified && (
+            <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-300">
+              <ShieldAlert size={10} />
+              Unverified plugin will access your API keys at runtime
             </div>
           )}
         </div>

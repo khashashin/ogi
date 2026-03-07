@@ -27,7 +27,7 @@ interface RegistryState {
   fetchIndex: () => Promise<void>;
   fetchInstalledPlugins: () => Promise<void>;
   searchTransforms: (query: string, category?: string, tier?: string) => Promise<void>;
-  installTransform: (slug: string) => Promise<void>;
+  installTransform: (transform: RegistryTransform) => Promise<void>;
   enablePlugin: (name: string) => Promise<void>;
   disablePlugin: (name: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
@@ -80,14 +80,14 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
-  installTransform: async (slug: string) => {
+  installTransform: async (transform: RegistryTransform) => {
     if (!get().canManage) {
       set({ error: "Only admins can install transforms." });
       return;
     }
-    set({ installing: slug, error: null });
+    set({ installing: transform.slug, error: null });
     try {
-      await api.registry.install(slug);
+      await api.registry.install(transform.slug);
       // Refresh installed list and search results
       await get().fetchInstalledPlugins();
       const { searchQuery, selectedCategory, selectedTier } = get();

@@ -7,6 +7,7 @@ import { ENTITY_TYPE_META } from "../types/entity";
 import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { useIsViewer } from "../hooks/useIsViewer";
+import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
 
 export function EntityInspector() {
   const {
@@ -117,6 +118,11 @@ export function EntityInspector() {
 
   const handleRunTransform = async (transformName: string) => {
     if (!currentProject || !entity) return;
+    const transform = transforms.find((item) => item.name === transformName);
+    const warning = transform ? buildRunRiskWarning(transform) : null;
+    if (warning && !window.confirm(warning)) {
+      return;
+    }
     setRunningTransform(transformName);
     try {
       const run = await api.transforms.run(transformName, entity.id, currentProject.id);
@@ -537,6 +543,16 @@ export function EntityInspector() {
                   {t.api_key_services.length > 0 && (
                     <p className="text-[10px] text-warning">
                       Requires API key: {t.api_key_services.join(", ")}
+                    </p>
+                  )}
+                  {t.plugin_name && (
+                    <p className="text-[10px] text-text-muted">
+                      Plugin: {t.plugin_name} ({t.plugin_verification_tier ?? "community"})
+                    </p>
+                  )}
+                  {t.plugin_name && isUnverifiedTier(t.plugin_verification_tier) && t.api_key_services.length > 0 && (
+                    <p className="text-[10px] text-amber-300">
+                      Unverified plugin will access your API keys at runtime
                     </p>
                   )}
                 </div>
