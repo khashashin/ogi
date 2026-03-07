@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ogi.config import settings
-from ogi.models import TransformInfo, TransformRun, TransformStatus, TransformJobMessage, UserProfile
+from ogi.models import AuditLogCreate, TransformInfo, TransformRun, TransformStatus, TransformJobMessage, UserProfile
 from ogi.transforms.base import TransformConfig, TransformSetting
 from ogi.api.auth import get_current_user, require_project_viewer, require_admin_user
 from ogi.api.dependencies import (
+    get_audit_log_store,
     get_transform_engine,
     get_entity_store,
     get_entity_registry,
@@ -26,6 +27,7 @@ from ogi.api.dependencies import (
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.transform_run_store import TransformRunStore
+from ogi.store.audit_log_store import AuditLogStore
 from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 from ogi.store.api_key_store import ApiKeyStore
 from ogi.store.transform_settings_store import TransformSettingsStore
@@ -107,6 +109,47 @@ def _enrich_transform_info(transform: TransformInfo) -> TransformInfo:
             "plugin_source": plugin.source or "local",
         }
     )
+
+
+def _service_allowed_for_api_key_injection(service_name: str) -> tuple[bool, str | None]:
+    allowlist = {item.strip().lower() for item in settings.api_key_service_allowlist if item.strip()}
+    blocklist = {item.strip().lower() for item in settings.api_key_service_blocklist if item.strip()}
+    normalized = service_name.strip().lower()
+
+    if normalized in blocklist:
+        return False, f"Stored API key injection is blocked for service '{service_name}'"
+    if allowlist and normalized not in allowlist:
+        return False, f"Stored API key injection is not allowed for service '{service_name}'"
+    return True, None
+
+
+def _plugin_allowed_for_api_key_injection(
+    plugin_name: str | None,
+    plugin_tier: str | None,
+) -> tuple[bool, str | None]:
+    if not plugin_name:
+        return True, None
+
+    tier = (plugin_tier or "community").strip().lower()
+    if not settings.api_key_injection_allow_community_plugins and tier == "community":
+        return False, (
+            f"Stored API key injection is disabled for community plugins "
+            f"('{plugin_name}')"
+        )
+
+    if settings.api_key_injection_trusted_tiers_only:
+        allowed_tiers = {
+            item.strip().lower()
+            for item in settings.api_key_injection_allowed_tiers
+            if item.strip()
+        }
+        if tier not in allowed_tiers:
+            return False, (
+                f"Stored API key injection is restricted to trusted plugin tiers "
+                f"({sorted(allowed_tiers)}); '{plugin_name}' is '{tier}'"
+            )
+
+    return True, None
 
 
 def _base_default_settings(transform: object) -> dict[str, str]:
@@ -331,6 +374,7 @@ async def run_transform(
     preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
     api_key_store: ApiKeyStore = Depends(get_api_key_store),
     settings_store: TransformSettingsStore = Depends(get_transform_settings_store),
+    audit_store: AuditLogStore = Depends(get_audit_log_store),
 ) -> TransformRun:
     role = await project_store.get_member_role(request.project_id, current_user.id)
     if role not in ("owner", "editor"):
@@ -363,6 +407,10 @@ async def run_transform(
         **_sanitize_settings(transform, request.config.settings),
     }
 
+    plugin = get_plugin_engine().get_plugin(plugin_name) if plugin_name else None
+    plugin_tier = plugin.verification_tier if plugin is not None else None
+    injected_services: list[str] = []
+
     # Auto-inject required API keys when a setting follows "<service>_api_key".
     for setting in getattr(transform, "settings", []):
         if not getattr(setting, "required", False):
@@ -373,9 +421,19 @@ async def run_transform(
         if setting_name.endswith("_api_key"):
             service_name = setting_name.removesuffix("_api_key")
             if service_name:
+                service_allowed, service_error = _service_allowed_for_api_key_injection(service_name)
+                if not service_allowed:
+                    raise HTTPException(status_code=403, detail=service_error)
+                plugin_allowed, plugin_error = _plugin_allowed_for_api_key_injection(
+                    plugin_name,
+                    plugin_tier,
+                )
+                if not plugin_allowed:
+                    raise HTTPException(status_code=403, detail=plugin_error)
                 stored = await api_key_store.get_key(current_user.id, service_name)
                 if stored:
                     merged_settings[setting_name] = stored
+                    injected_services.append(service_name)
         if getattr(setting, "required", False) and not merged_settings.get(setting_name):
             raise HTTPException(status_code=400, detail=f"Missing required setting '{setting_name}'")
 
@@ -389,6 +447,26 @@ async def run_transform(
         status=TransformStatus.PENDING,
     )
     await run_store.save(run)
+
+    for service_name in injected_services:
+        await audit_store.create(
+            request.project_id,
+            current_user.id,
+            AuditLogCreate(
+                action="transform.api_key_injected",
+                resource_type="transform",
+                resource_id=name,
+                details={
+                    "transform_name": name,
+                    "run_id": str(run.id),
+                    "input_entity_id": str(entity.id),
+                    "plugin_name": plugin_name,
+                    "plugin_verification_tier": plugin_tier,
+                    "service_name": service_name,
+                    "injection_source": "stored_api_key",
+                },
+            ),
+        )
 
     # Enqueue the job via RQ
     queue = get_rq_queue()
