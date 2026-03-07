@@ -4,7 +4,9 @@ import json
 import zipfile
 from typing import Any
 from uuid import UUID
-from xml.etree import ElementTree as ET
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -60,7 +62,7 @@ def _local_name(tag: str) -> str:
 def _parse_graphml(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     try:
         root = ET.fromstring(content)
-    except ET.ParseError as exc:
+    except (ET.ParseError, DefusedXmlException) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid GraphML: {exc}") from exc
 
     key_meta: dict[str, tuple[str, str]] = {}
