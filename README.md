@@ -73,6 +73,8 @@ uv run uvicorn ogi.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
+If you run the backend against PostgreSQL (`OGI_USE_SQLITE=false`), startup will automatically apply Alembic migrations before serving requests. Docker deployments do the same in the backend container entrypoint.
+
 ### Frontend
 
 ```bash
