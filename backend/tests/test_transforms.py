@@ -6,7 +6,7 @@ import pytest
 from ogi.models import Entity, EntityType
 from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
 from ogi.store.timezone_store import TimezoneResolution, TimezoneStore
-from ogi.store.weather_store import WeatherStore
+from ogi.store.weather_store import WeatherSnapshot, WeatherStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
@@ -614,3 +614,99 @@ async def test_location_to_weather_snapshot_missing_coordinate_behavior():
     result = await transform.run(entity, TransformConfig(settings={"openweather_api_key": "ow-test"}))
     assert result.entities == []
     assert result.messages == ["Weather lookup skipped: missing valid coordinates."]
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_uses_explicit_target_datetime_over_observed_at(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={
+            "lat": 47.37,
+            "lon": 8.54,
+            "observed_at": "2026-03-07T09:00:00Z",
+        },
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_get_snapshot(self, lat: float, lon: float, observed_at, api_key: str):
+        captured["lat"] = lat
+        captured["lon"] = lon
+        captured["observed_at"] = observed_at
+        captured["api_key"] = api_key
+        return WeatherSnapshot(
+            condition="Clear",
+            temp_c=14.2,
+            wind_kph=9.0,
+            visibility_km=10.0,
+            source_timestamp="2026-03-06T10:30:00+00:00",
+        )
+
+    monkeypatch.setattr(WeatherStore, "get_snapshot", fake_get_snapshot)
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "openweather_api_key": "ow-test",
+                "target_datetime": "2026-03-06T10:30:00Z",
+            }
+        ),
+    )
+    assert result.entities
+    assert captured["observed_at"] == datetime(2026, 3, 6, 10, 30, tzinfo=timezone.utc)
+    assert any(msg == "Requested timestamp: 2026-03-06T10:30:00+00:00." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_rejects_invalid_target_datetime():
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.37, "lon": 8.54},
+    )
+    result = await transform.run(
+        entity,
+        TransformConfig(settings={"openweather_api_key": "ow-test", "target_datetime": "not-a-date"}),
+    )
+    assert result.entities == []
+    assert result.messages == ["Weather lookup skipped: invalid target_datetime. Use ISO-8601 format."]
+
+
+@pytest.mark.asyncio
+async def test_weather_store_historical_unavailable_message(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+    observed = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=_FakeResponse(status_code=403, json_data={}))
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(46.95, 7.44, observed, "ow-test")
+    assert snapshot.error == "Historical weather is unavailable for the requested timestamp or current OpenWeather plan."
+
+
+@pytest.mark.asyncio
+async def test_weather_store_historical_401_reports_plan_or_key_issue(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+    observed = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=_FakeResponse(status_code=401, json_data={}))
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(46.95, 7.44, observed, "ow-test")
+    assert snapshot.error == "Historical weather is unavailable for this API key or current OpenWeather plan."
