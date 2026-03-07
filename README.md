@@ -168,6 +168,8 @@ If you use prebuilt images and a plugin needs extra Python libraries, OGI instal
 
 OpenGraph Intel has a built-in transform marketplace. Browse, install, and manage transforms from the [community registry](https://github.com/opengraphintel/ogi-transforms).
 
+> **Security note:** Plugins that require API keys should be treated as privileged code. If a plugin can access your secrets and make outbound network requests, it can misuse or exfiltrate those secrets. Review trust tier, permissions, and required services before installing or running third-party plugins.
+
 ```bash
 # Search for transforms
 uv run ogi transform search dns
@@ -196,6 +198,8 @@ uv run ogi transform install shodan-host-lookup
 ### Building Your Own Transforms
 
 Want to build your own? See the [contributing guide](https://github.com/opengraphintel/ogi-transforms/blob/main/CONTRIBUTING.md).
+
+If your transform needs external service credentials, declare them in `api_keys_required`. Do not store secrets in transform settings. OGI manages those under `API Keys`, and secret-using plugins are considered privileged code.
 
 Each plugin is a directory with a `plugin.yaml` manifest:
 
