@@ -98,7 +98,7 @@ def _parse_graphml(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str,
 
             properties: dict[str, Any] = {}
             for key, val in data_map.items():
-                if key in {"type", "entity_type", "value", "label", "weight"}:
+                if key in {"type", "entity_type", "value", "label", "weight", "source_field", "origin_source_field"}:
                     continue
                 properties[key] = val
             if raw_type and raw_type.lower().startswith("maltego."):
@@ -109,7 +109,8 @@ def _parse_graphml(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str,
                 "type": entity_type.value,
                 "value": value,
                 "properties": properties,
-                "source": "graphml_import",
+                "source": data_map.get("source_field") or "graphml_import",
+                "origin_source": data_map.get("origin_source_field") or data_map.get("source_field") or "graphml_import",
             }
             raw_weight = data_map.get("weight")
             if raw_weight and raw_weight.isdigit():
@@ -185,6 +186,10 @@ async def _import_entities_and_edges(
                 notes=str(entity_data.get("notes", "") or ""),
                 tags=entity_data.get("tags", []) or [],
                 source=str(entity_data.get("source", entity_source_fallback) or entity_source_fallback),
+                origin_source=str(
+                    entity_data.get("origin_source", entity_data.get("source", entity_source_fallback))
+                    or entity_source_fallback
+                ),
                 weight=int(entity_data.get("weight", 1) or 1),
                 project_id=project_id,
             )
@@ -280,7 +285,7 @@ async def import_csv(
     _role: str = Depends(require_project_editor),
     es: EntityStore = Depends(get_entity_store),
 ) -> ImportSummary:
-    """Import entities from a CSV file. Expected columns: type, value, properties (JSON), weight, notes, tags, source"""
+    """Import entities from a CSV file. Expected columns: type, value, properties (JSON), weight, notes, tags, source, origin_source"""
     content = (await file.read()).decode("utf-8")
     reader = csv.DictReader(io.StringIO(content))
 
@@ -301,6 +306,7 @@ async def import_csv(
             tags_str = row.get("tags", "")
             tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
             source = row.get("source", "csv_import")
+            origin_source = row.get("origin_source", source)
 
             entity = Entity(
                 type=entity_type,
@@ -310,6 +316,7 @@ async def import_csv(
                 notes=notes,
                 tags=tags,
                 source=source,
+                origin_source=origin_source,
             )
             saved = await es.save(project_id, entity)
             if saved.id == entity.id:
