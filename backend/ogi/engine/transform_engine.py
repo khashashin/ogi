@@ -134,6 +134,7 @@ class TransformEngine:
         from ogi.transforms.org.organization_to_team_members import OrganizationToTeamMembers
         from ogi.transforms.location.location_to_geocode import LocationToGeocode
         from ogi.transforms.location.location_to_timezone import LocationToTimezone
+        from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
         from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 
         for cls in [
@@ -146,6 +147,7 @@ class TransformEngine:
             OrganizationToTeamMembers,
             LocationToGeocode,
             LocationToTimezone,
+            LocationToSunTimes,
             LocationToWeatherSnapshot,
         ]:
             self.register(cls())
