@@ -3,7 +3,6 @@ import logging
 import traceback
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +29,16 @@ from ogi.api.router import api_router
 # Configure logging so all errors are visible in the terminal
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("ogi")
+
+
+async def _run_startup_migrations() -> None:
+    """Run Alembic migrations for non-SQLite app startups when enabled."""
+    if settings.use_sqlite or not settings.auto_run_migrations:
+        return
+
+    from ogi.db.alembic_runner import adopt_and_upgrade
+
+    await adopt_and_upgrade()
 
 
 async def _recover_stale_jobs() -> None:
@@ -69,6 +78,8 @@ async def _recover_stale_jobs() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await _run_startup_migrations()
+
     # Startup DB connection
     await init_db()
 
