@@ -5,6 +5,7 @@ import pytest
 
 from ogi.models import Entity, EntityType
 from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
+from ogi.store.timezone_store import TimezoneResolution, TimezoneStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
@@ -14,6 +15,7 @@ from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
 from ogi.transforms.location.location_to_geocode import LocationToGeocode
+from ogi.transforms.location.location_to_timezone import LocationToTimezone
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
 from ogi.transforms.web.url_to_headers import URLToHeaders
@@ -461,3 +463,62 @@ async def test_location_to_geocode_with_mocked_store(monkeypatch: pytest.MonkeyP
     assert out.properties["country"] == "USA"
     assert any(msg == "Confidence: 0.84." for msg in result.messages)
     assert any(msg == "Used upstream geocoder." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_timezone_known_coordinate_mapping(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToTimezone()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417},
+    )
+
+    def fake_resolve(self, lat: float, lon: float, observed_at=None):
+        assert lat == pytest.approx(47.3769)
+        assert lon == pytest.approx(8.5417)
+        return TimezoneResolution(
+            timezone="Europe/Zurich",
+            utc_offset="+01:00",
+            dst_active=False,
+            cache_hit=False,
+        )
+
+    monkeypatch.setattr(TimezoneStore, "resolve", fake_resolve)
+
+    result = await transform.run(entity, TransformConfig())
+    assert len(result.entities) == 1
+    out = result.entities[0]
+    assert out.properties["timezone"] == "Europe/Zurich"
+    assert out.properties["utc_offset"] == "+01:00"
+    assert out.properties["dst_active"] is False
+    assert any(msg == "Timezone: Europe/Zurich." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_timezone_missing_coordinate_behavior(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToTimezone()
+    entity = Entity(type=EntityType.LOCATION, value="Unknown place", project_id=uuid4())
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_normalize(self, query: str):
+        assert query == "Unknown place"
+        return LocationGeocodeResult(query=query, source="nominatim")
+
+    monkeypatch.setattr("ogi.transforms.location.location_to_timezone.get_session", lambda: _SessionCtx(), raising=False)
+    monkeypatch.setattr(LocationToTimezone, "_get_session", staticmethod(lambda: _SessionCtx()))
+    monkeypatch.setattr(LocationSearchStore, "normalize", fake_normalize)
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities == []
+    assert result.messages == ["Timezone lookup skipped: missing valid coordinates."]
