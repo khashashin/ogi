@@ -1349,6 +1349,29 @@ async def test_import_graphml(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_import_graphml_rejects_unsafe_xml(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "ImportGraphMLUnsafe"})
+    pid = resp.json()["id"]
+
+    payload = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE graphml [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <graph id="G" edgedefault="directed">
+    <node id="n1"><data key="value">&xxe;</data></node>
+  </graph>
+</graphml>
+"""
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/import/graphml",
+        files={"file": ("unsafe.graphml", payload.encode("utf-8"), "application/xml")},
+    )
+    assert resp.status_code == 400
+    assert "Invalid GraphML" in resp.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_import_maltego_mtgx(client: AsyncClient):
     import io as _io
     import zipfile as _zipfile
