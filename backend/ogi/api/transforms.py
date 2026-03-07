@@ -90,6 +90,25 @@ def _transform_visible_to_user(
     return plugin_enabled_map.get(plugin_name, True)
 
 
+def _enrich_transform_info(transform: TransformInfo) -> TransformInfo:
+    plugin_name = get_plugin_engine().get_plugin_for_transform(transform.name)
+    if plugin_name is None:
+        return transform
+
+    plugin = get_plugin_engine().get_plugin(plugin_name)
+    if plugin is None:
+        return transform.model_copy(update={"plugin_name": plugin_name})
+
+    return transform.model_copy(
+        update={
+            "plugin_name": plugin_name,
+            "plugin_verification_tier": plugin.verification_tier or "community",
+            "plugin_permissions": plugin.permissions or {},
+            "plugin_source": plugin.source or "local",
+        }
+    )
+
+
 def _base_default_settings(transform: object) -> dict[str, str]:
     return {
         s.name: s.default
@@ -184,7 +203,7 @@ async def list_transforms(
     all_transforms = engine.list_transforms()
     enabled_by_plugin = await preferences.list_for_user(current_user.id)
     return [
-        transform
+        _enrich_transform_info(transform)
         for transform in all_transforms
         if _transform_visible_to_user(transform.name, enabled_by_plugin)
     ]   
@@ -295,7 +314,7 @@ async def list_transforms_for_entity(
     engine = get_transform_engine()
     enabled_by_plugin = await preferences.list_for_user(current_user.id)
     return [
-        transform
+        _enrich_transform_info(transform)
         for transform in engine.list_for_entity(entity)
         if _transform_visible_to_user(transform.name, enabled_by_plugin)
     ]
