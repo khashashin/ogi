@@ -24,8 +24,9 @@ def test_auto_discover(engine: TransformEngine):
         "domain_to_ns",
         "ip_to_domain",
         "whois_lookup",
-        "organization_to_team_members",
+        "website_to_people",
         "location_to_geocode",
+        "location_to_nearby_asns",
         "location_to_weather_snapshot",
         "url_to_links",
         "url_to_content",
@@ -159,11 +160,11 @@ def test_get_nonexistent_transform(engine: TransformEngine):
 
 
 @pytest.mark.asyncio
-async def test_organization_to_team_members_requires_openai_key(engine: TransformEngine):
-    transform = engine.get_transform("organization_to_team_members")
+async def test_website_to_people_requires_openai_key(engine: TransformEngine):
+    transform = engine.get_transform("website_to_people")
     assert transform is not None
-    org = Entity(type=EntityType.ORGANIZATION, value="Acme")
-    result = await transform.run(org, TransformConfig(settings={}))
+    website = Entity(type=EntityType.DOMAIN, value="example.org")
+    result = await transform.run(website, TransformConfig(settings={}))
     assert result.messages
     assert "OpenAI API key required" in result.messages[0]
 

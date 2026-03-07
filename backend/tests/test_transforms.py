@@ -5,8 +5,15 @@ import pytest
 
 from ogi.models import Entity, EntityType
 from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
+from ogi.store.nearby_network_store import (
+    NearbyFacility,
+    NearbyNetworkPresence,
+    NearbyNetworkResult,
+    NearbyNetworkStore,
+)
+from ogi.store.sun_store import SunStore
 from ogi.store.timezone_store import TimezoneResolution, TimezoneStore
-from ogi.store.weather_store import WeatherStore
+from ogi.store.weather_store import WeatherSnapshot, WeatherStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
@@ -16,12 +23,15 @@ from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
 from ogi.transforms.location.location_to_geocode import LocationToGeocode
+from ogi.transforms.location.location_to_nearby_asns import LocationToNearbyASNs
+from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
 from ogi.transforms.location.location_to_timezone import LocationToTimezone
 from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
 from ogi.transforms.web.url_to_headers import URLToHeaders
 from ogi.transforms.web.url_to_links import URLToLinks
+from ogi.transforms.web.website_to_people import WebsiteToPeople
 
 
 class _FakeResponse:
@@ -238,6 +248,100 @@ async def test_domain_to_emails_with_mocked_mx(monkeypatch: pytest.MonkeyPatch):
     result = await transform.run(entity, TransformConfig())
     assert any(e.type == EntityType.EMAIL_ADDRESS for e in result.entities)
     assert any(e.value.startswith("admin@") for e in result.entities)
+
+
+def test_website_to_people_rejects_non_website_input():
+    transform = WebsiteToPeople()
+    entity = Entity(type=EntityType.DOMAIN, value="EXAMPLE, CH")
+    assert transform._resolve_base_url(entity) is None
+
+
+@pytest.mark.asyncio
+async def test_website_to_people_extracts_people(monkeypatch: pytest.MonkeyPatch):
+    transform = WebsiteToPeople()
+    entity = Entity(type=EntityType.DOMAIN, value="example.org", project_id=uuid4())
+
+    async def fake_discover(self, base_url: str):
+        assert base_url == "https://example.org"
+        return ["https://example.org/team"]
+
+    async def fake_extract(self, *, api_key: str, model: str, website: str, page_chunks: list[str], max_people: int):
+        assert api_key == "sk-test"
+        assert website == "https://example.org"
+        assert max_people == 25
+        assert page_chunks
+        return [{"name": "Alice Example", "role": "CEO", "profile_url": "https://example.org/team/alice"}]
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(
+            get_response=_FakeResponse(
+                status_code=200,
+                text="<html><body><h1>Team</h1><p>Alice Example - CEO</p></body></html>",
+                url="https://example.org/team",
+            )
+        )
+
+    monkeypatch.setattr(WebsiteToPeople, "_discover_people_pages", fake_discover)
+    monkeypatch.setattr(WebsiteToPeople, "_extract_people_with_openai", fake_extract)
+    monkeypatch.setattr("ogi.transforms.web.website_to_people.httpx.AsyncClient", fake_client)
+
+    result = await transform.run(
+        entity,
+        TransformConfig(settings={"openai_api_key": "sk-test", "max_people": "25"}),
+    )
+
+    assert len(result.entities) == 1
+    assert result.entities[0].type == EntityType.PERSON
+    assert result.entities[0].value == "Alice Example"
+    assert result.edges[0].label == "listed_on_website"
+    assert any(msg == "Website: https://example.org." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_website_to_people_parses_responses_api_output_blocks(monkeypatch: pytest.MonkeyPatch):
+    transform = WebsiteToPeople()
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict):
+            return _FakeResponse(
+                json_data={
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": '{"members":[{"name":"Alice Example","role":"CEO","profile_url":"https://example.org/team/alice"}]}',
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    monkeypatch.setattr("ogi.transforms.web.website_to_people.httpx.AsyncClient", lambda *a, **k: _Client())
+
+    people = await transform._extract_people_with_openai(
+        api_key="sk-test",
+        model="gpt-4o",
+        website="https://example.org",
+        page_chunks=["Alice Example CEO"],
+        max_people=10,
+    )
+
+    assert people == [
+        {
+            "name": "Alice Example",
+            "role": "CEO",
+            "profile_url": "https://example.org/team/alice",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -527,6 +631,408 @@ async def test_location_to_timezone_missing_coordinate_behavior(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_nearby_network_store_filters_by_radius(monkeypatch: pytest.MonkeyPatch):
+    NearbyNetworkStore._facility_cache.clear()
+    NearbyNetworkStore._netfac_cache.clear()
+    NearbyNetworkStore._network_name_cache.clear()
+    NearbyNetworkStore._cooldown_until = 0.0
+    store = NearbyNetworkStore()
+
+    async def fake_fetch_facilities(self, client, *, city: str | None, country: str | None):
+        assert city == "Zurich"
+        assert country == "Switzerland"
+        return [
+            NearbyFacility(
+                fac_id=1,
+                name="Near Facility",
+                city="Zurich",
+                country="CH",
+                latitude=47.3770,
+                longitude=8.5418,
+                distance_km=0.0,
+            ),
+            NearbyFacility(
+                fac_id=2,
+                name="Far Facility",
+                city="Geneva",
+                country="CH",
+                latitude=46.2044,
+                longitude=6.1432,
+                distance_km=0.0,
+            ),
+        ]
+
+    async def fake_fetch_netfac(self, client, facility: NearbyFacility):
+        return [
+            NearbyNetworkPresence(
+                fac_id=facility.fac_id,
+                facility_name=facility.name,
+                distance_km=facility.distance_km,
+                asn=64500 + facility.fac_id,
+            )
+        ]
+
+    async def fake_fetch_network_names(self, client, asns: list[int]):
+        return {asn: f"TestNet {asn}" for asn in asns}
+
+    monkeypatch.setattr(NearbyNetworkStore, "_fetch_facilities", fake_fetch_facilities)
+    monkeypatch.setattr(NearbyNetworkStore, "_fetch_netfac", fake_fetch_netfac)
+    monkeypatch.setattr(NearbyNetworkStore, "_fetch_network_names", fake_fetch_network_names)
+
+    result = await store.get_nearby_networks(
+        lat=47.3769,
+        lon=8.5417,
+        radius_km=25,
+        city="Zurich",
+        country="Switzerland",
+    )
+
+    assert result.error is None
+    assert len(result.presences) == 1
+    assert result.presences[0].facility_name == "Near Facility"
+    assert result.presences[0].network_name == "TestNet 64501"
+    assert result.presences[0].distance_km < 1.0
+
+
+def test_nearby_network_store_cache_helpers_round_trip():
+    NearbyNetworkStore._facility_cache.clear()
+    NearbyNetworkStore._cooldown_until = 0.0
+
+    cached_value = [
+        NearbyFacility(
+            fac_id=1,
+            name="Near Facility",
+            city="Zurich",
+            country="CH",
+            latitude=47.3770,
+            longitude=8.5418,
+            distance_km=0.0,
+        )
+    ]
+    NearbyNetworkStore._cache_set(NearbyNetworkStore._facility_cache, "zurich|switzerland", cached_value)
+
+    restored = NearbyNetworkStore._cache_get(NearbyNetworkStore._facility_cache, "zurich|switzerland")
+    assert restored == cached_value
+
+
+@pytest.mark.asyncio
+async def test_nearby_network_store_rate_limited_cooldown_skips_requests():
+    import time as _time
+
+    NearbyNetworkStore._cooldown_until = _time.time() + 30
+    try:
+        result = await NearbyNetworkStore().get_nearby_networks(
+            lat=47.3769,
+            lon=8.5417,
+            radius_km=25,
+            city="Zurich",
+            country="Switzerland",
+        )
+        assert result.presences == []
+        assert result.error is not None
+        assert "Retry in about" in result.error
+    finally:
+        NearbyNetworkStore._cooldown_until = 0.0
+
+
+@pytest.mark.asyncio
+async def test_nearby_network_store_uses_api_key_header(monkeypatch: pytest.MonkeyPatch):
+    NearbyNetworkStore._facility_cache.clear()
+    NearbyNetworkStore._netfac_cache.clear()
+    NearbyNetworkStore._network_name_cache.clear()
+    NearbyNetworkStore._cooldown_until = 0.0
+    captured: dict[str, object] = {}
+
+    class _HeaderAwareClient:
+        def __init__(self, *args, **kwargs):
+            captured["headers"] = kwargs.get("headers")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, **kwargs):
+            if url.endswith("/fac"):
+                return _FakeResponse(
+                    json_data={
+                        "data": [
+                            {
+                                "id": 1,
+                                "name": "Near Facility",
+                                "city": "Zurich",
+                                "country": "CH",
+                                "latitude": 47.3770,
+                                "longitude": 8.5418,
+                            }
+                        ]
+                    }
+                )
+            if url.endswith("/netfac"):
+                return _FakeResponse(json_data={"data": [{"local_asn": 64501}]})
+            if url.endswith("/net"):
+                return _FakeResponse(json_data={"data": [{"name": "TestNet 64501"}]})
+            return _FakeResponse(status_code=404, json_data={})
+
+    monkeypatch.setattr("ogi.store.nearby_network_store.httpx.AsyncClient", _HeaderAwareClient)
+    result = await NearbyNetworkStore().get_nearby_networks(
+        lat=47.3769,
+        lon=8.5417,
+        radius_km=25,
+        city="Zurich",
+        country="Switzerland",
+        api_key="pdb-test",
+    )
+
+    assert result.error is None
+    assert captured["headers"] == {"Authorization": "api-key pdb-test"}
+
+
+@pytest.mark.asyncio
+async def test_location_to_nearby_asns_geocodes_admin_context_when_missing(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToNearbyASNs()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich, Switzerland",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417},
+    )
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_normalize(self, query: str):
+        assert query == "Zurich, Switzerland"
+        return LocationGeocodeResult(
+            query=query,
+            lat=47.3769,
+            lon=8.5417,
+            display_name="Zurich, Switzerland",
+            confidence=0.9,
+            source="nominatim",
+            country="Switzerland",
+            city="Zurich",
+        )
+
+    async def fake_get_nearby_networks(
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: int,
+        city: str | None = None,
+        country: str | None = None,
+        api_key: str = "",
+        timeout_seconds: float = 8.0,
+    ):
+        assert city == "Zurich"
+        assert country == "Switzerland"
+        assert api_key == "pdb-test"
+        return NearbyNetworkResult(
+            presences=[
+                NearbyNetworkPresence(
+                    fac_id=10,
+                    facility_name="Facility A",
+                    distance_km=2.4,
+                    asn=64500,
+                    network_name="ZurichNet",
+                )
+            ]
+        )
+
+    monkeypatch.setattr(LocationToNearbyASNs, "_get_session", staticmethod(lambda: _SessionCtx()))
+    monkeypatch.setattr(LocationSearchStore, "normalize", fake_normalize)
+    monkeypatch.setattr(NearbyNetworkStore, "get_nearby_networks", fake_get_nearby_networks)
+
+    result = await transform.run(entity, TransformConfig(settings={"peeringdb_api_key": "pdb-test"}))
+
+    assert result.entities
+    assert any("Administrative context was resolved via geocoding" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_nearby_asns_requires_admin_context_if_geocode_cannot_resolve(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToNearbyASNs()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Somewhere",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417},
+    )
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_normalize(self, query: str):
+        return LocationGeocodeResult(query=query, source="nominatim")
+
+    monkeypatch.setattr(LocationToNearbyASNs, "_get_session", staticmethod(lambda: _SessionCtx()))
+    monkeypatch.setattr(LocationSearchStore, "normalize", fake_normalize)
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities == []
+    assert result.messages == [
+        "Nearby ASN lookup skipped: city or country context is required.",
+        "Run geocoding first or provide a more specific location label.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_location_to_nearby_asns_deduplicates_asns_and_creates_edges(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToNearbyASNs()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417, "city": "Zurich", "country": "Switzerland"},
+    )
+
+    async def fake_get_nearby_networks(
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: int,
+        city: str | None = None,
+        country: str | None = None,
+        api_key: str = "",
+        timeout_seconds: float = 8.0,
+    ):
+        assert lat == pytest.approx(47.3769)
+        assert lon == pytest.approx(8.5417)
+        assert radius_km == 25
+        assert city == "Zurich"
+        assert country == "Switzerland"
+        assert api_key == ""
+        assert timeout_seconds == pytest.approx(8.0)
+        return NearbyNetworkResult(
+            presences=[
+                NearbyNetworkPresence(
+                    fac_id=10,
+                    facility_name="Facility A",
+                    distance_km=2.4,
+                    asn=64500,
+                    network_name="ZurichNet",
+                ),
+                NearbyNetworkPresence(
+                    fac_id=11,
+                    facility_name="Facility B",
+                    distance_km=3.1,
+                    asn=64500,
+                    network_name="ZurichNet",
+                ),
+                NearbyNetworkPresence(
+                    fac_id=12,
+                    facility_name="Facility C",
+                    distance_km=7.5,
+                    asn=64501,
+                    network_name="Alpine Carrier",
+                ),
+            ],
+        )
+
+    monkeypatch.setattr(NearbyNetworkStore, "get_nearby_networks", fake_get_nearby_networks)
+
+    result = await transform.run(entity, TransformConfig(settings={"target_datetime": "2026-03-07T12:00:00Z"}))
+
+    as_entities = [row for row in result.entities if row.type == EntityType.AS_NUMBER]
+    network_entities = [row for row in result.entities if row.type == EntityType.NETWORK]
+    assert [row.value for row in as_entities] == ["AS64500", "AS64501"]
+    assert {row.value for row in network_entities} == {"ZurichNet", "Alpine Carrier"}
+    assert all(edge.label == "nearby_network" for edge in result.edges)
+    assert len(result.edges) == 4
+    assert any("current-state only" in msg for msg in result.messages)
+    assert as_entities[0].properties["nearby_presence_count"] == 2
+    assert as_entities[0].properties["nearest_facility_name"] == "Facility A"
+
+
+def test_sun_store_typical_latitude_date():
+    from datetime import datetime, timezone
+
+    result = SunStore().calculate(
+        lat=47.3769,
+        lon=8.5417,
+        reference_time=datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc),
+        timezone_name="Europe/Zurich",
+    )
+    assert result.error is None
+    assert result.sunrise_utc is not None
+    assert result.sunset_utc is not None
+    assert result.civil_twilight_begin_utc is not None
+    assert result.civil_twilight_end_utc is not None
+    assert result.nautical_twilight_begin_utc is not None
+    assert result.astronomical_twilight_end_utc is not None
+    assert result.sunrise_local is not None
+    assert result.sunset_local is not None
+    assert result.daylight_at_reference is True
+
+
+def test_sun_store_polar_region_edge_case():
+    from datetime import datetime, timezone
+
+    result = SunStore().calculate(
+        lat=78.2232,
+        lon=15.6469,
+        reference_time=datetime(2026, 12, 15, 12, 0, tzinfo=timezone.utc),
+        timezone_name="Arctic/Longyearbyen",
+    )
+    assert result.error is None
+    assert result.sunrise_utc is None
+    assert result.sunset_utc is None
+    assert result.polar_note is not None
+
+
+@pytest.mark.asyncio
+async def test_location_to_sun_times_with_explicit_target_datetime(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    transform = LocationToSunTimes()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417, "timezone": "Europe/Zurich"},
+    )
+    captured: dict[str, object] = {}
+    original_calculate = SunStore.calculate
+
+    def fake_calculate(self, lat: float, lon: float, reference_time: datetime, timezone_name: str | None = None):
+        captured["reference_time"] = reference_time
+        captured["timezone_name"] = timezone_name
+        return original_calculate(self, lat, lon, reference_time, timezone_name)
+
+    monkeypatch.setattr(SunStore, "calculate", fake_calculate)
+    result = await transform.run(
+        entity,
+        TransformConfig(settings={"target_datetime": "2026-06-15T10:30:00Z"}),
+    )
+    assert result.entities
+    assert captured["reference_time"] == datetime(2026, 6, 15, 10, 30, tzinfo=timezone.utc)
+    out = result.entities[0]
+    assert out.properties["sunrise_local"] is not None
+    assert out.properties["sunset_local"] is not None
+    assert out.properties["civil_twilight_begin_local"] is not None
+    assert out.properties["civil_twilight_end_local"] is not None
+    assert out.properties["sun_timezone"] == "Europe/Zurich"
+    assert out.properties["daylight_at_reference_time"] is True
+
+
+@pytest.mark.asyncio
 async def test_weather_store_parses_current_weather(monkeypatch: pytest.MonkeyPatch):
     WeatherStore._cache.clear()
     store = WeatherStore()
@@ -614,3 +1120,99 @@ async def test_location_to_weather_snapshot_missing_coordinate_behavior():
     result = await transform.run(entity, TransformConfig(settings={"openweather_api_key": "ow-test"}))
     assert result.entities == []
     assert result.messages == ["Weather lookup skipped: missing valid coordinates."]
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_uses_explicit_target_datetime_over_observed_at(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={
+            "lat": 47.37,
+            "lon": 8.54,
+            "observed_at": "2026-03-07T09:00:00Z",
+        },
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_get_snapshot(self, lat: float, lon: float, observed_at, api_key: str):
+        captured["lat"] = lat
+        captured["lon"] = lon
+        captured["observed_at"] = observed_at
+        captured["api_key"] = api_key
+        return WeatherSnapshot(
+            condition="Clear",
+            temp_c=14.2,
+            wind_kph=9.0,
+            visibility_km=10.0,
+            source_timestamp="2026-03-06T10:30:00+00:00",
+        )
+
+    monkeypatch.setattr(WeatherStore, "get_snapshot", fake_get_snapshot)
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "openweather_api_key": "ow-test",
+                "target_datetime": "2026-03-06T10:30:00Z",
+            }
+        ),
+    )
+    assert result.entities
+    assert captured["observed_at"] == datetime(2026, 3, 6, 10, 30, tzinfo=timezone.utc)
+    assert any(msg == "Requested timestamp: 2026-03-06T10:30:00+00:00." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_rejects_invalid_target_datetime():
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.37, "lon": 8.54},
+    )
+    result = await transform.run(
+        entity,
+        TransformConfig(settings={"openweather_api_key": "ow-test", "target_datetime": "not-a-date"}),
+    )
+    assert result.entities == []
+    assert result.messages == ["Weather lookup skipped: invalid target_datetime. Use ISO-8601 format."]
+
+
+@pytest.mark.asyncio
+async def test_weather_store_historical_unavailable_message(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+    observed = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=_FakeResponse(status_code=403, json_data={}))
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(46.95, 7.44, observed, "ow-test")
+    assert snapshot.error == "Historical weather is unavailable for the requested timestamp or current OpenWeather plan."
+
+
+@pytest.mark.asyncio
+async def test_weather_store_historical_401_reports_plan_or_key_issue(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+    observed = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=_FakeResponse(status_code=401, json_data={}))
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(46.95, 7.44, observed, "ow-test")
+    assert snapshot.error == "Historical weather is unavailable for this API key or current OpenWeather plan."
