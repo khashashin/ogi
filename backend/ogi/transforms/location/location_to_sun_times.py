@@ -45,40 +45,26 @@ class LocationToSunTimes(BaseTransform):
         if sun_result.error:
             return TransformResult(messages=[sun_result.error])
 
-        props["sun_reference_time_utc"] = sun_result.reference_time_utc
-        props["sun_reference_date_utc"] = sun_result.date_utc
-        props["sunrise_utc"] = sun_result.sunrise_utc
-        props["sunset_utc"] = sun_result.sunset_utc
-        props["civil_twilight_begin_utc"] = sun_result.civil_twilight_begin_utc
-        props["civil_twilight_end_utc"] = sun_result.civil_twilight_end_utc
-        props["nautical_twilight_begin_utc"] = sun_result.nautical_twilight_begin_utc
-        props["nautical_twilight_end_utc"] = sun_result.nautical_twilight_end_utc
-        props["astronomical_twilight_begin_utc"] = sun_result.astronomical_twilight_begin_utc
-        props["astronomical_twilight_end_utc"] = sun_result.astronomical_twilight_end_utc
         props["daylight_at_reference_time"] = sun_result.daylight_at_reference
 
         if sun_result.timezone:
             props["sun_timezone"] = sun_result.timezone
-        if sun_result.reference_time_local:
-            props["sun_reference_time_local"] = sun_result.reference_time_local
-        if sun_result.date_local:
-            props["sun_reference_date_local"] = sun_result.date_local
         if sun_result.sunrise_local:
             props["sunrise_local"] = sun_result.sunrise_local
+        elif sun_result.sunrise_utc:
+            props["sunrise_utc"] = sun_result.sunrise_utc
         if sun_result.sunset_local:
             props["sunset_local"] = sun_result.sunset_local
+        elif sun_result.sunset_utc:
+            props["sunset_utc"] = sun_result.sunset_utc
         if sun_result.civil_twilight_begin_local:
             props["civil_twilight_begin_local"] = sun_result.civil_twilight_begin_local
+        elif sun_result.civil_twilight_begin_utc:
+            props["civil_twilight_begin_utc"] = sun_result.civil_twilight_begin_utc
         if sun_result.civil_twilight_end_local:
             props["civil_twilight_end_local"] = sun_result.civil_twilight_end_local
-        if sun_result.nautical_twilight_begin_local:
-            props["nautical_twilight_begin_local"] = sun_result.nautical_twilight_begin_local
-        if sun_result.nautical_twilight_end_local:
-            props["nautical_twilight_end_local"] = sun_result.nautical_twilight_end_local
-        if sun_result.astronomical_twilight_begin_local:
-            props["astronomical_twilight_begin_local"] = sun_result.astronomical_twilight_begin_local
-        if sun_result.astronomical_twilight_end_local:
-            props["astronomical_twilight_end_local"] = sun_result.astronomical_twilight_end_local
+        elif sun_result.civil_twilight_end_utc:
+            props["civil_twilight_end_utc"] = sun_result.civil_twilight_end_utc
         if sun_result.polar_note:
             props["sun_polar_note"] = sun_result.polar_note
 
