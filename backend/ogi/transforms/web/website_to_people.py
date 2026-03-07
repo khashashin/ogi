@@ -8,18 +8,18 @@ from ogi.models import Entity, EntityType, Edge, TransformResult
 from ogi.transforms.base import BaseTransform, TransformConfig, TransformSetting
 
 
-class OrganizationToTeamMembers(BaseTransform):
-    name = "organization_to_team_members"
-    display_name = "Organization to Team Members"
-    description = "Finds an organization's team pages and extracts up to 500 team members using OpenAI."
-    input_types = [EntityType.ORGANIZATION]
+class WebsiteToPeople(BaseTransform):
+    name = "website_to_people"
+    display_name = "Website to People"
+    description = "Finds people listed on a website's team/about pages and extracts them using OpenAI."
+    input_types = [EntityType.DOMAIN, EntityType.URL]
     output_types = [EntityType.PERSON]
     category = "People"
     settings = [
         TransformSetting(
             name="openai_api_key",
             display_name="OpenAI API Key",
-            description="Required OpenAI API key used to extract team members from webpage content.",
+            description="Required OpenAI API key used to extract people from webpage content.",
             required=True,
             field_type="secret",
         ),
@@ -32,9 +32,9 @@ class OrganizationToTeamMembers(BaseTransform):
             options=["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"],
         ),
         TransformSetting(
-            name="max_members",
-            display_name="Max Members",
-            description="Maximum number of team members to return (1-500).",
+            name="max_people",
+            display_name="Max People",
+            description="Maximum number of people to return (1-500).",
             default="500",
             field_type="integer",
             min_value=1,
@@ -48,17 +48,20 @@ class OrganizationToTeamMembers(BaseTransform):
             return TransformResult(messages=["OpenAI API key required. Save it in API Keys (service: openai)."])
 
         model = config.settings.get("openai_model", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
-        max_members = self._parse_max_members(config.settings.get("max_members", "500"))
+        max_people = self._parse_max_people(config.settings.get("max_people", "500"))
 
-        base_url = self._resolve_website(entity)
+        base_url = self._resolve_base_url(entity)
         if not base_url:
             return TransformResult(
-                messages=["No website found for this organization. Add a website/domain in entity properties."]
+                messages=[
+                    "No valid website found for this entity.",
+                    "Use a domain or website URL as the input entity.",
+                ]
             )
 
-        team_pages = await self._discover_team_pages(base_url)
+        team_pages = await self._discover_people_pages(base_url)
         if not team_pages:
-            return TransformResult(messages=[f"No team pages discovered from {base_url}."])
+            return TransformResult(messages=[f"No people/team pages discovered from {base_url}."])
 
         page_texts: list[str] = []
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -74,23 +77,23 @@ class OrganizationToTeamMembers(BaseTransform):
                     continue
 
         if not page_texts:
-            return TransformResult(messages=["Team pages were found, but page text could not be fetched."])
+            return TransformResult(messages=["People pages were found, but page text could not be fetched."])
 
-        members = await self._extract_members_with_openai(
+        people = await self._extract_people_with_openai(
             api_key=api_key,
             model=model,
-            organization_name=entity.value,
+            website=base_url,
             page_chunks=page_texts,
-            max_members=max_members,
+            max_people=max_people,
         )
-        if not members:
-            return TransformResult(messages=["No team members extracted from discovered pages."])
+        if not people:
+            return TransformResult(messages=["No people extracted from discovered pages."])
 
         entities: list[Entity] = []
         edges: list[Edge] = []
         seen_names: set[str] = set()
-        for member in members[:max_members]:
-            name = member.get("name", "").strip()
+        for person_data in people[:max_people]:
+            name = person_data.get("name", "").strip()
             if not name:
                 continue
             key = name.lower()
@@ -98,15 +101,15 @@ class OrganizationToTeamMembers(BaseTransform):
                 continue
             seen_names.add(key)
 
-            role = member.get("role", "").strip()
-            profile_url = member.get("profile_url", "").strip()
+            role = person_data.get("role", "").strip()
+            profile_url = person_data.get("profile_url", "").strip()
             person = Entity(
                 type=EntityType.PERSON,
                 value=name,
                 project_id=entity.project_id,
                 source=self.name,
                 properties={
-                    "organization": entity.value,
+                    "website": base_url,
                     "role": role,
                     "profile_url": profile_url,
                     "source_transform": self.name,
@@ -117,7 +120,7 @@ class OrganizationToTeamMembers(BaseTransform):
                 Edge(
                     source_id=entity.id,
                     target_id=person.id,
-                    label="team_member",
+                    label="listed_on_website",
                     source_transform=self.name,
                 )
             )
@@ -126,35 +129,49 @@ class OrganizationToTeamMembers(BaseTransform):
             entities=entities,
             edges=edges,
             messages=[
+                f"Website: {base_url}.",
                 f"Scanned {len(page_texts)} page(s).",
-                f"Extracted {len(entities)} team member(s).",
+                f"Extracted {len(entities)} people.",
             ],
         )
 
-    def _parse_max_members(self, value: str) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = 500
-        return max(1, min(parsed, 500))
-
-    def _resolve_website(self, entity: Entity) -> str | None:
+    def _resolve_base_url(self, entity: Entity) -> str | None:
         props = entity.properties or {}
-        raw = (
-            str(props.get("website") or props.get("url") or props.get("homepage") or props.get("domain") or "").strip()
-        )
-        if not raw:
-            raw = entity.value.strip()
-        if not raw:
-            return None
-        if not raw.startswith(("http://", "https://")):
-            raw = f"https://{raw}"
-        parsed = urlparse(raw)
-        if not parsed.netloc:
-            return None
-        return f"{parsed.scheme}://{parsed.netloc}"
+        candidate = str(props.get("website") or props.get("url") or props.get("homepage") or entity.value or "").strip()
+        return self._normalize_website_candidate(candidate)
 
-    async def _discover_team_pages(self, base_url: str) -> list[str]:
+    def _normalize_website_candidate(self, raw: str) -> str | None:
+        candidate = raw.strip()
+        if not candidate:
+            return None
+        if not candidate.startswith(("http://", "https://")):
+            candidate = f"https://{candidate}"
+        parsed = urlparse(candidate)
+        host = (parsed.hostname or "").strip().lower()
+        if not self._is_valid_host(host):
+            return None
+        return f"{parsed.scheme}://{host}"
+
+    def _is_valid_host(self, host: str) -> bool:
+        if not host or len(host) > 253:
+            return False
+        if "," in host or "_" in host:
+            return False
+        if host.startswith(".") or host.endswith("."):
+            return False
+        labels = host.split(".")
+        if len(labels) < 2:
+            return False
+        for label in labels:
+            if not label or len(label) > 63:
+                return False
+            if label.startswith("-") or label.endswith("-"):
+                return False
+            if not re.fullmatch(r"[a-z0-9-]+", label):
+                return False
+        return re.fullmatch(r"[a-z]{2,63}", labels[-1]) is not None
+
+    async def _discover_people_pages(self, base_url: str) -> list[str]:
         candidates: set[str] = set()
         keywords = ("team", "about", "people", "leadership", "staff", "company")
         static_paths = [
@@ -186,13 +203,12 @@ class OrganizationToTeamMembers(BaseTransform):
                         if not parsed.netloc or parsed.netloc != urlparse(base_url).netloc:
                             continue
                         lower = full.lower()
-                        if any(k in lower for k in keywords):
+                        if any(keyword in lower for keyword in keywords):
                             candidates.add(f"{parsed.scheme}://{parsed.netloc}{parsed.path}")
             except Exception:
                 pass
 
-        ordered = sorted(candidates)
-        return ordered[:8]
+        return sorted(candidates)[:8]
 
     def _html_to_text(self, html: str) -> str:
         no_script = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
@@ -201,19 +217,20 @@ class OrganizationToTeamMembers(BaseTransform):
         text = re.sub(r"\s+", " ", text)
         return text.strip()
 
-    async def _extract_members_with_openai(
+    async def _extract_people_with_openai(
         self,
+        *,
         api_key: str,
         model: str,
-        organization_name: str,
+        website: str,
         page_chunks: list[str],
-        max_members: int,
+        max_people: int,
     ) -> list[dict[str, str]]:
         prompt = (
-            "Extract team members from the supplied webpage text for organization "
-            f"'{organization_name}'. Return strict JSON only with this schema: "
-            '{"members":[{"name":"", "role":"", "profile_url":""}]}. '
-            f"Return at most {max_members} unique real people. "
+            "Extract people listed on the supplied website/team page text. "
+            f"Website: {website}. "
+            'Return strict JSON only with schema {"people":[{"name":"", "role":"", "profile_url":""}]}. '
+            f"Return at most {max_people} unique real people. "
             "Do not include advisors, investors, companies, or placeholders. "
             "If uncertain, omit the entry."
         )
@@ -240,7 +257,7 @@ class OrganizationToTeamMembers(BaseTransform):
             response.raise_for_status()
             data = response.json()
 
-        raw = (data.get("output_text") or "").strip()
+        raw = self._response_text(data).strip()
         if not raw:
             return []
         if raw.startswith("```"):
@@ -248,11 +265,11 @@ class OrganizationToTeamMembers(BaseTransform):
             raw = raw.replace("json", "", 1).strip()
 
         parsed = json.loads(raw)
-        members = parsed.get("members", [])
-        if not isinstance(members, list):
+        people = parsed.get("people") or parsed.get("members") or []
+        if not isinstance(people, list):
             return []
         out: list[dict[str, str]] = []
-        for item in members:
+        for item in people:
             if not isinstance(item, dict):
                 continue
             out.append(
@@ -263,3 +280,27 @@ class OrganizationToTeamMembers(BaseTransform):
                 }
             )
         return out
+
+    def _parse_max_people(self, value: str) -> int:
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = 500
+        return max(1, min(parsed, 500))
+
+    def _response_text(self, payload: dict) -> str:
+        direct = payload.get("output_text")
+        if isinstance(direct, str) and direct.strip():
+            return direct
+
+        fragments: list[str] = []
+        for item in payload.get("output", []) or []:
+            if not isinstance(item, dict):
+                continue
+            for content in item.get("content", []) or []:
+                if not isinstance(content, dict):
+                    continue
+                text_value = content.get("text")
+                if isinstance(text_value, str) and text_value.strip():
+                    fragments.append(text_value)
+        return "\n".join(fragments)
