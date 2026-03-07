@@ -81,7 +81,19 @@ class WeatherStore:
             if resp.status_code == 429:
                 return WeatherSnapshot(error="OpenWeather rate limit exceeded.", rate_limited=True)
             if resp.status_code == 401:
-                return WeatherSnapshot(error="Invalid OpenWeather API key.")
+                return WeatherSnapshot(
+                    error=(
+                        "Historical weather is unavailable for this API key or current "
+                        "OpenWeather plan."
+                    )
+                )
+            if resp.status_code in {400, 403, 404}:
+                return WeatherSnapshot(
+                    error=(
+                        "Historical weather is unavailable for the requested timestamp "
+                        "or current OpenWeather plan."
+                    )
+                )
             resp.raise_for_status()
             return self._parse_historical(resp.json())
         except httpx.RequestError as exc:
