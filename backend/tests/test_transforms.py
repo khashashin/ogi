@@ -591,8 +591,11 @@ async def test_location_to_sun_times_with_explicit_target_datetime(monkeypatch: 
     assert result.entities
     assert captured["reference_time"] == datetime(2026, 6, 15, 10, 30, tzinfo=timezone.utc)
     out = result.entities[0]
-    assert out.properties["sunrise_utc"] is not None
-    assert out.properties["sunset_utc"] is not None
+    assert out.properties["sunrise_local"] is not None
+    assert out.properties["sunset_local"] is not None
+    assert out.properties["civil_twilight_begin_local"] is not None
+    assert out.properties["civil_twilight_end_local"] is not None
+    assert out.properties["sun_timezone"] == "Europe/Zurich"
     assert out.properties["daylight_at_reference_time"] is True
 
 
