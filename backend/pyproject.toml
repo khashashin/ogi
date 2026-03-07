@@ -29,6 +29,7 @@ dependencies = [
     "cryptography>=46.0.0",
     "rq>=2.3.0",
     "redis>=6.0.0",
+    "timezonefinder>=8.2.1",
 ]
 
 [project.scripts]
