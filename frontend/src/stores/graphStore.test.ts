@@ -14,6 +14,7 @@ function makeEntity(id: string, overrides: Partial<Entity> = {}): Entity {
     notes: "",
     tags: [],
     source: "manual",
+    origin_source: "manual",
     project_id: "p-1",
     created_at: "2026-03-03T10:00:00Z",
     updated_at: "2026-03-03T10:00:00Z",
@@ -119,4 +120,3 @@ describe("graphStore filters", () => {
     expect(state.filterState).toEqual(DEFAULT_FILTER_STATE);
   });
 });
-

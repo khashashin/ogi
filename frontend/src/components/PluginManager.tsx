@@ -1,17 +1,9 @@
 import { useState, useEffect } from "react";
-import { X, RefreshCw, ToggleLeft, ToggleRight, Puzzle } from "lucide-react";
+import { X, RefreshCw, ToggleLeft, ToggleRight, Puzzle, Key, AlertTriangle } from "lucide-react";
 import { api } from "../api/client";
-
-interface PluginInfo {
-  name: string;
-  version: string;
-  display_name: string;
-  description: string;
-  author: string;
-  enabled: boolean;
-  transform_count: number;
-  transform_names: string[];
-}
+import type { PluginInfo, VerificationTier } from "../types/registry";
+import { VerificationBadge } from "./marketplace/VerificationBadge";
+import { hasNetworkAndSecretRisk } from "../lib/pluginRisk";
 
 interface PluginManagerProps {
   open: boolean;
@@ -29,7 +21,7 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
   const loadPlugins = async () => {
     setLoading(true);
     try {
-      const data = await api.plugins.list();
+      const data = await api.plugins.list() as PluginInfo[];
       setPlugins(data);
     } catch {
       setPlugins([]);
@@ -96,6 +88,7 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
                       <span className="text-sm font-medium text-text">
                         {plugin.display_name || plugin.name}
                       </span>
+                      <VerificationBadge tier={(plugin.verification_tier || "community") as VerificationTier} />
                       {plugin.version && (
                         <span className="text-[10px] text-text-muted bg-surface px-1.5 py-0.5 rounded">
                           v{plugin.version}
@@ -114,6 +107,32 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
                         <span>: {plugin.transform_names.join(", ")}</span>
                       )}
                     </p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap text-[10px]">
+                      <span className={plugin.permissions.network ? "text-green-400" : "text-text-muted"}>
+                        Network {plugin.permissions.network ? "on" : "off"}
+                      </span>
+                      <span className={plugin.permissions.filesystem ? "text-yellow-400" : "text-text-muted"}>
+                        Filesystem {plugin.permissions.filesystem ? "on" : "off"}
+                      </span>
+                      <span className={plugin.permissions.subprocess ? "text-red-400" : "text-text-muted"}>
+                        Subprocess {plugin.permissions.subprocess ? "on" : "off"}
+                      </span>
+                    </div>
+                    {plugin.api_keys_required.length > 0 && (
+                      <p className="flex items-center gap-1 mt-1 text-[10px] text-yellow-400">
+                        <Key size={10} />
+                        Requires API key: {plugin.api_keys_required.map((item) => item.service).join(", ")}
+                      </p>
+                    )}
+                    {hasNetworkAndSecretRisk(
+                      plugin.api_keys_required.map((item) => item.service),
+                      plugin.permissions
+                    ) && (
+                      <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-300">
+                        <AlertTriangle size={10} />
+                        Privileged plugin: network access + API keys
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1">

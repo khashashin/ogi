@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
+from sqlmodel import select
 from starlette.websockets import WebSocketDisconnect
 
 # Use in-memory SQLite DB for tests and disable Supabase auth
@@ -117,6 +118,28 @@ async def test_list_transforms(client: AsyncClient):
     assert len(transforms) >= 15
     names = [t["name"] for t in transforms]
     assert "domain_to_ip" in names
+
+
+@pytest.mark.asyncio
+async def test_list_transforms_includes_plugin_metadata(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms")
+    assert resp.status_code == 200
+    transforms = resp.json()
+
+    hello_world = next((t for t in transforms if t["name"] == "hello_world"), None)
+    assert hello_world is not None
+    assert hello_world["plugin_name"] == "example-plugin"
+    assert hello_world["plugin_verification_tier"] == "community"
+    assert hello_world["plugin_permissions"] == {
+        "network": False,
+        "filesystem": False,
+        "subprocess": False,
+    }
+    assert hello_world["plugin_source"] == "local"
+
+    domain_to_ip = next((t for t in transforms if t["name"] == "domain_to_ip"), None)
+    assert domain_to_ip is not None
+    assert domain_to_ip["plugin_name"] is None
 
 
 @pytest.mark.asyncio
@@ -1095,6 +1118,250 @@ async def test_transform_settings_user_defaults_are_applied_on_run(
 
 
 @pytest.mark.asyncio
+async def test_transform_settings_reject_api_key_persistence(client: AsyncClient):
+    resp = await client.put(
+        "/api/v1/transforms/location_to_weather_snapshot/settings/user",
+        json={"settings": {"openweather_api_key": "ow-secret"}},
+    )
+    assert_error_envelope(
+        resp,
+        400,
+        code="HTTP_400",
+        message_contains="API key settings must be configured in API Keys",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_transform_audits_stored_api_key_injection(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "virustotal", "key": "vt-test-key"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.post("/api/v1/projects", json={"name": "APIKeyAudit"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Hash", "value": "d41d8cd98f00b204e9800998ecf8427e"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/transforms/hash_lookup/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert resp.status_code == 200
+
+    audit_resp = await client.get(f"/api/v1/projects/{pid}/audit-logs")
+    assert audit_resp.status_code == 200
+    rows = audit_resp.json()
+    injected = next((row for row in rows if row["action"] == "transform.api_key_injected"), None)
+    assert injected is not None
+    assert injected["resource_id"] == "hash_lookup"
+    assert injected["details"]["service_name"] == "virustotal"
+    assert injected["details"]["injection_source"] == "stored_api_key"
+
+
+@pytest.mark.asyncio
+async def test_run_transform_blocks_stored_api_key_injection_for_community_plugin_when_disabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+    from ogi.config import settings
+    from ogi.models import PluginInfo
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+
+    plugin_info = PluginInfo(
+        name="mock-community-plugin",
+        display_name="Mock Community Plugin",
+        verification_tier="community",
+        permissions={"network": True, "filesystem": False, "subprocess": False},
+        api_keys_required=[{"service": "openai", "description": "OpenAI", "env_var": "OPENAI_API_KEY"}],
+    )
+    plugin_engine = transforms_api.get_plugin_engine()
+    monkeypatch.setattr(plugin_engine, "get_plugin_for_transform", lambda transform_name: "mock-community-plugin" if transform_name == "organization_to_team_members" else None)
+    monkeypatch.setattr(plugin_engine, "get_plugin", lambda name: plugin_info if name == "mock-community-plugin" else None)
+    monkeypatch.setattr(settings, "api_key_injection_allow_community_plugins", False)
+
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.post("/api/v1/projects", json={"name": "PolicyBlocked"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Organization", "value": "Example Org"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/transforms/organization_to_team_members/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert_error_envelope(
+        resp,
+        403,
+        code="HTTP_403",
+        message_contains="disabled for community plugins",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_transform_blocks_stored_api_key_injection_for_blocked_service(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+    from ogi.config import settings
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+    monkeypatch.setattr(settings, "api_key_service_blocklist", ["openai"])
+
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.post("/api/v1/projects", json={"name": "BlockedService"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Organization", "value": "Example Org"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/transforms/organization_to_team_members/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert_error_envelope(
+        resp,
+        403,
+        code="HTTP_403",
+        message_contains="blocked for service 'openai'",
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_api_key_usage_report_aggregates_last_use(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import plugins as plugins_api
+    from ogi.models import PluginInfo
+
+    plugin_info = PluginInfo(
+        name="mock-community-plugin",
+        display_name="Mock Community Plugin",
+        verification_tier="community",
+        permissions={"network": True, "filesystem": False, "subprocess": False},
+        api_keys_required=[{"service": "openai", "description": "OpenAI", "env_var": "OPENAI_API_KEY"}],
+    )
+    plugin_engine = plugins_api.get_plugin_engine()
+    monkeypatch.setattr(plugin_engine, "list_plugins", lambda: [plugin_info])
+
+    resp = await client.post("/api/v1/projects", json={"name": "UsageReportProject"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/audit-logs",
+        json={
+            "action": "transform.api_key_injected",
+            "resource_type": "transform",
+            "resource_id": "organization_to_team_members",
+            "details": {
+                "plugin_name": "mock-community-plugin",
+                "service_name": "openai",
+            },
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = await client.get("/api/v1/plugins/api-key-usage-report")
+    assert resp.status_code == 200
+    rows = resp.json()
+    item = next((row for row in rows if row["plugin_name"] == "mock-community-plugin"), None)
+    assert item is not None
+    assert item["requested_services"] == ["openai"]
+    assert item["usage"][0]["service_name"] == "openai"
+    assert item["usage"][0]["last_used_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_registry_install_writes_system_audit_log(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import registry as registry_api
+    from ogi.db.database import get_session
+    from ogi.models import SystemAuditLog
+
+    class FakeRegistry:
+        async def fetch_index(self):
+            return {"transforms": []}
+
+        def get_transform(self, slug: str):
+            return {
+                "slug": slug,
+                "version": "1.2.3",
+                "verification_tier": "community",
+                "api_keys_required": [{"service": "openai"}],
+            }
+
+    class FakeInstaller:
+        async def install(self, slug: str):
+            return ["plugin.yaml"]
+
+    monkeypatch.setattr(registry_api, "get_registry_client", lambda: FakeRegistry())
+    monkeypatch.setattr(registry_api, "get_transform_installer", lambda: FakeInstaller())
+    monkeypatch.setattr(registry_api, "_reload_plugin_runtime", lambda name: 0)
+
+    resp = await client.post("/api/v1/registry/install/mock-plugin")
+    assert resp.status_code == 200
+
+    rows = []
+    async for session in get_session():
+        rows = (
+            await session.execute(select(SystemAuditLog).where(SystemAuditLog.action == "plugin.install"))
+        ).scalars().all()
+
+    assert rows
+    assert rows[-1].resource_id == "mock-plugin"
+    assert rows[-1].details["api_key_services"] == ["openai"]
+
+
+@pytest.mark.asyncio
 async def test_get_transform_run_forbidden_for_non_member(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1492,6 +1759,7 @@ async def test_entity_store_save_upserts_existing_entity(client: AsyncClient):
     assert len(entities) == 1
     entity = entities[0]
     assert entity["properties"]["first_seen"] == "yes"
+    assert entity["origin_source"] == "manual"
     assert entity["properties"]["whois_creation_date"] == "2025-01-01"
     assert "seed" in entity["tags"]
     assert "whois" in entity["tags"]

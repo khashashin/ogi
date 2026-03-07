@@ -1,7 +1,8 @@
-import { ArrowLeft, ExternalLink, Key, Tag } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ExternalLink, Key, ShieldAlert, Tag } from "lucide-react";
 import { VerificationBadge } from "./VerificationBadge";
 import { InstallButton } from "./InstallButton";
 import type { RegistryTransform, VerificationTier } from "../../types/registry";
+import { hasNetworkAndSecretRisk, isUnverifiedTier } from "../../lib/pluginRisk";
 
 interface TransformDetailProps {
   transform: RegistryTransform;
@@ -29,6 +30,10 @@ export function TransformDetail({
   onBack,
 }: TransformDetailProps) {
   const pop = transform.popularity;
+  const requiredServices = transform.api_keys_required.map((item) => item.service);
+  const hasSecretNetworkRisk = hasNetworkAndSecretRisk(requiredServices, transform.permissions);
+  const isSecretUsingUnverified =
+    requiredServices.length > 0 && isUnverifiedTier(transform.verification_tier);
 
   return (
     <div className="space-y-4">
@@ -67,6 +72,26 @@ export function TransformDetail({
         />
       </div>
 
+      {(hasSecretNetworkRisk || isSecretUsingUnverified) && (
+        <div className="rounded border border-amber-400/20 bg-amber-400/5 px-3 py-2 space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-amber-300 font-medium">
+            <AlertTriangle size={12} />
+            Secret-use risk
+          </div>
+          {hasSecretNetworkRisk && (
+            <p className="text-[11px] text-text-muted">
+              This plugin requests both network access and API keys. Treat it as privileged code.
+            </p>
+          )}
+          {isSecretUsingUnverified && (
+            <p className="flex items-center gap-1.5 text-[11px] text-orange-300">
+              <ShieldAlert size={11} />
+              Trust tier is {transform.verification_tier}. Review the plugin carefully before use.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         <div>
@@ -77,6 +102,10 @@ export function TransformDetail({
               <span className="text-text-muted"> (@{transform.author_github})</span>
             )}
           </p>
+        </div>
+        <div>
+          <span className="text-text-muted">Trust tier</span>
+          <p className="text-text capitalize">{transform.verification_tier}</p>
         </div>
         <div>
           <span className="text-text-muted">Category</span>
@@ -126,6 +155,9 @@ export function TransformDetail({
             <Key size={12} />
             API Keys Required
           </div>
+          <p className="text-[10px] text-text-muted ml-4 mb-1">
+            Configure these in <span className="text-text">API Keys</span>. Secret-using plugins are privileged code.
+          </p>
           {transform.api_keys_required.map((key) => (
             <p key={key.env_var} className="text-[10px] text-text-muted ml-4">
               <code className="text-text">{key.env_var}</code> — {key.description}

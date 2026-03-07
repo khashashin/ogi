@@ -54,7 +54,7 @@ ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
 
 class Entity(SQLModel, table=True):
     __tablename__ = "entities"
-    
+
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     type: EntityType
     value: str
@@ -64,6 +64,7 @@ class Entity(SQLModel, table=True):
     notes: str = ""
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     source: str = "manual"
+    origin_source: str = "manual"
     project_id: UUID = Field(foreign_key="projects.id", ondelete="CASCADE")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
@@ -83,6 +84,7 @@ class EntityCreate(SQLModel):
     notes: str = ""
     tags: list[str] = Field(default_factory=list)
     source: str = "manual"
+    origin_source: str | None = None
 
 
 class EntityUpdate(SQLModel):

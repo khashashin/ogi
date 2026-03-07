@@ -10,6 +10,13 @@ import { useTransformWebSocket } from "../hooks/useTransformWebSocket";
 import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 import { TransformSettingsDialog } from "./TransformSettingsDialog";
+import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
+
+function hasVisibleSettings(transform: TransformInfo): boolean {
+  return transform.settings.some(
+    (setting) => !(setting.field_type === "secret" && setting.name.endsWith("_api_key"))
+  );
+}
 
 export function TransformPanel() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
@@ -79,6 +86,11 @@ export function TransformPanel() {
 
   const handleRun = async (name: string) => {
     if (!entity || !currentProject) return;
+    const transform = transforms.find((item) => item.name === name);
+    const warning = transform ? buildRunRiskWarning(transform) : null;
+    if (warning && !window.confirm(warning)) {
+      return;
+    }
     try {
       const run = await api.transforms.run(name, entity.id, currentProject.id);
       submitJob(run);
@@ -165,10 +177,25 @@ export function TransformPanel() {
                     <div className="text-left">
                       <p className="font-medium">{t.display_name}</p>
                       <p className="text-[10px] text-text-muted">{t.description}</p>
+                      {t.api_key_services.length > 0 && (
+                        <p className="text-[10px] text-warning">
+                          Requires API key: {t.api_key_services.join(", ")}
+                        </p>
+                      )}
+                      {t.plugin_name && (
+                        <p className="text-[10px] text-text-muted">
+                          Plugin: {t.plugin_name} ({t.plugin_verification_tier ?? "community"})
+                        </p>
+                      )}
+                      {t.plugin_name && isUnverifiedTier(t.plugin_verification_tier) && t.api_key_services.length > 0 && (
+                        <p className="text-[10px] text-amber-300">
+                          Unverified plugin will access your API keys at runtime
+                        </p>
+                      )}
                     </div>
                   </button>
                   <div className="px-2 pb-2">
-                    {t.settings && t.settings.length > 0 && (
+                    {hasVisibleSettings(t) && (
                       <button
                         onClick={() => setSettingsTransform(t)}
                         className="text-[10px] text-text-muted hover:text-text flex items-center gap-1"

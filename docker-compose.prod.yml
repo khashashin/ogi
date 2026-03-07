@@ -15,6 +15,8 @@ services:
       - OGI_SUPABASE_URL=${OGI_SUPABASE_URL}
       - OGI_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY}
       - OGI_REDIS_URL=redis://redis:6379/0
+      - OGI_RUN_DB_MIGRATIONS=true
+      - OGI_AUTO_RUN_MIGRATIONS=false
     healthcheck:
       test:
         [
@@ -34,6 +36,8 @@ services:
     command: ["python", "-m", "ogi.worker.run_worker"]
     restart: unless-stopped
     depends_on:
+      backend:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -42,6 +46,8 @@ services:
       - OGI_DATABASE_URL=${OGI_DATABASE_URL}
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
+      - OGI_RUN_DB_MIGRATIONS=false
+      - OGI_AUTO_RUN_MIGRATIONS=false
 
   redis:
     image: redis:7-alpine

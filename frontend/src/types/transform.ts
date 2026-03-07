@@ -8,6 +8,11 @@ export interface TransformInfo {
   input_types: EntityType[];
   output_types: EntityType[];
   category: string;
+  api_key_services: string[];
+  plugin_name: string | null;
+  plugin_verification_tier: string | null;
+  plugin_permissions: Record<string, boolean>;
+  plugin_source: string | null;
   settings: TransformSettingSchema[];
 }
 

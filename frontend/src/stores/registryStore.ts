@@ -4,12 +4,14 @@ import type {
   RegistryTransform,
   RegistryIndex,
   PluginInfo,
+  PluginApiKeyUsageReportItem,
 } from "../types/registry";
 
 interface RegistryState {
   // Data
   index: RegistryIndex | null;
   installedPlugins: PluginInfo[];
+  pluginApiKeyUsageReport: PluginApiKeyUsageReportItem[];
   searchResults: RegistryTransform[];
   canManage: boolean;
 
@@ -26,8 +28,9 @@ interface RegistryState {
   // Actions
   fetchIndex: () => Promise<void>;
   fetchInstalledPlugins: () => Promise<void>;
+  fetchPluginApiKeyUsageReport: () => Promise<void>;
   searchTransforms: (query: string, category?: string, tier?: string) => Promise<void>;
-  installTransform: (slug: string) => Promise<void>;
+  installTransform: (transform: RegistryTransform) => Promise<void>;
   enablePlugin: (name: string) => Promise<void>;
   disablePlugin: (name: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
@@ -40,6 +43,7 @@ interface RegistryState {
 export const useRegistryStore = create<RegistryState>((set, get) => ({
   index: null,
   installedPlugins: [],
+  pluginApiKeyUsageReport: [],
   searchResults: [],
   canManage: false,
   loading: false,
@@ -70,6 +74,19 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
+  fetchPluginApiKeyUsageReport: async () => {
+    if (!get().canManage) {
+      set({ pluginApiKeyUsageReport: [] });
+      return;
+    }
+    try {
+      const report = await api.plugins.apiKeyUsageReport();
+      set({ pluginApiKeyUsageReport: report });
+    } catch {
+      set({ pluginApiKeyUsageReport: [] });
+    }
+  },
+
   searchTransforms: async (query: string, category?: string, tier?: string) => {
     set({ loading: true, error: null, searchQuery: query });
     try {
@@ -80,16 +97,17 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
-  installTransform: async (slug: string) => {
+  installTransform: async (transform: RegistryTransform) => {
     if (!get().canManage) {
       set({ error: "Only admins can install transforms." });
       return;
     }
-    set({ installing: slug, error: null });
+    set({ installing: transform.slug, error: null });
     try {
-      await api.registry.install(slug);
+      await api.registry.install(transform.slug);
       // Refresh installed list and search results
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       const { searchQuery, selectedCategory, selectedTier } = get();
       await get().searchTransforms(searchQuery, selectedCategory ?? undefined, selectedTier ?? undefined);
       set({ installing: null });
@@ -103,6 +121,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     try {
       await api.plugins.enable(name);
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });
@@ -114,6 +133,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     try {
       await api.plugins.disable(name);
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });

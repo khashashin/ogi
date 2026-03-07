@@ -9,6 +9,7 @@ interface ApiKeySettingsProps {
 
 const KNOWN_SERVICES = [
   "openai",
+  "openweather",
   "virustotal",
   "shodan",
   "censys",

@@ -76,6 +76,28 @@ class AuditLogCreate(SQLModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class SystemAuditLog(SQLModel, table=True):
+    __tablename__ = "system_audit_logs"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    actor_user_id: UUID | None = None
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
+    )
+
+
+class SystemAuditLogCreate(SQLModel):
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class TimelineBucket(SQLModel):
     bucket_start: datetime
     bucket_end: datetime

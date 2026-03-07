@@ -108,3 +108,17 @@ export interface PluginInfo {
   icon: string;
   color: string;
 }
+
+export interface PluginApiKeyUsageEntry {
+  service_name: string;
+  last_used_at: string | null;
+}
+
+export interface PluginApiKeyUsageReportItem {
+  plugin_name: string;
+  display_name: string;
+  verification_tier: VerificationTier;
+  permissions: TransformPermissions;
+  requested_services: string[];
+  usage: PluginApiKeyUsageEntry[];
+}
