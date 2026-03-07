@@ -1095,6 +1095,20 @@ async def test_transform_settings_user_defaults_are_applied_on_run(
 
 
 @pytest.mark.asyncio
+async def test_transform_settings_reject_api_key_persistence(client: AsyncClient):
+    resp = await client.put(
+        "/api/v1/transforms/location_to_weather_snapshot/settings/user",
+        json={"settings": {"openweather_api_key": "ow-secret"}},
+    )
+    assert_error_envelope(
+        resp,
+        400,
+        code="HTTP_400",
+        message_contains="API key settings must be configured in API Keys",
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_transform_run_forbidden_for_non_member(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1492,6 +1506,7 @@ async def test_entity_store_save_upserts_existing_entity(client: AsyncClient):
     assert len(entities) == 1
     entity = entities[0]
     assert entity["properties"]["first_seen"] == "yes"
+    assert entity["origin_source"] == "manual"
     assert entity["properties"]["whois_creation_date"] == "2025-01-01"
     assert "seed" in entity["tags"]
     assert "whois" in entity["tags"]

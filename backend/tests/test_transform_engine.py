@@ -26,6 +26,7 @@ def test_auto_discover(engine: TransformEngine):
         "whois_lookup",
         "organization_to_team_members",
         "location_to_geocode",
+        "location_to_weather_snapshot",
         "url_to_links",
         "url_to_content",
         "content_to_iocs",
