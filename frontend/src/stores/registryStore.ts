@@ -4,12 +4,14 @@ import type {
   RegistryTransform,
   RegistryIndex,
   PluginInfo,
+  PluginApiKeyUsageReportItem,
 } from "../types/registry";
 
 interface RegistryState {
   // Data
   index: RegistryIndex | null;
   installedPlugins: PluginInfo[];
+  pluginApiKeyUsageReport: PluginApiKeyUsageReportItem[];
   searchResults: RegistryTransform[];
   canManage: boolean;
 
@@ -26,6 +28,7 @@ interface RegistryState {
   // Actions
   fetchIndex: () => Promise<void>;
   fetchInstalledPlugins: () => Promise<void>;
+  fetchPluginApiKeyUsageReport: () => Promise<void>;
   searchTransforms: (query: string, category?: string, tier?: string) => Promise<void>;
   installTransform: (transform: RegistryTransform) => Promise<void>;
   enablePlugin: (name: string) => Promise<void>;
@@ -40,6 +43,7 @@ interface RegistryState {
 export const useRegistryStore = create<RegistryState>((set, get) => ({
   index: null,
   installedPlugins: [],
+  pluginApiKeyUsageReport: [],
   searchResults: [],
   canManage: false,
   loading: false,
@@ -70,6 +74,19 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
+  fetchPluginApiKeyUsageReport: async () => {
+    if (!get().canManage) {
+      set({ pluginApiKeyUsageReport: [] });
+      return;
+    }
+    try {
+      const report = await api.plugins.apiKeyUsageReport();
+      set({ pluginApiKeyUsageReport: report });
+    } catch {
+      set({ pluginApiKeyUsageReport: [] });
+    }
+  },
+
   searchTransforms: async (query: string, category?: string, tier?: string) => {
     set({ loading: true, error: null, searchQuery: query });
     try {
@@ -90,6 +107,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       await api.registry.install(transform.slug);
       // Refresh installed list and search results
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       const { searchQuery, selectedCategory, selectedTier } = get();
       await get().searchTransforms(searchQuery, selectedCategory ?? undefined, selectedTier ?? undefined);
       set({ installing: null });
@@ -103,6 +121,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     try {
       await api.plugins.enable(name);
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });
@@ -114,6 +133,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     try {
       await api.plugins.disable(name);
       await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });

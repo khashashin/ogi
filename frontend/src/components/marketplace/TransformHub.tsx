@@ -14,19 +14,24 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
     activeTab,
     setActiveTab,
     installedPlugins,
+    pluginApiKeyUsageReport,
     canManage,
     error,
     clearError,
     fetchIndex,
     fetchInstalledPlugins,
+    fetchPluginApiKeyUsageReport,
     searchTransforms,
   } = useRegistryStore();
 
   useEffect(() => {
     if (open) {
-      fetchIndex();
-      fetchInstalledPlugins();
-      searchTransforms("");
+      void (async () => {
+        await fetchIndex();
+        await fetchInstalledPlugins();
+        await fetchPluginApiKeyUsageReport();
+        await searchTransforms("");
+      })();
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -100,8 +105,12 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
           {activeTab === "enabled" && (
             <InstalledTab
               plugins={installedPlugins}
+              usageReport={pluginApiKeyUsageReport}
               canManage={canManage}
-              onRefresh={fetchInstalledPlugins}
+              onRefresh={async () => {
+                await fetchInstalledPlugins();
+                await fetchPluginApiKeyUsageReport();
+              }}
             />
           )}
           {activeTab === "catalog" && <BrowseTab />}
