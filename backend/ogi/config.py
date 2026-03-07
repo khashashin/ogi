@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     transform_timeout: int = 300  # seconds per transform job
     rq_queue_name: str = "transforms"
+    auto_run_migrations: bool = True
 
     # Cloud sandbox
     sandbox_enabled: bool = False  # auto-enabled in cloud mode
