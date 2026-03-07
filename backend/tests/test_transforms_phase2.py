@@ -1,8 +1,10 @@
 import asyncio
+from uuid import uuid4
 
 import pytest
 
 from ogi.models import Entity, EntityType
+from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
@@ -11,6 +13,7 @@ from ogi.transforms.email.email_to_domain import EmailToDomain
 from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
+from ogi.transforms.location.location_to_geocode import LocationToGeocode
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
 from ogi.transforms.web.url_to_headers import URLToHeaders
@@ -71,6 +74,30 @@ class _FakeDNSAnswer:
 
     def __str__(self):
         return self._value
+
+
+class _FakeScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+class _FakeSession:
+    def __init__(self, cache_row=None):
+        self.cache_row = cache_row
+        self.added: list[object] = []
+        self.commits = 0
+
+    async def execute(self, stmt):
+        return _FakeScalarResult(self.cache_row)
+
+    def add(self, value):
+        self.added.append(value)
+
+    async def commit(self):
+        self.commits += 1
 
 
 @pytest.mark.asyncio
@@ -307,3 +334,130 @@ async def test_username_search_with_mocked_http(monkeypatch: pytest.MonkeyPatch)
     assert any(e.type == EntityType.SOCIAL_MEDIA for e in result.entities)
     assert any(e.type == EntityType.URL for e in result.entities)
     assert any("GitHub" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_search_normalize_cache_hit(monkeypatch: pytest.MonkeyPatch):
+    from ogi.models import GeocodeCache
+
+    cached = GeocodeCache(
+        query="zurich, switzerland",
+        lat=47.3769,
+        lon=8.5417,
+        display_name="Zurich, Switzerland",
+        confidence=0.88,
+        source="cache",
+    )
+    store = LocationSearchStore(_FakeSession(cache_row=cached))
+
+    async def fail_upstream(_query: str):
+        raise AssertionError("Upstream should not be called on cache hit")
+
+    monkeypatch.setattr(store, "_fetch_nominatim_detail", fail_upstream)
+
+    result = await store.normalize("Zurich, Switzerland")
+    assert result.cache_hit is True
+    assert result.source == "cache"
+    assert result.display_name == "Zurich, Switzerland"
+    assert result.lat == pytest.approx(47.3769)
+    assert result.lon == pytest.approx(8.5417)
+
+
+@pytest.mark.asyncio
+async def test_location_search_normalize_upstream_parse_and_cache(monkeypatch: pytest.MonkeyPatch):
+    session = _FakeSession(cache_row=None)
+    store = LocationSearchStore(session)
+    captured: list[tuple[str, str, float]] = []
+
+    async def fake_upstream(_query: str):
+        return LocationGeocodeResult(
+            query="Berlin",
+            lat=52.52,
+            lon=13.405,
+            display_name="Berlin, Germany",
+            confidence=0.83,
+            source="nominatim",
+            country="Germany",
+            region="Berlin",
+            city="Berlin",
+            postcode="10117",
+        )
+
+    async def capture_upsert(query: str, suggestion, confidence: float = 0.6):
+        captured.append((query, suggestion.display_name, confidence))
+
+    monkeypatch.setattr(store, "_fetch_nominatim_detail", fake_upstream)
+    monkeypatch.setattr(store, "_upsert_cache", capture_upsert)
+
+    result = await store.normalize("Berlin")
+    assert result.source == "nominatim"
+    assert result.cache_hit is False
+    assert result.country == "Germany"
+    assert result.region == "Berlin"
+    assert result.city == "Berlin"
+    assert result.postcode == "10117"
+    assert captured[0] == ("berlin", "Berlin, Germany", 0.83)
+
+
+@pytest.mark.asyncio
+async def test_location_search_normalize_rate_limited(monkeypatch: pytest.MonkeyPatch):
+    import time as _time
+
+    store = LocationSearchStore(_FakeSession(cache_row=None))
+    LocationSearchStore._cooldown_until = _time.time() + 30
+    try:
+        async def fail_upstream(_query: str):
+            raise AssertionError("Upstream should not be called while rate-limited")
+
+        monkeypatch.setattr(store, "_fetch_nominatim_detail", fail_upstream)
+        result = await store.normalize("London")
+        assert result.rate_limited is True
+        assert result.source == "rate-limit"
+        assert (result.retry_after_seconds or 0) > 0
+    finally:
+        LocationSearchStore._cooldown_until = 0.0
+
+
+@pytest.mark.asyncio
+async def test_location_to_geocode_with_mocked_store(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToGeocode()
+    entity = Entity(type=EntityType.LOCATION, value="NYC", project_id=uuid4())
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_normalize(self, query: str):
+        assert query == "NYC"
+        return LocationGeocodeResult(
+            query=query,
+            lat=40.7128,
+            lon=-74.0060,
+            display_name="New York, NY, USA",
+            confidence=0.84,
+            source="nominatim",
+            country="USA",
+            region="New York",
+            city="New York",
+            postcode="10007",
+        )
+
+    monkeypatch.setattr("ogi.transforms.location.location_to_geocode.get_session", lambda: _SessionCtx())
+    monkeypatch.setattr(LocationSearchStore, "normalize", fake_normalize)
+
+    result = await transform.run(entity, TransformConfig())
+    assert len(result.entities) == 1
+    out = result.entities[0]
+    assert out.type == EntityType.LOCATION
+    assert out.value == "New York, NY, USA"
+    assert out.properties["lat"] == pytest.approx(40.7128)
+    assert out.properties["lon"] == pytest.approx(-74.0060)
+    assert out.properties["country"] == "USA"
+    assert any(msg == "Confidence: 0.84." for msg in result.messages)
+    assert any(msg == "Used upstream geocoder." for msg in result.messages)

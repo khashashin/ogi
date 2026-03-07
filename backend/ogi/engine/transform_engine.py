@@ -119,6 +119,7 @@ class TransformEngine:
         from ogi.transforms.social.username_search import UsernameSearch
         from ogi.transforms.hash.hash_lookup import HashLookup
         from ogi.transforms.org.organization_to_team_members import OrganizationToTeamMembers
+        from ogi.transforms.location.location_to_geocode import LocationToGeocode
 
         for cls in [
             DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
@@ -128,5 +129,6 @@ class TransformEngine:
             DomainToCerts, CertTransparency,
             UsernameSearch, HashLookup,
             OrganizationToTeamMembers,
+            LocationToGeocode,
         ]:
             self.register(cls())
