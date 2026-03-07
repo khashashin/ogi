@@ -120,6 +120,28 @@ async def test_list_transforms(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_list_transforms_includes_plugin_metadata(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms")
+    assert resp.status_code == 200
+    transforms = resp.json()
+
+    hello_world = next((t for t in transforms if t["name"] == "hello_world"), None)
+    assert hello_world is not None
+    assert hello_world["plugin_name"] == "example-plugin"
+    assert hello_world["plugin_verification_tier"] == "community"
+    assert hello_world["plugin_permissions"] == {
+        "network": False,
+        "filesystem": False,
+        "subprocess": False,
+    }
+    assert hello_world["plugin_source"] == "local"
+
+    domain_to_ip = next((t for t in transforms if t["name"] == "domain_to_ip"), None)
+    assert domain_to_ip is not None
+    assert domain_to_ip["plugin_name"] is None
+
+
+@pytest.mark.asyncio
 async def test_list_entity_types(client: AsyncClient):
     resp = await client.get("/api/v1/transforms/entity-types")
     assert resp.status_code == 200
