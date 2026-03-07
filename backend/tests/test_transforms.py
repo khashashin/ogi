@@ -5,6 +5,7 @@ import pytest
 
 from ogi.models import Entity, EntityType
 from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
+from ogi.store.sun_store import SunStore
 from ogi.store.timezone_store import TimezoneResolution, TimezoneStore
 from ogi.store.weather_store import WeatherSnapshot, WeatherStore
 from ogi.transforms.base import TransformConfig
@@ -16,6 +17,7 @@ from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
 from ogi.transforms.location.location_to_geocode import LocationToGeocode
+from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
 from ogi.transforms.location.location_to_timezone import LocationToTimezone
 from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 from ogi.transforms.social.username_search import UsernameSearch
@@ -524,6 +526,74 @@ async def test_location_to_timezone_missing_coordinate_behavior(monkeypatch: pyt
     result = await transform.run(entity, TransformConfig())
     assert result.entities == []
     assert result.messages == ["Timezone lookup skipped: missing valid coordinates."]
+
+
+def test_sun_store_typical_latitude_date():
+    from datetime import datetime, timezone
+
+    result = SunStore().calculate(
+        lat=47.3769,
+        lon=8.5417,
+        reference_time=datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc),
+        timezone_name="Europe/Zurich",
+    )
+    assert result.error is None
+    assert result.sunrise_utc is not None
+    assert result.sunset_utc is not None
+    assert result.civil_twilight_begin_utc is not None
+    assert result.civil_twilight_end_utc is not None
+    assert result.nautical_twilight_begin_utc is not None
+    assert result.astronomical_twilight_end_utc is not None
+    assert result.sunrise_local is not None
+    assert result.sunset_local is not None
+    assert result.daylight_at_reference is True
+
+
+def test_sun_store_polar_region_edge_case():
+    from datetime import datetime, timezone
+
+    result = SunStore().calculate(
+        lat=78.2232,
+        lon=15.6469,
+        reference_time=datetime(2026, 12, 15, 12, 0, tzinfo=timezone.utc),
+        timezone_name="Arctic/Longyearbyen",
+    )
+    assert result.error is None
+    assert result.sunrise_utc is None
+    assert result.sunset_utc is None
+    assert result.polar_note is not None
+
+
+@pytest.mark.asyncio
+async def test_location_to_sun_times_with_explicit_target_datetime(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    transform = LocationToSunTimes()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417, "timezone": "Europe/Zurich"},
+    )
+    captured: dict[str, object] = {}
+    original_calculate = SunStore.calculate
+
+    def fake_calculate(self, lat: float, lon: float, reference_time: datetime, timezone_name: str | None = None):
+        captured["reference_time"] = reference_time
+        captured["timezone_name"] = timezone_name
+        return original_calculate(self, lat, lon, reference_time, timezone_name)
+
+    monkeypatch.setattr(SunStore, "calculate", fake_calculate)
+    result = await transform.run(
+        entity,
+        TransformConfig(settings={"target_datetime": "2026-06-15T10:30:00Z"}),
+    )
+    assert result.entities
+    assert captured["reference_time"] == datetime(2026, 6, 15, 10, 30, tzinfo=timezone.utc)
+    out = result.entities[0]
+    assert out.properties["sunrise_utc"] is not None
+    assert out.properties["sunset_utc"] is not None
+    assert out.properties["daylight_at_reference_time"] is True
 
 
 @pytest.mark.asyncio
