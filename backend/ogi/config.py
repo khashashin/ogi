@@ -49,6 +49,26 @@ class Settings(BaseSettings):
             return ",".join(str(i) for i in v)
         return str(v) if v else ""
 
+    @field_validator(
+        "plugin_dirs",
+        "cors_origins",
+        "sandbox_allowed_tiers",
+        "api_key_injection_allowed_tiers",
+        "api_key_service_allowlist",
+        "api_key_service_blocklist",
+        mode="before",
+    )
+    @classmethod
+    def _parse_list_or_csv(cls, v: object) -> object:
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                return v
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return v
+
     def get_admin_emails(self) -> list[str]:
         return [
             email.strip().lower()
@@ -67,6 +87,13 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 30
     sandbox_memory_mb: int = 256
     sandbox_allowed_tiers: list[str] = ["official", "verified"]
+
+    # Plugin API key policy
+    api_key_injection_allow_community_plugins: bool = True
+    api_key_injection_trusted_tiers_only: bool = False
+    api_key_injection_allowed_tiers: list[str] = ["official", "verified"]
+    api_key_service_allowlist: list[str] = []
+    api_key_service_blocklist: list[str] = []
 
     @property
     def abs_database_path(self) -> Path:

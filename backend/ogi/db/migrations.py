@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS project_bookmarks (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS system_audit_logs (
+    id TEXT PRIMARY KEY,
+    actor_user_id TEXT,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
 CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
 CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
@@ -192,6 +202,16 @@ CREATE TABLE IF NOT EXISTS project_bookmarks (
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS system_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    details JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
