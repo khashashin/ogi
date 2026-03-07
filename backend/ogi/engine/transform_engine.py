@@ -120,6 +120,7 @@ class TransformEngine:
         from ogi.transforms.hash.hash_lookup import HashLookup
         from ogi.transforms.org.organization_to_team_members import OrganizationToTeamMembers
         from ogi.transforms.location.location_to_geocode import LocationToGeocode
+        from ogi.transforms.location.location_to_timezone import LocationToTimezone
 
         for cls in [
             DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
@@ -130,5 +131,6 @@ class TransformEngine:
             UsernameSearch, HashLookup,
             OrganizationToTeamMembers,
             LocationToGeocode,
+            LocationToTimezone,
         ]:
             self.register(cls())
