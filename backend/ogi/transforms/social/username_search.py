@@ -311,9 +311,10 @@ class UsernameSearch(BaseTransform):
             profile_url = template.format(account=username)
             pretty_url = site.get("uri_pretty", profile_url)
             post_body = site.get("post_body")
+            method = "POST" if post_body else "GET"
 
             try:
-                response = await client.get(profile_url, data=post_body)
+                response = await client.request(method, profile_url, data=post_body if post_body else None)
             except httpx.TimeoutException:
                 return self._not_found(site, username, "request timed out")
             except httpx.RequestError as exc:
