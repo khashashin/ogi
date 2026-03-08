@@ -36,6 +36,27 @@ const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
 /** Custom SVG icons served from /icons/ */
 const CUSTOM_SVG_ICONS = new Set(["subdomain", "nsrecord"]);
 
+const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
+  [EntityType.Person]: "Enter first and last name",
+  [EntityType.Organization]: "Enter organization name",
+  [EntityType.Domain]: "Enter domain, e.g. example.com",
+  [EntityType.Subdomain]: "Enter subdomain, e.g. api.example.com",
+  [EntityType.URL]: "Enter full URL, e.g. https://example.com",
+  [EntityType.EmailAddress]: "Enter email address",
+  [EntityType.PhoneNumber]: "Enter phone number",
+  [EntityType.IPAddress]: "Enter IPv4 or IPv6 address",
+  [EntityType.SocialMedia]: "Enter username or social handle",
+  [EntityType.Hash]: "Enter file or artifact hash",
+  [EntityType.Document]: "Enter document title or URL",
+  [EntityType.ASNumber]: "Enter ASN, e.g. AS15169",
+  [EntityType.Network]: "Enter network or CIDR, e.g. 192.168.0.0/24",
+  [EntityType.MXRecord]: "Enter MX record hostname",
+  [EntityType.NSRecord]: "Enter NS record hostname",
+  [EntityType.Nameserver]: "Enter nameserver hostname",
+  [EntityType.SSLCertificate]: "Enter certificate identifier or subject",
+  [EntityType.HTTPHeader]: "Enter header name or raw header",
+};
+
 export function EntityPalette() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<EntityType | null>(null);
@@ -49,6 +70,9 @@ export function EntityPalette() {
   const { addEntity } = useGraphStore();
   const isViewer = useIsViewer();
   const isLocationMode = adding === EntityType.Location;
+  const valuePlaceholder = adding
+    ? (isLocationMode ? "Search location..." : ENTITY_VALUE_PLACEHOLDERS[adding] ?? "Enter value")
+    : "Enter value";
 
   const groupedTypes = useMemo(() => {
     const groups: Record<string, EntityTypeMeta[]> = {};
@@ -160,7 +184,7 @@ export function EntityPalette() {
           <p className="text-xs text-text-muted mb-1.5">Add {adding}</p>
           <input
             type="text"
-            placeholder={isLocationMode ? "Search location..." : "Enter value..."}
+            placeholder={valuePlaceholder}
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
