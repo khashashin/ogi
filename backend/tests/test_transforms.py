@@ -66,6 +66,7 @@ class _FakeHTTPClient:
     def __init__(self, *, get_response=None, head_response=None):
         self._get_response = get_response
         self._head_response = head_response
+        self.requests: list[tuple[str, str, dict]] = []
 
     async def __aenter__(self):
         return self
@@ -76,6 +77,12 @@ class _FakeHTTPClient:
     async def get(self, url: str, **kwargs):
         if callable(self._get_response):
             return self._get_response(url)
+        return self._get_response
+
+    async def request(self, method: str, url: str, **kwargs):
+        self.requests.append((method, url, kwargs))
+        if callable(self._get_response):
+            return self._get_response(url, **kwargs)
         return self._get_response
 
     async def head(self, url: str, **kwargs):
@@ -551,6 +558,44 @@ async def test_username_search_requires_username_in_body(monkeypatch: pytest.Mon
     result = await transform.run(entity, TransformConfig())
     assert result.entities == []
     assert any("No matching accounts found" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_username_search_uses_post_for_sites_with_post_body(monkeypatch: pytest.MonkeyPatch):
+    transform = UsernameSearch()
+    entity = Entity(type=EntityType.USERNAME, value="alice")
+
+    async def fake_sites(*, max_sites: int):
+        return (
+            [
+                {
+                    "name": "ExampleSite",
+                    "cat": "community",
+                    "uri_check": "https://example.com/check/{account}",
+                    "uri_pretty": "https://example.com/u/{account}",
+                    "e_code": 200,
+                    "e_string": "",
+                    "post_body": "username=alice",
+                }
+            ],
+            "test",
+        )
+
+    client = _FakeHTTPClient(get_response=_FakeResponse(status_code=200, text="alice profile"))
+
+    def fake_client(*args, **kwargs):
+        return client
+
+    monkeypatch.setattr("ogi.transforms.social.username_search.httpx.AsyncClient", fake_client)
+    monkeypatch.setattr(transform, "_get_candidate_sites", fake_sites)
+
+    result = await transform.run(entity, TransformConfig())
+
+    assert result.entities
+    assert client.requests
+    method, _url, kwargs = client.requests[0]
+    assert method == "POST"
+    assert kwargs["data"] == "username=alice"
 
 
 @pytest.mark.asyncio
