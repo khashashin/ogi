@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil } from "lucide-react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -29,11 +29,12 @@ export function ContextMenu() {
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { entities, removeEntity, removeEdge, selectNode } = useGraphStore();
+  const { entities, pinnedNodeIds, removeEntity, removeEdge, selectNode, hideNode, hideEdge, hideConnectedEdges, pinNode, unpinNode } = useGraphStore();
   const { currentProject } = useProjectStore();
   const isViewer = useIsViewer();
 
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
+  const isPinned = Boolean(menu.id && pinnedNodeIds.has(menu.id));
   const menuVisible = menu.visible;
   const menuX = menu.x;
   const menuY = menu.y;
@@ -173,6 +174,39 @@ export function ContextMenu() {
     close();
   };
 
+  const handleHideNode = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    hideNode(currentProject.id, menu.id);
+    toast.success("Entity hidden");
+    close();
+  };
+
+  const handleHideConnectedEdges = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    hideConnectedEdges(currentProject.id, menu.id);
+    toast.success("Connected edges hidden");
+    close();
+  };
+
+  const handleHideEdge = () => {
+    if (!currentProject || !menu.id || menu.type !== "edge") return;
+    hideEdge(currentProject.id, menu.id);
+    toast.success("Edge hidden");
+    close();
+  };
+
+  const handleTogglePin = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    if (isPinned) {
+      unpinNode(currentProject.id, menu.id);
+      toast.success("Node unpinned");
+    } else {
+      pinNode(currentProject.id, menu.id);
+      toast.success("Node pinned");
+    }
+    close();
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -232,6 +266,25 @@ export function ContextMenu() {
             </button>
           )}
 
+          {!isViewer && (
+            <>
+              <button onClick={handleTogglePin} className={itemClass}>
+                {isPinned ? <Unlock size={12} /> : <Lock size={12} />}
+                {isPinned ? "Unpin Node" : "Pin Node"}
+              </button>
+
+              <button onClick={handleHideNode} className={itemClass}>
+                <EyeOff size={12} />
+                Hide Selected Node
+              </button>
+
+              <button onClick={handleHideConnectedEdges} className={itemClass}>
+                <EyeOff size={12} />
+                Hide Connected Edges
+              </button>
+            </>
+          )}
+
           <button onClick={handleCopyValue} className={itemClass}>
             <Copy size={12} />
             Copy Value
@@ -282,6 +335,13 @@ export function ContextMenu() {
 
       {menu.type === "edge" && !isViewer && (
         <>
+          <button onClick={handleHideEdge} className={itemClass}>
+            <EyeOff size={12} />
+            Hide Edge
+          </button>
+
+          <div className="border-t border-border my-1" />
+
           <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
             <Trash2 size={12} />
             Delete Edge
