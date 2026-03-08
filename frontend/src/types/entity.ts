@@ -21,6 +21,13 @@ export const EntityType = {
 } as const;
 
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
+export type PropertyValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: PropertyValue }
+  | PropertyValue[];
 
 export interface EntityTypeMeta {
   type: EntityType;
@@ -55,7 +62,7 @@ export interface Entity {
   id: string;
   type: EntityType;
   value: string;
-  properties: Record<string, string | number | boolean | null>;
+  properties: Record<string, PropertyValue>;
   icon: string;
   weight: number;
   notes: string;
@@ -70,7 +77,7 @@ export interface Entity {
 export interface EntityCreate {
   type: EntityType;
   value: string;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
   weight?: number;
   notes?: string;
   tags?: string[];
@@ -80,7 +87,7 @@ export interface EntityCreate {
 
 export interface EntityUpdate {
   value?: string;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
   weight?: number;
   notes?: string;
   tags?: string[];

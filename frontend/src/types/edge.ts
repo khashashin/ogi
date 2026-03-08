@@ -1,10 +1,12 @@
+import type { PropertyValue } from "./entity";
+
 export interface Edge {
   id: string;
   source_id: string;
   target_id: string;
   label: string;
   weight: number;
-  properties: Record<string, string | number | boolean | null>;
+  properties: Record<string, PropertyValue>;
   bidirectional: boolean;
   source_transform: string;
   project_id: string | null;
@@ -16,7 +18,7 @@ export interface EdgeCreate {
   target_id: string;
   label?: string;
   weight?: number;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
   bidirectional?: boolean;
   source_transform?: string;
 }
@@ -24,5 +26,5 @@ export interface EdgeCreate {
 export interface EdgeUpdate {
   label?: string;
   weight?: number;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
 }
