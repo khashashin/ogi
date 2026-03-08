@@ -21,6 +21,7 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
     fetchIndex,
     fetchInstalledPlugins,
     fetchPluginApiKeyUsageReport,
+    fetchAvailableUpdates,
     searchTransforms,
   } = useRegistryStore();
 
@@ -30,6 +31,7 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
         await fetchIndex();
         await fetchInstalledPlugins();
         await fetchPluginApiKeyUsageReport();
+        await fetchAvailableUpdates();
         await searchTransforms("");
       })();
     }
@@ -110,6 +112,7 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
               onRefresh={async () => {
                 await fetchInstalledPlugins();
                 await fetchPluginApiKeyUsageReport();
+                await fetchAvailableUpdates();
               }}
             />
           )}

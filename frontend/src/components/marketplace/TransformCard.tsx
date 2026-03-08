@@ -10,8 +10,11 @@ interface TransformCardProps {
   enabled: boolean;
   canManage: boolean;
   installing: boolean;
+  updateAvailable: boolean;
+  updating: boolean;
   toggling: boolean;
   onInstall: () => void;
+  onUpdate: () => void;
   onEnable: () => void;
   onDisable: () => void;
   onClick: () => void;
@@ -23,8 +26,11 @@ export function TransformCard({
   enabled,
   canManage,
   installing,
+  updateAvailable,
+  updating,
   toggling,
   onInstall,
+  onUpdate,
   onEnable,
   onDisable,
   onClick,
@@ -97,8 +103,11 @@ export function TransformCard({
             canManage={canManage}
             bundled={transform.bundled}
             installing={installing}
+            updateAvailable={updateAvailable}
+            updating={updating}
             toggling={toggling}
             onInstall={onInstall}
+            onUpdate={onUpdate}
             onEnable={onEnable}
             onDisable={onDisable}
           />
