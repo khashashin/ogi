@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, Keyboard, Lock, Unlock, Users } from "lucide-react";
+import { Download, Globe, GlobeLock, Keyboard, Users } from "lucide-react";
 
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
@@ -70,7 +70,7 @@ export function RightToolbar() {
                   : "Private Project (Click to make Public)"
               }
             >
-              {currentProject?.is_public ? <Unlock size={14} /> : <Lock size={14} />}
+              {currentProject?.is_public ? <Globe size={14} /> : <GlobeLock size={14} />}
             </button>
           </>
         )}
