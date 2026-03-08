@@ -80,11 +80,11 @@ export function GraphCanvas() {
       selectNodes,
     clearSelection,
     selectEdge,
-    selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
     hiddenNodeIds,
     hiddenEdgeIds,
+    declutterState,
     nodeOverlay,
     persistPositions,
   } = useGraphStore();
@@ -374,16 +374,13 @@ export function GraphCanvas() {
             highlightedLabelBackground: SELECTED_LABEL_BG,
           };
         }
-        const isNeighbor =
-          selectedNodeIds.size === 1 &&
-          selectedNodeId &&
-          graph.hasNode(selectedNodeId) &&
-          graph.areNeighbors(node, selectedNodeId);
-        return {
-          ...data,
-          color: isNeighbor ? data.color : `${data.color}44`,
-          label: isNeighbor ? data.label : "",
-        };
+        if (declutterState.fadeUnselected) {
+          return {
+            ...data,
+            color: `${data.color}44`,
+            label: "",
+          };
+        }
       }
 
       return data;
@@ -414,7 +411,7 @@ export function GraphCanvas() {
         };
       }
 
-      if (selectedNodeIds.size > 0 && !nodeOverlay) {
+      if (selectedNodeIds.size > 0 && declutterState.fadeUnselected && !nodeOverlay) {
         const connectedToSelection = selectedNodeIds.has(src) || selectedNodeIds.has(tgt);
         if (!connectedToSelection) {
           return { ...data, hidden: true };
@@ -424,7 +421,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, pinnedNodeIds, nodeOverlay, graph]);
+  }, [selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, pinnedNodeIds, nodeOverlay, declutterState, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {

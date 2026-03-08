@@ -7,6 +7,7 @@ import { ENTITY_TYPE_META } from "../types/entity";
 import { api } from "../api/client";
 import { useUndoStore } from "./undoStore";
 import type { UndoAction } from "./undoStore";
+import { matchesEntitySearch } from "../lib/entitySearch";
 
 export interface GraphFilterState {
   types: string[];
@@ -41,6 +42,24 @@ interface HiddenGraphState {
 interface PinnedGraphState {
   entityIds: string[];
 }
+
+export type GraphFocusMode = "none" | "selection" | "neighbors-1" | "neighbors-2" | "search";
+
+export interface GraphDeclutterState {
+  focusMode: GraphFocusMode;
+  fadeUnselected: boolean;
+  hideIsolates: boolean;
+  hideLowDegree: boolean;
+  lowDegreeThreshold: number;
+}
+
+const DEFAULT_DECLUTTER_STATE: GraphDeclutterState = {
+  focusMode: "none",
+  fadeUnselected: false,
+  hideIsolates: false,
+  hideLowDegree: false,
+  lowDegreeThreshold: 1,
+};
 
 function loadPositions(projectId: string): NodePositions {
   try {
@@ -117,6 +136,35 @@ function savePinnedGraphState(projectId: string, state: PinnedGraphState): void 
   localStorage.setItem(`ogi-pinned-${projectId}`, JSON.stringify(state));
 }
 
+function loadDeclutterState(projectId: string): GraphDeclutterState {
+  try {
+    const raw = localStorage.getItem(`ogi-declutter-${projectId}`);
+    if (!raw) return { ...DEFAULT_DECLUTTER_STATE };
+    const parsed = JSON.parse(raw) as Partial<GraphDeclutterState>;
+    return {
+      ...DEFAULT_DECLUTTER_STATE,
+      ...parsed,
+      focusMode:
+        parsed.focusMode === "selection" ||
+        parsed.focusMode === "neighbors-1" ||
+        parsed.focusMode === "neighbors-2" ||
+        parsed.focusMode === "search"
+          ? parsed.focusMode
+          : "none",
+      lowDegreeThreshold:
+        typeof parsed.lowDegreeThreshold === "number" && parsed.lowDegreeThreshold >= 0
+          ? parsed.lowDegreeThreshold
+          : 1,
+    };
+  } catch {
+    return { ...DEFAULT_DECLUTTER_STATE };
+  }
+}
+
+function saveDeclutterState(projectId: string, state: GraphDeclutterState): void {
+  localStorage.setItem(`ogi-declutter-${projectId}`, JSON.stringify(state));
+}
+
 function computeFilteredHiddenNodeIds(
   entities: Map<string, Entity>,
   filters: GraphFilterState,
@@ -155,13 +203,128 @@ function computeFilteredHiddenNodeIds(
   return hidden;
 }
 
+function computeFocusVisibleNodeIds(
+  graph: Graph,
+  entities: Map<string, Entity>,
+  selectedNodeIds: Set<string>,
+  searchQuery: string,
+  focusMode: GraphFocusMode,
+): Set<string> | null {
+  if (focusMode === "none") return null;
+
+  if (focusMode === "search") {
+    if (!searchQuery.trim()) return null;
+    const visible = new Set<string>();
+    for (const [id, entity] of entities.entries()) {
+      if (matchesEntitySearch(entity, searchQuery)) visible.add(id);
+    }
+    return visible;
+  }
+
+  if (selectedNodeIds.size === 0) return null;
+
+  if (focusMode === "selection") {
+    return new Set(selectedNodeIds);
+  }
+
+  const visible = new Set<string>(selectedNodeIds);
+  const queue = [...selectedNodeIds].map((id) => ({ id, depth: 0 }));
+  const maxDepth = focusMode === "neighbors-2" ? 2 : 1;
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || current.depth >= maxDepth || !graph.hasNode(current.id)) continue;
+    for (const neighbor of graph.neighbors(current.id)) {
+      if (!visible.has(neighbor)) {
+        visible.add(neighbor);
+        queue.push({ id: neighbor, depth: current.depth + 1 });
+      }
+    }
+  }
+
+  return visible;
+}
+
+function computeDerivedHiddenNodeIds(
+  graph: Graph,
+  entities: Map<string, Entity>,
+  baseHiddenNodeIds: Set<string>,
+  selectedNodeIds: Set<string>,
+  searchQuery: string,
+  declutterState: GraphDeclutterState,
+): Set<string> {
+  const hidden = new Set<string>();
+  const focusVisibleNodeIds = computeFocusVisibleNodeIds(
+    graph,
+    entities,
+    selectedNodeIds,
+    searchQuery,
+    declutterState.focusMode,
+  );
+
+  for (const id of entities.keys()) {
+    if (baseHiddenNodeIds.has(id)) continue;
+    if (focusVisibleNodeIds && !focusVisibleNodeIds.has(id)) hidden.add(id);
+  }
+
+  const visibleAfterFocus = new Set<string>();
+  for (const id of entities.keys()) {
+    if (!baseHiddenNodeIds.has(id) && !hidden.has(id)) visibleAfterFocus.add(id);
+  }
+
+  if (declutterState.hideIsolates || declutterState.hideLowDegree) {
+    const threshold = declutterState.hideLowDegree ? Math.max(0, declutterState.lowDegreeThreshold) : 0;
+    const preserveIds = new Set<string>(selectedNodeIds);
+    if (focusVisibleNodeIds) {
+      for (const id of focusVisibleNodeIds) preserveIds.add(id);
+    }
+    if (declutterState.focusMode === "search" && searchQuery.trim()) {
+      for (const [id, entity] of entities.entries()) {
+        if (matchesEntitySearch(entity, searchQuery)) preserveIds.add(id);
+      }
+    }
+
+    for (const id of visibleAfterFocus) {
+      if (preserveIds.has(id)) continue;
+      let degree = 0;
+      if (graph.hasNode(id)) {
+        for (const neighbor of graph.neighbors(id)) {
+          if (visibleAfterFocus.has(neighbor)) degree += 1;
+        }
+      }
+      if (declutterState.hideIsolates && degree === 0) {
+        hidden.add(id);
+        continue;
+      }
+      if (declutterState.hideLowDegree && degree <= threshold) {
+        hidden.add(id);
+      }
+    }
+  }
+
+  return hidden;
+}
+
 function computeHiddenNodeIds(
+  graph: Graph,
   entities: Map<string, Entity>,
   filters: GraphFilterState,
   manualHiddenNodeIds: Set<string>,
+  selectedNodeIds: Set<string>,
+  searchQuery: string,
+  declutterState: GraphDeclutterState,
 ): Set<string> {
   const hidden = computeFilteredHiddenNodeIds(entities, filters);
   for (const id of manualHiddenNodeIds) hidden.add(id);
+  const derivedHidden = computeDerivedHiddenNodeIds(
+    graph,
+    entities,
+    hidden,
+    selectedNodeIds,
+    searchQuery,
+    declutterState,
+  );
+  for (const id of derivedHidden) hidden.add(id);
   return hidden;
 }
 
@@ -221,6 +384,7 @@ interface GraphState {
   hiddenNodeIds: Set<string>;
   hiddenEdgeIds: Set<string>;
   filterState: GraphFilterState;
+  declutterState: GraphDeclutterState;
   searchQuery: string;
   centerView: CenterView;
   currentProjectId: string | null;
@@ -253,6 +417,11 @@ interface GraphState {
   unhideNode: (projectId: string, nodeId: string) => void;
   unhideEdge: (projectId: string, edgeId: string) => void;
   unhideAll: (projectId: string) => void;
+  setFocusMode: (projectId: string, mode: GraphFocusMode) => void;
+  setFadeUnselected: (projectId: string, enabled: boolean) => void;
+  setHideIsolates: (projectId: string, enabled: boolean) => void;
+  setHideLowDegree: (projectId: string, enabled: boolean, threshold?: number) => void;
+  clearDeclutterState: (projectId: string) => void;
   setSearchQuery: (query: string) => void;
   setFilterState: (projectId: string, patch: Partial<GraphFilterState>) => void;
   resetFilters: (projectId: string) => void;
@@ -282,6 +451,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   hiddenNodeIds: new Set(),
   hiddenEdgeIds: new Set(),
   filterState: { ...DEFAULT_FILTER_STATE },
+  declutterState: { ...DEFAULT_DECLUTTER_STATE },
   searchQuery: "",
   centerView: "graph",
   currentProjectId: null,
@@ -301,6 +471,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const filterState = loadFilters(projectId);
       const hiddenState = loadHiddenGraphState(projectId);
       const pinnedState = loadPinnedGraphState(projectId);
+      const declutterState = loadDeclutterState(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
@@ -331,7 +502,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const manualHiddenNodeIds = new Set(hiddenState.entityIds.filter((id) => entities.has(id)));
       const manualHiddenEdgeIds = new Set(hiddenState.edgeIds.filter((id) => edges.has(id)));
       const pinnedNodeIds = new Set(pinnedState.entityIds.filter((id) => entities.has(id)));
-      const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        graph,
+        entities,
+        filterState,
+        manualHiddenNodeIds,
+        new Set(),
+        "",
+        declutterState,
+      );
       const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
       set({
         graph,
@@ -343,11 +522,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         hiddenNodeIds,
         hiddenEdgeIds,
         filterState,
+        declutterState,
         currentProjectId: projectId,
         loading: false,
         selectedNodeId: null,
         selectedEdgeId: null,
         selectedNodeIds: new Set(),
+        searchQuery: "",
         nodeOverlay: null,
         analysisResults: null,
       });
@@ -367,6 +548,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const filterState = get().filterState;
       const hiddenState = loadHiddenGraphState(projectId);
       const pinnedState = loadPinnedGraphState(projectId);
+      const declutterState = loadDeclutterState(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
@@ -397,7 +579,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const manualHiddenNodeIds = new Set(hiddenState.entityIds.filter((id) => entities.has(id)));
       const manualHiddenEdgeIds = new Set(hiddenState.edgeIds.filter((id) => edges.has(id)));
       const pinnedNodeIds = new Set(pinnedState.entityIds.filter((id) => entities.has(id)));
-      const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        graph,
+        entities,
+        filterState,
+        manualHiddenNodeIds,
+        get().selectedNodeIds,
+        get().searchQuery,
+        declutterState,
+      );
       const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
       set({
         graph,
@@ -408,11 +598,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         manualHiddenEdgeIds,
         hiddenNodeIds,
         hiddenEdgeIds,
+        declutterState,
         currentProjectId: projectId,
         loading: false,
         selectedNodeId: null,
         selectedEdgeId: null,
         selectedNodeIds: new Set(),
+        searchQuery: "",
         nodeOverlay: null,
       });
     } catch (e) {
@@ -437,8 +629,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     entities.set(entity.id, entity);
     useUndoStore.getState().push({ type: "add_entity", entity, nodeAttrs });
-    const { filterState, manualHiddenNodeIds, manualHiddenEdgeIds, edges } = get();
-    const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
+    const { filterState, manualHiddenNodeIds, manualHiddenEdgeIds, edges, selectedNodeIds, searchQuery, declutterState } = get();
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      entities,
+      filterState,
+      manualHiddenNodeIds,
+      selectedNodeIds,
+      searchQuery,
+      declutterState,
+    );
     set({
       graph,
       entities: new Map(entities),
@@ -495,16 +695,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       pinnedNodeIds: nextPinnedNodeIds,
       manualHiddenNodeIds: new Set([...manualHiddenNodeIds].filter((id) => id !== entityId)),
       hiddenNodeIds: computeHiddenNodeIds(
+        graph,
         entities,
         get().filterState,
         new Set([...manualHiddenNodeIds].filter((id) => id !== entityId)),
+        nextSelectedNodeIds,
+        get().searchQuery,
+        get().declutterState,
       ),
       hiddenEdgeIds: computeHiddenEdgeIds(
         edges,
         computeHiddenNodeIds(
+          graph,
           entities,
           get().filterState,
           new Set([...manualHiddenNodeIds].filter((id) => id !== entityId)),
+          nextSelectedNodeIds,
+          get().searchQuery,
+          get().declutterState,
         ),
         new Set([...manualHiddenEdgeIds].filter((id) => edges.has(id))),
       ),
@@ -525,11 +733,25 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     edges.set(edge.id, edge);
     useUndoStore.getState().push({ type: "add_edge", edge, edgeAttrs });
-    set({ graph, edges: new Map(edges) });
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      get().entities,
+      get().filterState,
+      get().manualHiddenNodeIds,
+      get().selectedNodeIds,
+      get().searchQuery,
+      get().declutterState,
+    );
+    set({
+      graph,
+      edges: new Map(edges),
+      hiddenNodeIds,
+      hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, get().manualHiddenEdgeIds),
+    });
   },
 
   removeEdge: async (projectId, edgeId) => {
-    const { graph, edges, hiddenNodeIds, manualHiddenEdgeIds } = get();
+    const { graph, edges, manualHiddenEdgeIds } = get();
     const edge = edges.get(edgeId);
     if (!edge) return;
 
@@ -540,15 +762,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     edges.delete(edgeId);
     useUndoStore.getState().push({ type: "remove_edge", edge, edgeAttrs });
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      get().entities,
+      get().filterState,
+      get().manualHiddenNodeIds,
+      get().selectedNodeIds,
+      get().searchQuery,
+      get().declutterState,
+    );
     set({
       graph,
       edges: new Map(edges),
       manualHiddenEdgeIds: new Set([...manualHiddenEdgeIds].filter((id) => id !== edgeId)),
-      hiddenEdgeIds: computeHiddenEdgeIds(
-        edges,
-        hiddenNodeIds,
-        new Set([...manualHiddenEdgeIds].filter((id) => id !== edgeId)),
-      ),
+      hiddenNodeIds,
+      hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, new Set([...manualHiddenEdgeIds].filter((id) => id !== edgeId))),
     });
   },
 
@@ -574,7 +802,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   selectNode: (nodeId, mode = "replace") =>
     set((state) => {
       if (nodeId === null) {
-        return { selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: new Set<string>() };
+        const selectedNodeIds = new Set<string>();
+        const hiddenNodeIds = computeHiddenNodeIds(
+          state.graph,
+          state.entities,
+          state.filterState,
+          state.manualHiddenNodeIds,
+          selectedNodeIds,
+          state.searchQuery,
+          state.declutterState,
+        );
+        return {
+          selectedNodeId: null,
+          selectedEdgeId: null,
+          selectedNodeIds,
+          hiddenNodeIds,
+          hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+        };
       }
       const next = mode === "replace" ? new Set<string>() : new Set(state.selectedNodeIds);
       if (mode === "toggle") {
@@ -583,10 +827,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       } else {
         next.add(nodeId);
       }
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        next,
+        state.searchQuery,
+        state.declutterState,
+      );
       return {
         selectedNodeId: next.has(nodeId) ? nodeId : (next.values().next().value ?? null),
         selectedEdgeId: null,
         selectedNodeIds: next,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
       };
     }),
   selectNodes: (nodeIds, mode = "replace") =>
@@ -600,14 +855,63 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       } else {
         for (const id of nodeIds) next.add(id);
       }
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        next,
+        state.searchQuery,
+        state.declutterState,
+      );
       return {
         selectedNodeId: next.values().next().value ?? null,
         selectedEdgeId: null,
         selectedNodeIds: next,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
       };
     }),
-  selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null, selectedNodeIds: new Set() }),
-  clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: new Set() }),
+  selectEdge: (edgeId) =>
+    set((state) => {
+      const selectedNodeIds = new Set<string>();
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        selectedNodeIds,
+        state.searchQuery,
+        state.declutterState,
+      );
+      return {
+        selectedEdgeId: edgeId,
+        selectedNodeId: null,
+        selectedNodeIds,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
+  clearSelection: () =>
+    set((state) => {
+      const selectedNodeIds = new Set<string>();
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        selectedNodeIds,
+        state.searchQuery,
+        state.declutterState,
+      );
+      return {
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        selectedNodeIds,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
   pinNode: (projectId, nodeId) => {
     const { entities, pinnedNodeIds } = get();
     if (!entities.has(nodeId)) return;
@@ -645,16 +949,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ pinnedNodeIds: new Set() });
   },
   hideNode: (projectId, nodeId) => {
-    const { entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds } = get();
+    const { graph, entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds, searchQuery, declutterState } = get();
     if (!entities.has(nodeId)) return;
     const nextManualHiddenNodeIds = new Set(manualHiddenNodeIds).add(nodeId);
-    const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, nextManualHiddenNodeIds);
+    const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => id !== nodeId));
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      entities,
+      filterState,
+      nextManualHiddenNodeIds,
+      nextSelectedNodeIds,
+      searchQuery,
+      declutterState,
+    );
     const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
     saveHiddenGraphState(projectId, {
       entityIds: [...nextManualHiddenNodeIds],
       edgeIds: [...manualHiddenEdgeIds],
     });
-    const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => id !== nodeId));
     const nextSelectedNodeId =
       get().selectedNodeId === nodeId ? (nextSelectedNodeIds.values().next().value ?? null) : get().selectedNodeId;
     set({
@@ -710,9 +1022,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
   unhideNode: (projectId, nodeId) => {
-    const { entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds } = get();
+    const { graph, entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds, selectedNodeIds, searchQuery, declutterState } = get();
     const nextManualHiddenNodeIds = new Set([...manualHiddenNodeIds].filter((id) => id !== nodeId));
-    const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, nextManualHiddenNodeIds);
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      entities,
+      filterState,
+      nextManualHiddenNodeIds,
+      selectedNodeIds,
+      searchQuery,
+      declutterState,
+    );
     const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
     saveHiddenGraphState(projectId, {
       entityIds: [...nextManualHiddenNodeIds],
@@ -737,11 +1057,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
   unhideAll: (projectId) => {
-    const { entities, edges, filterState } = get();
+    const { graph, entities, edges, filterState, selectedNodeIds, searchQuery, declutterState } = get();
     const manualHiddenNodeIds = new Set<string>();
     const manualHiddenEdgeIds = new Set<string>();
     saveHiddenGraphState(projectId, { entityIds: [], edgeIds: [] });
-    const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      entities,
+      filterState,
+      manualHiddenNodeIds,
+      selectedNodeIds,
+      searchQuery,
+      declutterState,
+    );
     set({
       manualHiddenNodeIds,
       manualHiddenEdgeIds,
@@ -749,11 +1077,122 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds),
     });
   },
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  setFocusMode: (projectId, mode) =>
+    set((state) => {
+      const declutterState = { ...state.declutterState, focusMode: mode };
+      saveDeclutterState(projectId, declutterState);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        state.selectedNodeIds,
+        state.searchQuery,
+        declutterState,
+      );
+      return {
+        declutterState,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
+  setFadeUnselected: (projectId, enabled) =>
+    set((state) => {
+      const declutterState = { ...state.declutterState, fadeUnselected: enabled };
+      saveDeclutterState(projectId, declutterState);
+      return { declutterState };
+    }),
+  setHideIsolates: (projectId, enabled) =>
+    set((state) => {
+      const declutterState = { ...state.declutterState, hideIsolates: enabled };
+      saveDeclutterState(projectId, declutterState);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        state.selectedNodeIds,
+        state.searchQuery,
+        declutterState,
+      );
+      return {
+        declutterState,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
+  setHideLowDegree: (projectId, enabled, threshold) =>
+    set((state) => {
+      const declutterState = {
+        ...state.declutterState,
+        hideLowDegree: enabled,
+        lowDegreeThreshold:
+          typeof threshold === "number" ? Math.max(0, Math.floor(threshold)) : state.declutterState.lowDegreeThreshold,
+      };
+      saveDeclutterState(projectId, declutterState);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        state.selectedNodeIds,
+        state.searchQuery,
+        declutterState,
+      );
+      return {
+        declutterState,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
+  clearDeclutterState: (projectId) =>
+    set((state) => {
+      const declutterState = { ...DEFAULT_DECLUTTER_STATE };
+      saveDeclutterState(projectId, declutterState);
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        state.selectedNodeIds,
+        state.searchQuery,
+        declutterState,
+      );
+      return {
+        declutterState,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
+  setSearchQuery: (query) =>
+    set((state) => {
+      const hiddenNodeIds = computeHiddenNodeIds(
+        state.graph,
+        state.entities,
+        state.filterState,
+        state.manualHiddenNodeIds,
+        state.selectedNodeIds,
+        query,
+        state.declutterState,
+      );
+      return {
+        searchQuery: query,
+        hiddenNodeIds,
+        hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+      };
+    }),
   setFilterState: (projectId, patch) => {
     const nextFilterState = { ...get().filterState, ...patch };
     saveFilters(projectId, nextFilterState);
-    const hiddenNodeIds = computeHiddenNodeIds(get().entities, nextFilterState, get().manualHiddenNodeIds);
+    const hiddenNodeIds = computeHiddenNodeIds(
+      get().graph,
+      get().entities,
+      nextFilterState,
+      get().manualHiddenNodeIds,
+      get().selectedNodeIds,
+      get().searchQuery,
+      get().declutterState,
+    );
     set({
       filterState: nextFilterState,
       hiddenNodeIds,
@@ -763,7 +1202,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   resetFilters: (projectId) => {
     const nextFilterState = { ...DEFAULT_FILTER_STATE };
     saveFilters(projectId, nextFilterState);
-    const hiddenNodeIds = computeHiddenNodeIds(get().entities, nextFilterState, get().manualHiddenNodeIds);
+    const hiddenNodeIds = computeHiddenNodeIds(
+      get().graph,
+      get().entities,
+      nextFilterState,
+      get().manualHiddenNodeIds,
+      get().selectedNodeIds,
+      get().searchQuery,
+      get().declutterState,
+    );
     set({
       filterState: nextFilterState,
       hiddenNodeIds,
@@ -789,6 +1236,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       hiddenNodeIds: new Set(),
       hiddenEdgeIds: new Set(),
       filterState: { ...DEFAULT_FILTER_STATE },
+      declutterState: { ...DEFAULT_DECLUTTER_STATE },
       searchQuery: "",
       centerView: "graph",
       currentProjectId: null,

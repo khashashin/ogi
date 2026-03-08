@@ -33,6 +33,8 @@ export function Toolbar() {
     pinnedNodeIds,
     manualHiddenNodeIds,
     manualHiddenEdgeIds,
+    declutterState,
+    searchQuery,
     pinSelected,
     unpinSelected,
     pinVisible,
@@ -41,6 +43,11 @@ export function Toolbar() {
     unhideAll,
     unhideNode,
     unhideEdge,
+    setFocusMode,
+    setFadeUnselected,
+    setHideIsolates,
+    setHideLowDegree,
+    clearDeclutterState,
   } = useGraphStore();
   const submitJob = useTransformJobStore((s) => s.submitJob);
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
@@ -49,6 +56,7 @@ export function Toolbar() {
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
+  const [showDeclutter, setShowDeclutter] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [showBulkTransforms, setShowBulkTransforms] = useState(false);
   const [allTransforms, setAllTransforms] = useState<TransformInfo[]>([]);
@@ -97,6 +105,12 @@ export function Toolbar() {
     }))
     .filter((item) => item.count > 0);
   const selectedPinnedCount = selectedEntities.filter((entity) => pinnedNodeIds.has(entity.id)).length;
+  const hasActiveDeclutter =
+    declutterState.focusMode !== "none" ||
+    declutterState.fadeUnselected ||
+    declutterState.hideIsolates ||
+    declutterState.hideLowDegree;
+  const canUseSelectionFocus = selectedNodeIds.size > 0;
 
   useEffect(() => {
     if (!showBulkTransforms || allTransforms.length > 0) return;
@@ -358,6 +372,109 @@ export function Toolbar() {
               >
                 <Lock size={14} />
               </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowDeclutter((open) => !open)}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded ${
+                    hasActiveDeclutter ? "text-accent bg-surface-hover" : "text-text-muted hover:text-text hover:bg-surface-hover"
+                  }`}
+                  title="Focus and declutter tools"
+                >
+                  <Focus size={12} />
+                  Focus
+                </button>
+                {showDeclutter && currentProject && (
+                  <div className="absolute right-0 top-8 z-50 w-72 rounded border border-border bg-surface shadow-lg p-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-medium text-text">Focus & Declutter</div>
+                        <div className="text-[10px] text-text-muted">
+                          Reversible view modes for crowded graphs
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => clearDeclutterState(currentProject.id)}
+                        disabled={!hasActiveDeclutter}
+                        className="text-[11px] text-accent disabled:opacity-40"
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">Focus</div>
+                      <button
+                        onClick={() => setFocusMode(currentProject.id, "selection")}
+                        disabled={!canUseSelectionFocus}
+                        className={`w-full rounded px-2 py-1.5 text-left text-xs ${
+                          declutterState.focusMode === "selection" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                        } disabled:opacity-40`}
+                      >
+                        Focus on selection
+                      </button>
+                      <button
+                        onClick={() => setFocusMode(currentProject.id, "neighbors-1")}
+                        disabled={!canUseSelectionFocus}
+                        className={`w-full rounded px-2 py-1.5 text-left text-xs ${
+                          declutterState.focusMode === "neighbors-1" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                        } disabled:opacity-40`}
+                      >
+                        Show 1-hop neighborhood
+                      </button>
+                      <button
+                        onClick={() => setFocusMode(currentProject.id, "neighbors-2")}
+                        disabled={!canUseSelectionFocus}
+                        className={`w-full rounded px-2 py-1.5 text-left text-xs ${
+                          declutterState.focusMode === "neighbors-2" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                        } disabled:opacity-40`}
+                      >
+                        Show 2-hop neighborhood
+                      </button>
+                      <button
+                        onClick={() => setFocusMode(currentProject.id, "search")}
+                        disabled={!searchQuery.trim()}
+                        className={`w-full rounded px-2 py-1.5 text-left text-xs ${
+                          declutterState.focusMode === "search" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                        } disabled:opacity-40`}
+                      >
+                        Show only current search hits
+                      </button>
+                    </div>
+
+                    <div className="border-t border-border pt-2 space-y-1">
+                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">Declutter</div>
+                      <label className="flex items-center justify-between gap-3 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover">
+                        <span>Fade unselected</span>
+                        <input
+                          type="checkbox"
+                          checked={declutterState.fadeUnselected}
+                          onChange={(e) => setFadeUnselected(currentProject.id, e.target.checked)}
+                          className="accent-accent"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between gap-3 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover">
+                        <span>Hide isolates</span>
+                        <input
+                          type="checkbox"
+                          checked={declutterState.hideIsolates}
+                          onChange={(e) => setHideIsolates(currentProject.id, e.target.checked)}
+                          className="accent-accent"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between gap-3 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover">
+                        <span>Hide low-degree nodes</span>
+                        <input
+                          type="checkbox"
+                          checked={declutterState.hideLowDegree}
+                          onChange={(e) => setHideLowDegree(currentProject.id, e.target.checked)}
+                          className="accent-accent"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="relative">
                 <button
