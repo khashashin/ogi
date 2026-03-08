@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import Graph from "graphology";
 
 import { EntityType, type Entity } from "../types/entity";
 import { DEFAULT_FILTER_STATE, useGraphStore } from "./graphStore";
@@ -36,6 +37,17 @@ function makeEdge(id: string, sourceId: string, targetId: string): Edge {
     project_id: "p-1",
     created_at: "2026-03-03T10:00:00Z",
   };
+}
+
+function makeGraph(entities: Entity[], edges: Edge[] = []) {
+  const graph = new Graph({ multi: true, type: "directed" });
+  for (const entity of entities) {
+    graph.addNode(entity.id, { x: 0, y: 0, size: 8, color: "#6366f1", label: entity.value });
+  }
+  for (const edge of edges) {
+    graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, { label: edge.label });
+  }
+  return graph;
 }
 
 describe("graphStore filters", () => {
@@ -242,5 +254,97 @@ describe("graphStore filters", () => {
 
     expect(useGraphStore.getState().pinnedNodeIds.has(a.id)).toBe(true);
     expect(useGraphStore.getState().pinnedNodeIds.has(b.id)).toBe(false);
+  });
+
+  it("focuses on the current selection without deleting other nodes", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b");
+    const c = makeEntity("e-c");
+    useGraphStore.setState({
+      graph: makeGraph([a, b, c]),
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+        [c.id, c],
+      ]),
+      selectedNodeId: a.id,
+      selectedNodeIds: new Set([a.id]),
+    });
+
+    useGraphStore.getState().setFocusMode("p-1", "selection");
+
+    let state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.has(a.id)).toBe(false);
+    expect(state.hiddenNodeIds.has(b.id)).toBe(true);
+    expect(state.hiddenNodeIds.has(c.id)).toBe(true);
+    expect(state.entities.has(b.id)).toBe(true);
+
+    useGraphStore.getState().clearDeclutterState("p-1");
+    state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.size).toBe(0);
+  });
+
+  it("shows one-hop and two-hop neighborhoods around the selection", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b");
+    const c = makeEntity("e-c");
+    const d = makeEntity("e-d");
+    const ab = makeEdge("ab", a.id, b.id);
+    const bc = makeEdge("bc", b.id, c.id);
+    const cd = makeEdge("cd", c.id, d.id);
+    useGraphStore.setState({
+      graph: makeGraph([a, b, c, d], [ab, bc, cd]),
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+        [c.id, c],
+        [d.id, d],
+      ]),
+      edges: new Map([
+        [ab.id, ab],
+        [bc.id, bc],
+        [cd.id, cd],
+      ]),
+      selectedNodeId: b.id,
+      selectedNodeIds: new Set([b.id]),
+    });
+
+    useGraphStore.getState().setFocusMode("p-1", "neighbors-1");
+    let state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.has(a.id)).toBe(false);
+    expect(state.hiddenNodeIds.has(b.id)).toBe(false);
+    expect(state.hiddenNodeIds.has(c.id)).toBe(false);
+    expect(state.hiddenNodeIds.has(d.id)).toBe(true);
+
+    useGraphStore.getState().setFocusMode("p-1", "neighbors-2");
+    state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.has(d.id)).toBe(false);
+  });
+
+  it("can hide isolates and show only current search hits as derived view state", () => {
+    const alpha = makeEntity("e-alpha", { value: "alpha.example.org" });
+    const beta = makeEntity("e-beta", { value: "beta.example.org" });
+    const gamma = makeEntity("e-gamma", { value: "gamma.example.org" });
+    const edge = makeEdge("ab", alpha.id, beta.id);
+    useGraphStore.setState({
+      graph: makeGraph([alpha, beta, gamma], [edge]),
+      entities: new Map([
+        [alpha.id, alpha],
+        [beta.id, beta],
+        [gamma.id, gamma],
+      ]),
+      edges: new Map([[edge.id, edge]]),
+    });
+
+    useGraphStore.getState().setHideIsolates("p-1", true);
+    let state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.has(gamma.id)).toBe(true);
+    expect(state.hiddenNodeIds.has(alpha.id)).toBe(false);
+
+    useGraphStore.getState().setSearchQuery("alpha");
+    useGraphStore.getState().setFocusMode("p-1", "search");
+    state = useGraphStore.getState();
+    expect(state.hiddenNodeIds.has(alpha.id)).toBe(false);
+    expect(state.hiddenNodeIds.has(beta.id)).toBe(true);
   });
 });
