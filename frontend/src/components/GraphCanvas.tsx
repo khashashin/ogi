@@ -8,7 +8,7 @@ import { setSigmaRef } from "../stores/sigmaRef";
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, hiddenNodeIds, nodeOverlay, persistPositions } = useGraphStore();
+  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, hiddenNodeIds, hiddenEdgeIds, nodeOverlay, persistPositions } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
@@ -229,7 +229,7 @@ export function GraphCanvas() {
     renderer.setSetting("edgeReducer", (edge, data) => {
       const src = graph.source(edge);
       const tgt = graph.target(edge);
-      if (hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
+      if (hiddenEdgeIds.has(edge) || hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
         return { ...data, hidden: true };
       }
 
@@ -260,7 +260,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, nodeOverlay, graph]);
+  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {

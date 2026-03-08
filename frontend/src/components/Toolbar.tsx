@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon } from "lucide-react";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -17,7 +17,24 @@ import { applyGraphLayout, GRAPH_LAYOUT_OPTIONS, type GraphLayoutPreset } from "
 
 export function Toolbar() {
   const { currentProject, updateProject } = useProjectStore();
-  const { graph, entities, edges, centerView, setCenterView, persistPositions, performUndo, performRedo } = useGraphStore();
+  const {
+    graph,
+    entities,
+    edges,
+    centerView,
+    setCenterView,
+    persistPositions,
+    performUndo,
+    performRedo,
+    selectedNodeId,
+    selectedEdgeId,
+    manualHiddenNodeIds,
+    manualHiddenEdgeIds,
+    hideSelected,
+    unhideAll,
+    unhideNode,
+    unhideEdge,
+  } = useGraphStore();
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showExportImport, setShowExportImport] = useState(false);
@@ -26,6 +43,7 @@ export function Toolbar() {
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [selectedLayout, setSelectedLayout] = useState<GraphLayoutPreset>("force");
   const { user, authEnabled } = useAuthStore();
   const isViewer = useIsViewer();
@@ -57,6 +75,13 @@ export function Toolbar() {
   const handleZoomIn = () => getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
   const handleZoomOut = () => getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
   const handleFit = () => getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
+  const hiddenEntities = [...manualHiddenNodeIds]
+    .map((id) => entities.get(id))
+    .filter((entity): entity is NonNullable<typeof entity> => Boolean(entity));
+  const hiddenEdges = [...manualHiddenEdgeIds]
+    .map((id) => edges.get(id))
+    .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge));
+  const hasSelection = Boolean(selectedNodeId || selectedEdgeId);
 
   return (
     <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
@@ -160,6 +185,94 @@ export function Toolbar() {
           </div>
 
           <div className="w-px h-4 bg-border" />
+
+          {!isViewer && (
+            <>
+              <button
+                onClick={() => currentProject && hideSelected(currentProject.id)}
+                disabled={!currentProject || !hasSelection}
+                className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
+                title="Hide selected item"
+              >
+                <EyeOff size={14} />
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowHiddenItems((open) => !open)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-surface-hover rounded"
+                  title="Show hidden items"
+                >
+                  <Eye size={12} />
+                  Hidden {manualHiddenNodeIds.size + manualHiddenEdgeIds.size > 0 ? `(${manualHiddenNodeIds.size + manualHiddenEdgeIds.size})` : ""}
+                </button>
+                {showHiddenItems && (
+                  <div className="absolute right-0 top-8 z-50 w-80 rounded border border-border bg-surface shadow-lg p-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-text">Hidden Items</span>
+                      <button
+                        onClick={() => currentProject && unhideAll(currentProject.id)}
+                        disabled={!currentProject || (manualHiddenNodeIds.size === 0 && manualHiddenEdgeIds.size === 0)}
+                        className="text-[11px] text-accent disabled:opacity-40"
+                      >
+                        Unhide all
+                      </button>
+                    </div>
+                    {hiddenEntities.length === 0 && hiddenEdges.length === 0 ? (
+                      <div className="text-[11px] text-text-muted">No hidden items.</div>
+                    ) : (
+                      <div className="max-h-72 overflow-auto space-y-2">
+                        {hiddenEntities.length > 0 && (
+                          <div>
+                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Entities</div>
+                            <div className="space-y-1">
+                              {hiddenEntities.map((entity) => (
+                                <div key={entity.id} className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-xs text-text">{entity.value}</div>
+                                    <div className="text-[10px] text-text-muted">{entity.type}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => currentProject && unhideNode(currentProject.id, entity.id)}
+                                    className="text-[11px] text-accent"
+                                  >
+                                    Show
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {hiddenEdges.length > 0 && (
+                          <div>
+                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Edges</div>
+                            <div className="space-y-1">
+                              {hiddenEdges.map((edge) => (
+                                <div key={edge.id} className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-xs text-text">{edge.label || "Edge"}</div>
+                                    <div className="text-[10px] text-text-muted">{edge.source_id.slice(0, 6)} {"->"} {edge.target_id.slice(0, 6)}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => currentProject && unhideEdge(currentProject.id, edge.id)}
+                                    className="text-[11px] text-accent"
+                                  >
+                                    Show
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="w-px h-4 bg-border" />
+            </>
+          )}
         </>
       )}
 

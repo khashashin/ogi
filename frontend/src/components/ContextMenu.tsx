@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil } from "lucide-react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -29,7 +29,7 @@ export function ContextMenu() {
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { entities, removeEntity, removeEdge, selectNode } = useGraphStore();
+  const { entities, removeEntity, removeEdge, selectNode, hideNode, hideEdge, hideConnectedEdges } = useGraphStore();
   const { currentProject } = useProjectStore();
   const isViewer = useIsViewer();
 
@@ -173,6 +173,27 @@ export function ContextMenu() {
     close();
   };
 
+  const handleHideNode = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    hideNode(currentProject.id, menu.id);
+    toast.success("Entity hidden");
+    close();
+  };
+
+  const handleHideConnectedEdges = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    hideConnectedEdges(currentProject.id, menu.id);
+    toast.success("Connected edges hidden");
+    close();
+  };
+
+  const handleHideEdge = () => {
+    if (!currentProject || !menu.id || menu.type !== "edge") return;
+    hideEdge(currentProject.id, menu.id);
+    toast.success("Edge hidden");
+    close();
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -232,6 +253,20 @@ export function ContextMenu() {
             </button>
           )}
 
+          {!isViewer && (
+            <>
+              <button onClick={handleHideNode} className={itemClass}>
+                <EyeOff size={12} />
+                Hide Selected Node
+              </button>
+
+              <button onClick={handleHideConnectedEdges} className={itemClass}>
+                <EyeOff size={12} />
+                Hide Connected Edges
+              </button>
+            </>
+          )}
+
           <button onClick={handleCopyValue} className={itemClass}>
             <Copy size={12} />
             Copy Value
@@ -282,6 +317,13 @@ export function ContextMenu() {
 
       {menu.type === "edge" && !isViewer && (
         <>
+          <button onClick={handleHideEdge} className={itemClass}>
+            <EyeOff size={12} />
+            Hide Edge
+          </button>
+
+          <div className="border-t border-border my-1" />
+
           <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
             <Trash2 size={12} />
             Delete Edge
