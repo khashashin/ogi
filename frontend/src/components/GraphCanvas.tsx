@@ -9,6 +9,7 @@ const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
 const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
+const DRAG_DAMPING = 0.1;
 
 function drawHighlightedNodeHover(
   context: CanvasRenderingContext2D,
@@ -21,7 +22,11 @@ function drawHighlightedNodeHover(
     highlightedLabelColor?: string;
     highlightedLabelBackground?: string;
   },
-  settings: { labelSize: number; labelFont: string; labelWeight?: string | number },
+  settings: {
+    labelSize: number;
+    labelFont: string;
+    labelWeight?: string | number;
+  },
 ) {
   if (!data.label) return;
 
@@ -47,11 +52,26 @@ function drawHighlightedNodeHover(
   context.beginPath();
   context.moveTo(boxX + radius, boxY);
   context.lineTo(boxX + boxWidth - radius, boxY);
-  context.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + radius);
+  context.quadraticCurveTo(
+    boxX + boxWidth,
+    boxY,
+    boxX + boxWidth,
+    boxY + radius,
+  );
   context.lineTo(boxX + boxWidth, boxY + boxHeight - radius);
-  context.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - radius, boxY + boxHeight);
+  context.quadraticCurveTo(
+    boxX + boxWidth,
+    boxY + boxHeight,
+    boxX + boxWidth - radius,
+    boxY + boxHeight,
+  );
   context.lineTo(boxX + radius, boxY + boxHeight);
-  context.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+  context.quadraticCurveTo(
+    boxX,
+    boxY + boxHeight,
+    boxX,
+    boxY + boxHeight - radius,
+  );
   context.lineTo(boxX, boxY + radius);
   context.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
   context.closePath();
@@ -77,21 +97,30 @@ export function GraphCanvas() {
     entities,
     pinnedNodeIds,
     selectNode,
-      selectNodes,
+    selectNodes,
     clearSelection,
     selectEdge,
-    selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
     hiddenNodeIds,
     hiddenEdgeIds,
+    declutterState,
     nodeOverlay,
     persistPositions,
   } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; x: number; y: number }>(null);
-  const selectionStateRef = useRef<null | { startX: number; startY: number; mode: "replace" | "add" | "toggle" }>(null);
+  const [selectionBox, setSelectionBox] = useState<null | {
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+  }>(null);
+  const selectionStateRef = useRef<null | {
+    startX: number;
+    startY: number;
+    mode: "replace" | "add" | "toggle";
+  }>(null);
   const suppressStageClickRef = useRef(false);
   const pinnedNodeIdsRef = useRef(pinnedNodeIds);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
@@ -116,8 +145,17 @@ export function GraphCanvas() {
     startX: number;
     startY: number;
     hasMoved: boolean;
+    anchorOffset: { x: number; y: number };
     groupOffsets: Map<string, { x: number; y: number }>;
-  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false, groupOffsets: new Map() });
+  }>({
+    dragging: false,
+    draggedNode: null,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    anchorOffset: { x: 0, y: 0 },
+    groupOffsets: new Map(),
+  });
 
   const initSigma = useCallback(() => {
     if (!containerRef.current) return;
@@ -149,7 +187,8 @@ export function GraphCanvas() {
       // Don't fire click if we just finished dragging
       if (ds.hasMoved) return;
       const mouseEvent = event.original as MouseEvent;
-      const additive = mouseEvent.ctrlKey || mouseEvent.metaKey || mouseEvent.shiftKey;
+      const additive =
+        mouseEvent.ctrlKey || mouseEvent.metaKey || mouseEvent.shiftKey;
       selectNode(node, additive ? "toggle" : "replace");
     });
 
@@ -193,16 +232,30 @@ export function GraphCanvas() {
       ds.groupOffsets = new Map();
 
       const dragGroup =
-        selectedNodeIdsRef.current.size > 1 && selectedNodeIdsRef.current.has(node)
-          ? [...selectedNodeIdsRef.current].filter((groupNodeId) => !pinnedNodeIdsRef.current.has(groupNodeId))
+        selectedNodeIdsRef.current.size > 1 &&
+        selectedNodeIdsRef.current.has(node)
+          ? [...selectedNodeIdsRef.current].filter(
+              (groupNodeId) => !pinnedNodeIdsRef.current.has(groupNodeId),
+            )
           : [node];
-      const draggedNodeAttrs = graph.getNodeAttributes(node) as { x?: number; y?: number };
+      const draggedNodeAttrs = graph.getNodeAttributes(node) as {
+        x?: number;
+        y?: number;
+      };
       const draggedX = Number(draggedNodeAttrs.x) || 0;
       const draggedY = Number(draggedNodeAttrs.y) || 0;
+      const pointerGraphPos = renderer.viewportToGraph(event);
+      ds.anchorOffset = {
+        x: draggedX - pointerGraphPos.x,
+        y: draggedY - pointerGraphPos.y,
+      };
 
       for (const groupNodeId of dragGroup) {
         if (!graph.hasNode(groupNodeId)) continue;
-        const attrs = graph.getNodeAttributes(groupNodeId) as { x?: number; y?: number };
+        const attrs = graph.getNodeAttributes(groupNodeId) as {
+          x?: number;
+          y?: number;
+        };
         ds.groupOffsets.set(groupNodeId, {
           x: (Number(attrs.x) || 0) - draggedX,
           y: (Number(attrs.y) || 0) - draggedY,
@@ -213,30 +266,59 @@ export function GraphCanvas() {
       renderer.getCamera().disable();
     });
 
-    renderer.getMouseCaptor().on("mousemovebody", (event: { x: number; y: number }) => {
-      const ds = dragStateRef.current;
-      if (!ds.dragging || !ds.draggedNode) return;
+    renderer
+      .getMouseCaptor()
+      .on("mousemovebody", (event: { x: number; y: number }) => {
+        const ds = dragStateRef.current;
+        if (!ds.dragging || !ds.draggedNode) return;
 
-      // Check if user has moved enough to count as drag
-      const dx = event.x - ds.startX;
-      const dy = event.y - ds.startY;
-      if (!ds.hasMoved && Math.sqrt(dx * dx + dy * dy) > 3) {
-        ds.hasMoved = true;
-      }
-
-      // Convert viewport coords to graph coords
-      const pos = renderer.viewportToGraph(event);
-      if (ds.groupOffsets.size > 0) {
-        for (const [groupNodeId, offset] of ds.groupOffsets.entries()) {
-          if (!graph.hasNode(groupNodeId)) continue;
-          graph.setNodeAttribute(groupNodeId, "x", pos.x + offset.x);
-          graph.setNodeAttribute(groupNodeId, "y", pos.y + offset.y);
+        // Check if user has moved enough to count as drag
+        const dx = event.x - ds.startX;
+        const dy = event.y - ds.startY;
+        if (!ds.hasMoved && Math.sqrt(dx * dx + dy * dy) > 3) {
+          ds.hasMoved = true;
         }
-      } else {
-        graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
-        graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
-      }
-    });
+
+        // Convert viewport coords to graph coords
+        const pos = renderer.viewportToGraph(event);
+        const targetDraggedNodePos = {
+          x: pos.x + ds.anchorOffset.x,
+          y: pos.y + ds.anchorOffset.y,
+        };
+        const currentDraggedNodeAttrs = graph.getNodeAttributes(
+          ds.draggedNode,
+        ) as { x?: number; y?: number };
+        const currentDraggedNodePos = {
+          x: Number(currentDraggedNodeAttrs.x) || 0,
+          y: Number(currentDraggedNodeAttrs.y) || 0,
+        };
+        const draggedNodePos = {
+          x:
+            currentDraggedNodePos.x +
+            (targetDraggedNodePos.x - currentDraggedNodePos.x) * DRAG_DAMPING,
+          y:
+            currentDraggedNodePos.y +
+            (targetDraggedNodePos.y - currentDraggedNodePos.y) * DRAG_DAMPING,
+        };
+        if (ds.groupOffsets.size > 0) {
+          for (const [groupNodeId, offset] of ds.groupOffsets.entries()) {
+            if (!graph.hasNode(groupNodeId)) continue;
+            graph.setNodeAttribute(
+              groupNodeId,
+              "x",
+              draggedNodePos.x + offset.x,
+            );
+            graph.setNodeAttribute(
+              groupNodeId,
+              "y",
+              draggedNodePos.y + offset.y,
+            );
+          }
+        } else {
+          graph.setNodeAttribute(ds.draggedNode, "x", draggedNodePos.x);
+          graph.setNodeAttribute(ds.draggedNode, "y", draggedNodePos.y);
+        }
+      });
 
     renderer.getMouseCaptor().on("mouseup", () => {
       const ds = dragStateRef.current;
@@ -246,6 +328,7 @@ export function GraphCanvas() {
       }
       ds.dragging = false;
       ds.draggedNode = null;
+      ds.anchorOffset = { x: 0, y: 0 };
       ds.groupOffsets = new Map();
 
       // Re-enable camera
@@ -258,8 +341,13 @@ export function GraphCanvas() {
       const domEvent = event.original as MouseEvent;
       window.dispatchEvent(
         new CustomEvent("ogi-context-menu", {
-          detail: { type: "node", id: node, x: domEvent.clientX, y: domEvent.clientY },
-        })
+          detail: {
+            type: "node",
+            id: node,
+            x: domEvent.clientX,
+            y: domEvent.clientY,
+          },
+        }),
       );
     });
 
@@ -268,8 +356,13 @@ export function GraphCanvas() {
       const domEvent = event.original as MouseEvent;
       window.dispatchEvent(
         new CustomEvent("ogi-context-menu", {
-          detail: { type: "edge", id: edge, x: domEvent.clientX, y: domEvent.clientY },
-        })
+          detail: {
+            type: "edge",
+            id: edge,
+            x: domEvent.clientX,
+            y: domEvent.clientY,
+          },
+        }),
       );
     });
 
@@ -278,8 +371,13 @@ export function GraphCanvas() {
       const domEvent = event.original as MouseEvent;
       window.dispatchEvent(
         new CustomEvent("ogi-context-menu", {
-          detail: { type: "stage", id: null, x: domEvent.clientX, y: domEvent.clientY },
-        })
+          detail: {
+            type: "stage",
+            id: null,
+            x: domEvent.clientX,
+            y: domEvent.clientY,
+          },
+        }),
       );
     });
 
@@ -292,7 +390,14 @@ export function GraphCanvas() {
         target: "unpinned",
       });
     }
-  }, [graph, entities, selectNode, clearSelection, selectEdge, persistPositions]);
+  }, [
+    graph,
+    entities,
+    selectNode,
+    clearSelection,
+    selectEdge,
+    persistPositions,
+  ]);
 
   useEffect(() => {
     initSigma();
@@ -374,16 +479,13 @@ export function GraphCanvas() {
             highlightedLabelBackground: SELECTED_LABEL_BG,
           };
         }
-        const isNeighbor =
-          selectedNodeIds.size === 1 &&
-          selectedNodeId &&
-          graph.hasNode(selectedNodeId) &&
-          graph.areNeighbors(node, selectedNodeId);
-        return {
-          ...data,
-          color: isNeighbor ? data.color : `${data.color}44`,
-          label: isNeighbor ? data.label : "",
-        };
+        if (declutterState.fadeUnselected) {
+          return {
+            ...data,
+            color: `${data.color}44`,
+            label: "",
+          };
+        }
       }
 
       return data;
@@ -392,7 +494,11 @@ export function GraphCanvas() {
     renderer.setSetting("edgeReducer", (edge, data) => {
       const src = graph.source(edge);
       const tgt = graph.target(edge);
-      if (hiddenEdgeIds.has(edge) || hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
+      if (
+        hiddenEdgeIds.has(edge) ||
+        hiddenNodeIds.has(src) ||
+        hiddenNodeIds.has(tgt)
+      ) {
         return { ...data, hidden: true };
       }
 
@@ -414,8 +520,13 @@ export function GraphCanvas() {
         };
       }
 
-      if (selectedNodeIds.size > 0 && !nodeOverlay) {
-        const connectedToSelection = selectedNodeIds.has(src) || selectedNodeIds.has(tgt);
+      if (
+        selectedNodeIds.size > 0 &&
+        declutterState.fadeUnselected &&
+        !nodeOverlay
+      ) {
+        const connectedToSelection =
+          selectedNodeIds.has(src) || selectedNodeIds.has(tgt);
         if (!connectedToSelection) {
           return { ...data, hidden: true };
         }
@@ -424,7 +535,17 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, pinnedNodeIds, nodeOverlay, graph]);
+  }, [
+    selectedNodeIds,
+    selectedEdgeId,
+    hoveredEdgeId,
+    hiddenNodeIds,
+    hiddenEdgeIds,
+    pinnedNodeIds,
+    nodeOverlay,
+    declutterState,
+    graph,
+  ]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {
@@ -471,7 +592,10 @@ export function GraphCanvas() {
       const box = selectionBox;
       const state = selectionStateRef.current;
       const renderer = sigmaRef.current as Sigma & {
-        graphToViewport: (point: { x: number; y: number }) => { x: number; y: number };
+        graphToViewport: (point: { x: number; y: number }) => {
+          x: number;
+          y: number;
+        };
       };
       if (box && state && renderer?.graphToViewport) {
         const minX = Math.min(box.startX, box.x);
@@ -486,7 +610,12 @@ export function GraphCanvas() {
             y: Number(attrs.y) || 0,
           });
           if (!viewport) return;
-          if (viewport.x >= minX && viewport.x <= maxX && viewport.y >= minY && viewport.y <= maxY) {
+          if (
+            viewport.x >= minX &&
+            viewport.x <= maxX &&
+            viewport.y >= minY &&
+            viewport.y <= maxY
+          ) {
             selected.push(node);
           }
         });

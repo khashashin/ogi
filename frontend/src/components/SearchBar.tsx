@@ -45,12 +45,15 @@ export function SearchBar() {
 
   // Push search overlay to the centralized store (GraphCanvas owns the nodeReducer)
   useEffect(() => {
-    if (!visible || !searchQuery.trim() || matchingIds.length === 0) {
+    if (!visible || !searchQuery.trim()) {
+      setNodeOverlay(null);
+      return;
+    }
+
+    if (matchingIds.length === 0) {
       // Clear search overlay when not searching
-      if (visible && searchQuery.trim() && matchingIds.length === 0) {
-        // Active search with no results — still show the overlay to dim everything
-        setNodeOverlay({ type: "search", matchIds: new Set(), focusId: null });
-      }
+      // Active search with no results — still show the overlay to dim everything
+      setNodeOverlay({ type: "search", matchIds: new Set(), focusId: null });
       return;
     }
 
