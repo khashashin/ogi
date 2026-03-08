@@ -1362,6 +1362,46 @@ async def test_registry_install_writes_system_audit_log(
 
 
 @pytest.mark.asyncio
+async def test_registry_update_reloads_plugin_runtime_metadata(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import registry as registry_api
+
+    class FakeRegistry:
+        async def fetch_index(self):
+            return {"transforms": []}
+
+        def get_transform(self, slug: str):
+            return {
+                "slug": slug,
+                "version": "1.0.3",
+                "verification_tier": "community",
+                "api_keys_required": [],
+            }
+
+    class FakeInstaller:
+        async def update(self, slug: str):
+            assert slug == "username-user-scanner"
+            return True
+
+    reloaded: list[str] = []
+
+    def fake_reload(slug: str) -> int:
+        reloaded.append(slug)
+        return 1
+
+    monkeypatch.setattr(registry_api, "get_registry_client", lambda: FakeRegistry())
+    monkeypatch.setattr(registry_api, "get_transform_installer", lambda: FakeInstaller())
+    monkeypatch.setattr(registry_api, "_reload_plugin_runtime", fake_reload)
+
+    resp = await client.post("/api/v1/registry/update/username-user-scanner")
+    assert resp.status_code == 200
+    assert reloaded == ["username-user-scanner"]
+    assert resp.json()["version"] == "1.0.3"
+    assert "reloaded" in resp.json()["message"]
+
+
+@pytest.mark.asyncio
 async def test_get_transform_run_forbidden_for_non_member(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
