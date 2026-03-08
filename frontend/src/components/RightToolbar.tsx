@@ -32,7 +32,7 @@ export function RightToolbar() {
 
   return (
     <>
-      <div className="fixed right-3 top-14 z-40 flex flex-col gap-1 rounded border border-border bg-surface/95 p-1 shadow-lg backdrop-blur-sm">
+      <div className="flex h-full w-10 flex-col items-center gap-1 bg-surface px-1 py-2">
         <button
           onClick={() => setShowExportImport(true)}
           className="p-2 text-text-muted hover:text-text hover:bg-surface-hover rounded"

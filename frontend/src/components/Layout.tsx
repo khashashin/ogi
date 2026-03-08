@@ -31,7 +31,6 @@ export function Layout() {
   return (
     <div className="flex flex-col h-screen w-screen bg-bg">
       <Toolbar />
-      <RightToolbar />
       <Group orientation="horizontal" className="flex-1">
         {/* Left sidebar: Entity Palette */}
         {!isViewer && (
@@ -144,6 +143,12 @@ export function Layout() {
             <EntityInspector />
           </div>
         </Panel>
+
+        <Separator className="w-px bg-border" />
+
+        <div className="w-10 shrink-0 border-l border-border">
+          <RightToolbar />
+        </div>
       </Group>
 
       <ContextMenu />
