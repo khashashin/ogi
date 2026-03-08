@@ -41,6 +41,45 @@ interface LayoutContext {
   entities: Map<string, Entity>;
 }
 
+function applyDegreeSizing(graph: Graph, entities: Map<string, Entity>): void {
+  const nodes = graph.nodes();
+  if (nodes.length === 0) return;
+
+  const degrees = nodeDegreeMap(graph);
+  const maxDegree = Math.max(1, ...nodes.map((node) => degrees.get(node) ?? 0));
+  const minDegree = Math.min(...nodes.map((node) => degrees.get(node) ?? 0));
+  const minSize = 10;
+  const maxSize = 28;
+
+  nodes.forEach((node) => {
+    const degree = degrees.get(node) ?? 0;
+    const weight = Math.max(1, entities.get(node)?.weight ?? 1);
+    const normalizedDegree =
+      maxDegree === minDegree ? 0.35 : (degree - minDegree) / (maxDegree - minDegree);
+    const weightedBase = Math.min(1, (weight - 1) / 6);
+    const size = minSize + (normalizedDegree * 0.8 + weightedBase * 0.2) * (maxSize - minSize);
+    graph.setNodeAttribute(node, "size", Number(size.toFixed(2)));
+  });
+}
+
+export function applyForceDirectedLayout(graph: Graph, entities: Map<string, Entity>): void {
+  applyDegreeSizing(graph, entities);
+
+  forceAtlas2.assign(graph, {
+    iterations: 320,
+    settings: {
+      adjustSizes: true,
+      gravity: 0.25,
+      slowDown: graph.order > 200 ? 12 : 8,
+      scalingRatio: graph.order > 200 ? 18 : 14,
+      strongGravityMode: false,
+      barnesHutOptimize: graph.order > 50,
+      outboundAttractionDistribution: true,
+      linLogMode: true,
+    },
+  });
+}
+
 function setNodePosition(graph: Graph, node: string, x: number, y: number): void {
   graph.setNodeAttribute(node, "x", x);
   graph.setNodeAttribute(node, "y", y);
@@ -246,14 +285,7 @@ export function applyGraphLayout(
   const ctx = { graph, entities };
   switch (preset) {
     case "force":
-      forceAtlas2.assign(graph, {
-        iterations: 220,
-        settings: {
-          gravity: 1,
-          scalingRatio: 2,
-          barnesHutOptimize: graph.order > 50,
-        },
-      });
+      applyForceDirectedLayout(graph, entities);
       return;
     case "circular":
       circular.assign(graph);

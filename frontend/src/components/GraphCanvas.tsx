@@ -1,17 +1,18 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import Sigma from "sigma";
-import forceAtlas2 from "graphology-layout-forceatlas2";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
+import { applyForceDirectedLayout } from "../lib/graphLayouts";
 
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const {
-    graph,
-    selectNode,
-    selectNodes,
+    const {
+      graph,
+      entities,
+      selectNode,
+      selectNodes,
     clearSelection,
     selectEdge,
     selectedNodeId,
@@ -20,8 +21,8 @@ export function GraphCanvas() {
     hiddenNodeIds,
     hiddenEdgeIds,
     nodeOverlay,
-    persistPositions,
-  } = useGraphStore();
+      persistPositions,
+    } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; x: number; y: number }>(null);
@@ -176,16 +177,9 @@ export function GraphCanvas() {
 
     // Run ForceAtlas2 layout if there are enough nodes
     if (graph.order > 1) {
-      forceAtlas2.assign(graph, {
-        iterations: 100,
-        settings: {
-          gravity: 1,
-          scalingRatio: 2,
-          barnesHutOptimize: graph.order > 50,
-        },
-      });
+      applyForceDirectedLayout(graph, entities);
     }
-  }, [graph, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
+  }, [graph, entities, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
 
   useEffect(() => {
     initSigma();
