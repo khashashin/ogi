@@ -6,6 +6,7 @@ import { EntityInspector } from "./EntityInspector";
 import { TransformPanel } from "./TransformPanel";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { Toolbar } from "./Toolbar";
+import { RightToolbar } from "./RightToolbar";
 import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
 import { FilterPanel } from "./FilterPanel";
@@ -30,6 +31,7 @@ export function Layout() {
   return (
     <div className="flex flex-col h-screen w-screen bg-bg">
       <Toolbar />
+      <RightToolbar />
       <Group orientation="horizontal" className="flex-1">
         {/* Left sidebar: Entity Palette */}
         {!isViewer && (
