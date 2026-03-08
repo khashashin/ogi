@@ -38,6 +38,10 @@ interface HiddenGraphState {
   edgeIds: string[];
 }
 
+interface PinnedGraphState {
+  entityIds: string[];
+}
+
 function loadPositions(projectId: string): NodePositions {
   try {
     const raw = localStorage.getItem(`ogi-positions-${projectId}`);
@@ -94,6 +98,23 @@ function loadHiddenGraphState(projectId: string): HiddenGraphState {
 
 function saveHiddenGraphState(projectId: string, state: HiddenGraphState): void {
   localStorage.setItem(`ogi-hidden-${projectId}`, JSON.stringify(state));
+}
+
+function loadPinnedGraphState(projectId: string): PinnedGraphState {
+  try {
+    const raw = localStorage.getItem(`ogi-pinned-${projectId}`);
+    if (!raw) return { entityIds: [] };
+    const parsed = JSON.parse(raw) as Partial<PinnedGraphState>;
+    return {
+      entityIds: Array.isArray(parsed.entityIds) ? parsed.entityIds : [],
+    };
+  } catch {
+    return { entityIds: [] };
+  }
+}
+
+function savePinnedGraphState(projectId: string, state: PinnedGraphState): void {
+  localStorage.setItem(`ogi-pinned-${projectId}`, JSON.stringify(state));
 }
 
 function computeFilteredHiddenNodeIds(
@@ -192,6 +213,7 @@ interface GraphState {
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   selectedNodeIds: Set<string>;
+  pinnedNodeIds: Set<string>;
   entities: Map<string, Entity>;
   edges: Map<string, Edge>;
   manualHiddenNodeIds: Set<string>;
@@ -218,6 +240,12 @@ interface GraphState {
   selectNodes: (nodeIds: string[], mode?: SelectionMode) => void;
   selectEdge: (edgeId: string | null) => void;
   clearSelection: () => void;
+  pinNode: (projectId: string, nodeId: string) => void;
+  unpinNode: (projectId: string, nodeId: string) => void;
+  pinSelected: (projectId: string) => void;
+  unpinSelected: (projectId: string) => void;
+  pinVisible: (projectId: string) => void;
+  unpinAll: (projectId: string) => void;
   hideNode: (projectId: string, nodeId: string) => void;
   hideEdge: (projectId: string, edgeId: string) => void;
   hideConnectedEdges: (projectId: string, nodeId: string) => void;
@@ -246,6 +274,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   selectedNodeId: null,
   selectedEdgeId: null,
   selectedNodeIds: new Set(),
+  pinnedNodeIds: new Set(),
   entities: new Map(),
   edges: new Map(),
   manualHiddenNodeIds: new Set(),
@@ -271,6 +300,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const savedPositions = loadPositions(projectId);
       const filterState = loadFilters(projectId);
       const hiddenState = loadHiddenGraphState(projectId);
+      const pinnedState = loadPinnedGraphState(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
@@ -300,10 +330,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
       const manualHiddenNodeIds = new Set(hiddenState.entityIds.filter((id) => entities.has(id)));
       const manualHiddenEdgeIds = new Set(hiddenState.edgeIds.filter((id) => edges.has(id)));
+      const pinnedNodeIds = new Set(pinnedState.entityIds.filter((id) => entities.has(id)));
       const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
       const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
       set({
         graph,
+        pinnedNodeIds,
         entities,
         edges,
         manualHiddenNodeIds,
@@ -334,6 +366,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const savedPositions = loadPositions(projectId);
       const filterState = get().filterState;
       const hiddenState = loadHiddenGraphState(projectId);
+      const pinnedState = loadPinnedGraphState(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
@@ -363,10 +396,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
       const manualHiddenNodeIds = new Set(hiddenState.entityIds.filter((id) => entities.has(id)));
       const manualHiddenEdgeIds = new Set(hiddenState.edgeIds.filter((id) => edges.has(id)));
+      const pinnedNodeIds = new Set(pinnedState.entityIds.filter((id) => entities.has(id)));
       const hiddenNodeIds = computeHiddenNodeIds(entities, filterState, manualHiddenNodeIds);
       const hiddenEdgeIds = computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds);
       set({
         graph,
+        pinnedNodeIds,
         entities,
         edges,
         manualHiddenNodeIds,
@@ -448,6 +483,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       edgeAttrs: connectedEdgeAttrs,
     });
 
+    const nextPinnedNodeIds = new Set([...get().pinnedNodeIds].filter((id) => id !== entityId));
+    savePinnedGraphState(projectId, { entityIds: [...nextPinnedNodeIds] });
     const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => id !== entityId));
     const nextSelectedNodeId =
       get().selectedNodeId === entityId ? (nextSelectedNodeIds.values().next().value ?? null) : get().selectedNodeId;
@@ -455,6 +492,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       graph,
       entities: new Map(entities),
       edges: new Map(edges),
+      pinnedNodeIds: nextPinnedNodeIds,
       manualHiddenNodeIds: new Set([...manualHiddenNodeIds].filter((id) => id !== entityId)),
       hiddenNodeIds: computeHiddenNodeIds(
         entities,
@@ -570,6 +608,42 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }),
   selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null, selectedNodeIds: new Set() }),
   clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: new Set() }),
+  pinNode: (projectId, nodeId) => {
+    const { entities, pinnedNodeIds } = get();
+    if (!entities.has(nodeId)) return;
+    const next = new Set(pinnedNodeIds).add(nodeId);
+    savePinnedGraphState(projectId, { entityIds: [...next] });
+    set({ pinnedNodeIds: next });
+  },
+  unpinNode: (projectId, nodeId) => {
+    const next = new Set([...get().pinnedNodeIds].filter((id) => id !== nodeId));
+    savePinnedGraphState(projectId, { entityIds: [...next] });
+    set({ pinnedNodeIds: next });
+  },
+  pinSelected: (projectId) => {
+    const next = new Set(get().pinnedNodeIds);
+    for (const id of get().selectedNodeIds) next.add(id);
+    savePinnedGraphState(projectId, { entityIds: [...next] });
+    set({ pinnedNodeIds: next });
+  },
+  unpinSelected: (projectId) => {
+    const selected = get().selectedNodeIds;
+    const next = new Set([...get().pinnedNodeIds].filter((id) => !selected.has(id)));
+    savePinnedGraphState(projectId, { entityIds: [...next] });
+    set({ pinnedNodeIds: next });
+  },
+  pinVisible: (projectId) => {
+    const next = new Set(get().pinnedNodeIds);
+    for (const id of get().entities.keys()) {
+      if (!get().hiddenNodeIds.has(id)) next.add(id);
+    }
+    savePinnedGraphState(projectId, { entityIds: [...next] });
+    set({ pinnedNodeIds: next });
+  },
+  unpinAll: (projectId) => {
+    savePinnedGraphState(projectId, { entityIds: [] });
+    set({ pinnedNodeIds: new Set() });
+  },
   hideNode: (projectId, nodeId) => {
     const { entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds } = get();
     if (!entities.has(nodeId)) return;
@@ -707,6 +781,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedNodeId: null,
       selectedEdgeId: null,
       selectedNodeIds: new Set(),
+      pinnedNodeIds: new Set(),
       entities: new Map(),
       edges: new Map(),
       manualHiddenNodeIds: new Set(),

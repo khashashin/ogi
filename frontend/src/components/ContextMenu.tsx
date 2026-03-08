@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff } from "lucide-react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -29,11 +29,12 @@ export function ContextMenu() {
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { entities, removeEntity, removeEdge, selectNode, hideNode, hideEdge, hideConnectedEdges } = useGraphStore();
+  const { entities, pinnedNodeIds, removeEntity, removeEdge, selectNode, hideNode, hideEdge, hideConnectedEdges, pinNode, unpinNode } = useGraphStore();
   const { currentProject } = useProjectStore();
   const isViewer = useIsViewer();
 
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
+  const isPinned = Boolean(menu.id && pinnedNodeIds.has(menu.id));
   const menuVisible = menu.visible;
   const menuX = menu.x;
   const menuY = menu.y;
@@ -194,6 +195,18 @@ export function ContextMenu() {
     close();
   };
 
+  const handleTogglePin = () => {
+    if (!currentProject || !menu.id || menu.type !== "node") return;
+    if (isPinned) {
+      unpinNode(currentProject.id, menu.id);
+      toast.success("Node unpinned");
+    } else {
+      pinNode(currentProject.id, menu.id);
+      toast.success("Node pinned");
+    }
+    close();
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -255,6 +268,11 @@ export function ContextMenu() {
 
           {!isViewer && (
             <>
+              <button onClick={handleTogglePin} className={itemClass}>
+                {isPinned ? <Unlock size={12} /> : <Lock size={12} />}
+                {isPinned ? "Unpin Node" : "Pin Node"}
+              </button>
+
               <button onClick={handleHideNode} className={itemClass}>
                 <EyeOff size={12} />
                 Hide Selected Node

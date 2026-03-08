@@ -3,15 +3,16 @@ import Sigma from "sigma";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
-import { applyForceDirectedLayout } from "../lib/graphLayouts";
+import { applyGraphLayout } from "../lib/graphLayouts";
 
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
     const {
-      graph,
-      entities,
-      selectNode,
+    graph,
+    entities,
+    pinnedNodeIds,
+    selectNode,
       selectNodes,
     clearSelection,
     selectEdge,
@@ -36,7 +37,8 @@ export function GraphCanvas() {
     startX: number;
     startY: number;
     hasMoved: boolean;
-  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false });
+    groupOffsets: Map<string, { x: number; y: number }>;
+  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false, groupOffsets: new Map() });
 
   const initSigma = useCallback(() => {
     if (!containerRef.current) return;
@@ -107,6 +109,22 @@ export function GraphCanvas() {
       ds.hasMoved = false;
       ds.startX = event.x;
       ds.startY = event.y;
+      ds.groupOffsets = new Map();
+
+      const dragGroup =
+        selectedNodeIds.size > 1 && selectedNodeIds.has(node) ? [...selectedNodeIds] : [node];
+      const draggedNodeAttrs = graph.getNodeAttributes(node) as { x?: number; y?: number };
+      const draggedX = Number(draggedNodeAttrs.x) || 0;
+      const draggedY = Number(draggedNodeAttrs.y) || 0;
+
+      for (const groupNodeId of dragGroup) {
+        if (!graph.hasNode(groupNodeId)) continue;
+        const attrs = graph.getNodeAttributes(groupNodeId) as { x?: number; y?: number };
+        ds.groupOffsets.set(groupNodeId, {
+          x: (Number(attrs.x) || 0) - draggedX,
+          y: (Number(attrs.y) || 0) - draggedY,
+        });
+      }
 
       // Disable camera on drag
       renderer.getCamera().disable();
@@ -125,8 +143,16 @@ export function GraphCanvas() {
 
       // Convert viewport coords to graph coords
       const pos = renderer.viewportToGraph(event);
-      graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
-      graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
+      if (ds.groupOffsets.size > 0) {
+        for (const [groupNodeId, offset] of ds.groupOffsets.entries()) {
+          if (!graph.hasNode(groupNodeId)) continue;
+          graph.setNodeAttribute(groupNodeId, "x", pos.x + offset.x);
+          graph.setNodeAttribute(groupNodeId, "y", pos.y + offset.y);
+        }
+      } else {
+        graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
+        graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
+      }
     });
 
     renderer.getMouseCaptor().on("mouseup", () => {
@@ -137,6 +163,7 @@ export function GraphCanvas() {
       }
       ds.dragging = false;
       ds.draggedNode = null;
+      ds.groupOffsets = new Map();
 
       // Re-enable camera
       renderer.getCamera().enable();
@@ -177,9 +204,12 @@ export function GraphCanvas() {
 
     // Run ForceAtlas2 layout if there are enough nodes
     if (graph.order > 1) {
-      applyForceDirectedLayout(graph, entities);
+      applyGraphLayout("force", graph, entities, {
+        pinnedNodeIds,
+        target: "unpinned",
+      });
     }
-  }, [graph, entities, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
+  }, [graph, entities, pinnedNodeIds, selectedNodeIds, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
 
   useEffect(() => {
     initSigma();
@@ -200,6 +230,14 @@ export function GraphCanvas() {
     renderer.setSetting("nodeReducer", (node, data) => {
       if (hiddenNodeIds.has(node)) {
         return { ...data, hidden: true, label: "" };
+      }
+
+      if (pinnedNodeIds.has(node)) {
+        data = {
+          ...data,
+          zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 1),
+          highlighted: true,
+        };
       }
 
       // 1. Overlay takes priority when active
@@ -281,7 +319,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, nodeOverlay, graph]);
+  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, pinnedNodeIds, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {

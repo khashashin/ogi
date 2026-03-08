@@ -21,6 +21,8 @@ export interface GraphLayoutOption {
   description: string;
 }
 
+export type GraphLayoutTarget = "all" | "selected" | "unpinned";
+
 const TAU = Math.PI * 2;
 
 export const GRAPH_LAYOUT_OPTIONS: GraphLayoutOption[] = [
@@ -39,6 +41,12 @@ export const GRAPH_LAYOUT_OPTIONS: GraphLayoutOption[] = [
 interface LayoutContext {
   graph: Graph;
   entities: Map<string, Entity>;
+}
+
+interface GraphLayoutRunOptions {
+  pinnedNodeIds?: Set<string>;
+  selectedNodeIds?: Set<string>;
+  target?: GraphLayoutTarget;
 }
 
 function applyDegreeSizing(graph: Graph, entities: Map<string, Entity>): void {
@@ -279,42 +287,80 @@ export function applyGraphLayout(
   preset: GraphLayoutPreset,
   graph: Graph,
   entities: Map<string, Entity>,
+  options: GraphLayoutRunOptions = {},
 ): void {
   if (graph.order < 2) return;
+
+  const pinnedNodeIds = options.pinnedNodeIds ?? new Set<string>();
+  const selectedNodeIds = options.selectedNodeIds ?? new Set<string>();
+  const target = options.target ?? "unpinned";
+  const nodes = new Set(graph.nodes());
+  const effectivePinnedNodeIds = new Set<string>();
+
+  if (target === "selected") {
+    for (const node of nodes) {
+      if (!selectedNodeIds.has(node)) effectivePinnedNodeIds.add(node);
+    }
+    for (const node of pinnedNodeIds) {
+      if (!selectedNodeIds.has(node)) effectivePinnedNodeIds.add(node);
+    }
+  } else if (target === "unpinned") {
+    for (const node of pinnedNodeIds) effectivePinnedNodeIds.add(node);
+  }
+
+  const pinnedPositions = new Map<string, { x: number; y: number; size: number | null }>();
+  for (const node of effectivePinnedNodeIds) {
+    if (!graph.hasNode(node)) continue;
+    const attrs = graph.getNodeAttributes(node) as { x?: number; y?: number; size?: number };
+    pinnedPositions.set(node, {
+      x: Number(attrs.x) || 0,
+      y: Number(attrs.y) || 0,
+      size: typeof attrs.size === "number" ? attrs.size : null,
+    });
+  }
 
   const ctx = { graph, entities };
   switch (preset) {
     case "force":
       applyForceDirectedLayout(graph, entities);
-      return;
+      break;
     case "circular":
       circular.assign(graph);
-      return;
+      break;
     case "grid":
       applyGrid(ctx);
-      return;
+      break;
     case "spiral":
       applySpiral(ctx);
-      return;
+      break;
     case "concentric":
       applyConcentric(ctx);
-      return;
+      break;
     case "components":
       applyComponents(ctx);
-      return;
+      break;
     case "type-columns":
       applyTypeColumns(ctx);
-      return;
+      break;
     case "type-rings":
       applyTypeRings(ctx);
-      return;
+      break;
     case "degree-lines":
       applyDegreeLines(ctx);
-      return;
+      break;
     case "timeline":
       applyTimeline(ctx);
-      return;
+      break;
     default:
-      return;
+      break;
+  }
+
+  for (const [node, position] of pinnedPositions) {
+    if (!graph.hasNode(node)) continue;
+    graph.setNodeAttribute(node, "x", position.x);
+    graph.setNodeAttribute(node, "y", position.y);
+    if (position.size !== null) {
+      graph.setNodeAttribute(node, "size", position.size);
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play } from "lucide-react";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -33,8 +33,13 @@ export function Toolbar() {
     selectedNodeId,
     selectedNodeIds,
     selectedEdgeId,
+    pinnedNodeIds,
     manualHiddenNodeIds,
     manualHiddenEdgeIds,
+    pinSelected,
+    unpinSelected,
+    pinVisible,
+    unpinAll,
     hideSelected,
     unhideAll,
     unhideNode,
@@ -69,8 +74,20 @@ export function Toolbar() {
 
   const applySelectedLayout = () => {
     if (graph.order < 2) return;
-    applyGraphLayout(selectedLayout, graph, entities);
+    applyGraphLayout(selectedLayout, graph, entities, {
+      pinnedNodeIds,
+      target: "unpinned",
+    });
     if (currentProject) persistPositions(currentProject.id);
+    getSigmaRef()?.refresh();
+    getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
+  };
+
+  const handleResetLayout = () => {
+    if (!currentProject || graph.order < 2) return;
+    unpinAll(currentProject.id);
+    applyGraphLayout(selectedLayout, graph, entities, { target: "all" });
+    persistPositions(currentProject.id);
     getSigmaRef()?.refresh();
     getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
   };
@@ -101,6 +118,7 @@ export function Toolbar() {
       count: selectedEntities.filter((entity) => transform.input_types.includes(entity.type)).length,
     }))
     .filter((item) => item.count > 0);
+  const selectedPinnedCount = selectedEntities.filter((entity) => pinnedNodeIds.has(entity.id)).length;
 
   useEffect(() => {
     if (!showBulkTransforms || allTransforms.length > 0) return;
@@ -260,6 +278,15 @@ export function Toolbar() {
             >
               <Wand2 size={12} />
             </button>
+            {!isViewer && (
+              <button
+                onClick={handleResetLayout}
+                className="p-1 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+                title="Reset layout and clear pins"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
           </div>
 
           <div className="w-px h-4 bg-border" />
@@ -278,9 +305,24 @@ export function Toolbar() {
                   </button>
                   {showBulkActions && (
                     <div className="absolute right-0 top-8 z-50 w-64 rounded border border-border bg-surface shadow-lg p-2 space-y-1">
-                      <div className="text-[11px] text-text-muted px-1 pb-1">
-                        {selectedNodeIds.size} selected entit{selectedNodeIds.size === 1 ? "y" : "ies"}
-                      </div>
+                    <div className="text-[11px] text-text-muted px-1 pb-1">
+                      {selectedNodeIds.size} selected entit{selectedNodeIds.size === 1 ? "y" : "ies"}
+                    </div>
+                      <button
+                        onClick={() => currentProject && pinSelected(currentProject.id)}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
+                      >
+                        <Lock size={12} />
+                        Pin selected
+                      </button>
+                      <button
+                        onClick={() => currentProject && unpinSelected(currentProject.id)}
+                        disabled={selectedPinnedCount === 0}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover disabled:opacity-50"
+                      >
+                        <Unlock size={12} />
+                        Unpin selected
+                      </button>
                       <button
                         onClick={() => currentProject && hideSelected(currentProject.id)}
                         className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
@@ -341,6 +383,14 @@ export function Toolbar() {
                 title="Hide selected item"
               >
                 <EyeOff size={14} />
+              </button>
+              <button
+                onClick={() => currentProject && pinVisible(currentProject.id)}
+                disabled={!currentProject || entities.size === 0}
+                className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
+                title="Lock current positions"
+              >
+                <Lock size={14} />
               </button>
 
               <div className="relative">
