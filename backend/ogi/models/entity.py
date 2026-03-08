@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel, Column, JSON, DateTime
 
 class EntityType(str, Enum):
     PERSON = "Person"
+    USERNAME = "Username"
     DOMAIN = "Domain"
     IP_ADDRESS = "IPAddress"
     EMAIL_ADDRESS = "EmailAddress"
@@ -31,6 +32,7 @@ class EntityType(str, Enum):
 
 ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
     EntityType.PERSON: {"icon": "user", "color": "#6366f1", "category": "People"},
+    EntityType.USERNAME: {"icon": "at-sign", "color": "#ec4899", "category": "People"},
     EntityType.DOMAIN: {"icon": "globe", "color": "#22d3ee", "category": "Infrastructure"},
     EntityType.IP_ADDRESS: {"icon": "server", "color": "#f59e0b", "category": "Infrastructure"},
     EntityType.EMAIL_ADDRESS: {"icon": "mail", "color": "#a78bfa", "category": "People"},
