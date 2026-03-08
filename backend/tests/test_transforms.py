@@ -28,6 +28,7 @@ from ogi.transforms.location.location_to_reverse_geocode import LocationToRevers
 from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
 from ogi.transforms.location.location_to_timezone import LocationToTimezone
 from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
+from ogi.transforms.person.person_to_usernames import PersonToUsernames
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
 from ogi.transforms.web.url_to_headers import URLToHeaders
@@ -422,9 +423,52 @@ async def test_hash_lookup_with_mocked_http():
 
 
 @pytest.mark.asyncio
+async def test_person_to_usernames_generates_deduplicated_candidates():
+    transform = PersonToUsernames()
+    entity = Entity(
+        type=EntityType.PERSON,
+        value="Alice Example",
+        properties={
+            "display_name": "Alice Example",
+            "aliases": ["A. Example", "Alice Example"],
+        },
+    )
+
+    result = await transform.run(entity, TransformConfig())
+
+    assert result.entities
+    assert all(e.type == EntityType.USERNAME for e in result.entities)
+    usernames = [e.value for e in result.entities]
+    assert "aliceexample" in usernames
+    assert "alice.example" in usernames
+    assert "aexample" in usernames
+    assert len(usernames) == len(set(usernames))
+    assert any(edge.label == "possible username" for edge in result.edges)
+    assert any("Generated" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_person_to_usernames_uses_explicit_name_parts():
+    transform = PersonToUsernames()
+    entity = Entity(
+        type=EntityType.PERSON,
+        value="",
+        properties={
+            "first_name": "Renee",
+            "last_name": "Faure",
+        },
+    )
+
+    result = await transform.run(entity, TransformConfig())
+    usernames = {e.value for e in result.entities}
+    assert "reneefaure" in usernames
+    assert "rfaure" in usernames
+
+
+@pytest.mark.asyncio
 async def test_username_search_with_mocked_http(monkeypatch: pytest.MonkeyPatch):
     transform = UsernameSearch()
-    entity = Entity(type=EntityType.PERSON, value="alice")
+    entity = Entity(type=EntityType.USERNAME, value="alice")
 
     def fake_head(url: str):
         if "github.com" in url:

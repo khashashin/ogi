@@ -23,6 +23,7 @@ def test_auto_discover(engine: TransformEngine):
         "domain_to_mx",
         "domain_to_ns",
         "ip_to_domain",
+        "person_to_usernames",
         "whois_lookup",
         "website_to_people",
         "location_to_geocode",
@@ -47,6 +48,14 @@ def test_list_for_entity(engine: TransformEngine):
     assert "whois_lookup" in names
     # ip_to_domain should NOT be listed for domain entity
     assert "ip_to_domain" not in names
+
+
+def test_list_for_person_entity(engine: TransformEngine):
+    person = Entity(type=EntityType.PERSON, value="Alice Example")
+    transforms = engine.list_for_entity(person)
+    names = [t.name for t in transforms]
+    assert "person_to_usernames" in names
+    assert "username_search" not in names
 
 
 def test_list_for_ip_entity(engine: TransformEngine):
