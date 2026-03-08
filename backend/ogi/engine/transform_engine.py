@@ -134,6 +134,7 @@ class TransformEngine:
         from ogi.transforms.web.website_to_people import WebsiteToPeople
         from ogi.transforms.location.location_to_geocode import LocationToGeocode
         from ogi.transforms.location.location_to_nearby_asns import LocationToNearbyASNs
+        from ogi.transforms.location.location_to_reverse_geocode import LocationToReverseGeocode
         from ogi.transforms.location.location_to_timezone import LocationToTimezone
         from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
         from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
@@ -148,6 +149,7 @@ class TransformEngine:
             WebsiteToPeople,
             LocationToGeocode,
             LocationToNearbyASNs,
+            LocationToReverseGeocode,
             LocationToTimezone,
             LocationToSunTimes,
             LocationToWeatherSnapshot,
