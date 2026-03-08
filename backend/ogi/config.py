@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="OGI_")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_prefix="OGI_", extra="ignore")
 
     app_name: str = "OGI"
 
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     database_url: str = os.environ.get("OGI_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ogi")
 
     # Plugins
-    plugin_dirs: list[str] = ["plugins"]
+    plugin_dirs: list[str] = ["plugins", "../plugins"]
 
     # SQLite (default for local dev; set OGI_USE_SQLITE=false for PostgreSQL)
     database_path: str = os.environ.get("OGI_DB_PATH", "ogi.db")
