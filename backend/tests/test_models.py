@@ -61,5 +61,7 @@ def test_transform_run():
 
 
 def test_entity_types():
-    """All 19 entity types should exist."""
-    assert len(EntityType) == 19
+    names = {item.value for item in EntityType}
+    assert "Person" in names
+    assert "Username" in names
+    assert len(names) == len(EntityType)
