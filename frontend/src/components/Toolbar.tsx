@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { useTransformJobStore } from "../stores/transformJobStore";
 
 export function Toolbar() {
-  const appVersion = __APP_VERSION__;
   const { currentProject } = useProjectStore();
   const {
     graph,
@@ -165,12 +164,6 @@ export function Toolbar() {
       <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-warning/15 text-warning border border-warning/30 rounded">
         beta
       </span>
-      <span
-        className="px-1.5 py-0.5 text-[9px] font-medium text-text-muted border border-border rounded"
-        title="Frontend version"
-      >
-        v{appVersion}
-      </span>
       {currentProject && (
         <>
           <ChevronRight size={12} className="text-text-muted" />
@@ -181,18 +174,6 @@ export function Toolbar() {
       )}
 
       <div className="flex-1" />
-
-      {/* Graph stats */}
-      <span className="text-[10px] text-text-muted">
-        {entities.size} entities, {edges.size} edges
-      </span>
-      {selectedNodeIds.size > 0 && (
-        <span className="text-[10px] text-accent">
-          {selectedNodeIds.size} selected
-        </span>
-      )}
-
-      <div className="w-px h-4 bg-border" />
 
       {/* Undo / Redo */}
       <button
