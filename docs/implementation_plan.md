@@ -28,50 +28,50 @@ This document outlines the implementation plan for an open source alternative to
 ## 3. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                     Frontend (UI)                        │
-│  ┌──────────┐ ┌────────────┐ ┌────────────────────────┐ │
+│  ┌───────────┐ ┌────────────┐ ┌────────────────────────┐ │
 │  │  Graph    │ │  Entity    │ │  Transform Runner /    │ │
 │  │  Canvas   │ │  Inspector │ │  Results Panel         │ │
-│  └──────────┘ └────────────┘ └────────────────────────┘ │
-├─────────────────────────────────────────────────────────┤
+│  └───────────┘ └────────────┘ └────────────────────────┘ │
+├──────────────────────────────────────────────────────────┤
 │                   API Gateway (REST + WebSocket)         │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                     Core Engine                          │
-│  ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐ │
-│  │  Graph   │ │  Transform │ │  Entity  │ │  Session │ │
-│  │  Engine  │ │  Engine    │ │  Registry│ │  Manager │ │
-│  └──────────┘ └────────────┘ └──────────┘ └──────────┘ │
-├─────────────────────────────────────────────────────────┤
+│  ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐   │
+│  │  Graph   │ │  Transform │ │  Entity  │ │  Session │   │
+│  │  Engine  │ │  Engine    │ │  Registry│ │  Manager │   │
+│  └──────────┘ └────────────┘ └──────────┘ └──────────┘   │
+├──────────────────────────────────────────────────────────┤
 │                  Transform Layer                         │
-│  ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐ │
-│  │  Local   │ │  Remote    │ │  Custom  │ │  Plugin  │ │
-│  │Transforms│ │ Transform  │ │  Scripts │ │  Manager │ │
-│  │          │ │  Servers   │ │ (Py/JS)  │ │          │ │
-│  └──────────┘ └────────────┘ └──────────┘ └──────────┘ │
-├─────────────────────────────────────────────────────────┤
+│  ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐   │
+│  │  Local   │ │  Remote    │ │  Custom  │ │  Plugin  │   │
+│  │Transforms│ │ Transform  │ │  Scripts │ │  Manager │   │
+│  │          │ │  Servers   │ │ (Py/JS)  │ │          │   │
+│  └──────────┘ └────────────┘ └──────────┘ └──────────┘   │
+├──────────────────────────────────────────────────────────┤
 │                   Data Layer                             │
-│  ┌──────────┐ ┌────────────┐ ┌──────────────────────┐  │
-│  │  Graph   │ │  Cache /   │ │  Export / Import      │  │
-│  │  Store   │ │  Rate Limit│ │  (GraphML, CSV, JSON) │  │
-│  └──────────┘ └────────────┘ └──────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+│  ┌──────────┐ ┌────────────┐ ┌───────────────────────┐   │
+│  │  Graph   │ │  Cache /   │ │  Export / Import      │   │
+│  │  Store   │ │  Rate Limit│ │  (GraphML, CSV, JSON) │   │
+│  └──────────┘ └────────────┘ └───────────────────────┘   │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 4. Technology Stack (Recommended)
 
-| Layer | Technology | Rationale |
-|---|---|---|
-| **Frontend** | React + TypeScript | Large ecosystem, component-based architecture |
-| **Graph Rendering** | Cytoscape.js or Sigma.js | Mature graph viz libraries with layout algorithms |
-| **Backend API** | Python (FastAPI) | Fast async framework, strong OSINT ecosystem |
-| **Transform Runtime** | Python (primary), JS (secondary) | Python dominates the OSINT tooling space |
-| **Graph Database** | Neo4j (optional) or SQLite + in-memory graph | Neo4j for large-scale; SQLite for lightweight local use |
-| **Message Queue** | Redis or RabbitMQ | For async transform execution |
-| **Desktop Wrapper** | Electron or Tauri | Cross-platform desktop app |
-| **Packaging** | Docker, pip, npm | Easy deployment and development |
+| Layer                 | Technology                                   | Rationale                                               |
+| --------------------- | -------------------------------------------- | ------------------------------------------------------- |
+| **Frontend**          | React + TypeScript                           | Large ecosystem, component-based architecture           |
+| **Graph Rendering**   | Cytoscape.js or Sigma.js                     | Mature graph viz libraries with layout algorithms       |
+| **Backend API**       | Python (FastAPI)                             | Fast async framework, strong OSINT ecosystem            |
+| **Transform Runtime** | Python (primary), JS (secondary)             | Python dominates the OSINT tooling space                |
+| **Graph Database**    | Neo4j (optional) or SQLite + in-memory graph | Neo4j for large-scale; SQLite for lightweight local use |
+| **Message Queue**     | Redis or RabbitMQ                            | For async transform execution                           |
+| **Desktop Wrapper**   | Electron or Tauri                            | Cross-platform desktop app                              |
+| **Packaging**         | Docker, pip, npm                             | Easy deployment and development                         |
 
 ---
 
@@ -82,6 +82,7 @@ This document outlines the implementation plan for an open source alternative to
 Entities are the fundamental data objects placed on the graph.
 
 **Base Entity Schema:**
+
 ```python
 class Entity:
     id: UUID
@@ -118,6 +119,7 @@ class Entity:
 
 **Custom Entity Registration:**
 Users and plugin authors can register new entity types via a YAML/JSON schema:
+
 ```yaml
 entity:
   name: "ThreatActor"
@@ -137,10 +139,11 @@ entity:
 Transforms are the automated data enrichment functions — the core intelligence engine.
 
 **Transform Interface:**
+
 ```python
 class BaseTransform(ABC):
     """Base class for all transforms."""
-    
+
     # Metadata
     display_name: str
     description: str
@@ -149,18 +152,19 @@ class BaseTransform(ABC):
     author: str
     version: str
     category: str                   # e.g., "DNS", "Social Media", "OSINT"
-    
+
     @abstractmethod
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         """Execute the transform on a given entity."""
         pass
-    
+
     def get_settings(self) -> list[TransformSetting]:
         """Return configurable settings (API keys, options)."""
         return []
 ```
 
 **Transform Result:**
+
 ```python
 class TransformResult:
     entities: list[Entity]       # New entities discovered
@@ -188,12 +192,14 @@ ogi install-transform ogi-social-media
 ### 5.3 Graph Engine
 
 **Responsibilities:**
+
 - Manage the in-memory graph structure (nodes + edges)
 - Handle layout algorithms (force-directed, hierarchical, circular, organic)
 - Support graph operations: merge, group, filter, shortest path, clustering
 - Maintain undo/redo history
 
 **Edge (Link) Schema:**
+
 ```python
 class Edge:
     id: UUID
@@ -207,6 +213,7 @@ class Edge:
 ```
 
 **Built-in Graph Algorithms:**
+
 - Shortest path (Dijkstra / BFS)
 - Centrality analysis (betweenness, degree, closeness)
 - Community detection (Louvain, label propagation)
@@ -229,6 +236,7 @@ class Edge:
 9. **Notebook / Notes Panel** — attach analyst notes to entities or the session
 
 **Graph Interaction Features:**
+
 - Right-click context menu → "Run Transform" on selected entity
 - Multi-select → run transforms on multiple entities in batch
 - Bookmarking / pinning entities
@@ -248,18 +256,18 @@ class Edge:
 
 ## 6. Built-in Transform Packages (v1.0)
 
-| Package | Transforms | Data Sources |
-|---|---|---|
-| **DNS & Infrastructure** | DNS lookup, reverse DNS, WHOIS, subdomain enumeration, zone transfer, MX/NS/TXT records | Public DNS, WHOIS databases |
-| **IP Intelligence** | Geolocation, ASN lookup, port scan summary, reverse IP | MaxMind, RDAP, Shodan (API key) |
-| **Web / URL** | Screenshot, technology detection, robots.txt, sitemap parsing, link extraction | Direct HTTP requests |
-| **Email** | Email to domain, email verification, breach lookup, email header analysis | HIBP API, DNS |
-| **Social Media** | Username search, profile scraping, social connections | Public APIs and scraping |
-| **Search Engines** | Google dorking, Bing search, cached page retrieval | Search APIs |
-| **Threat Intelligence** | VirusTotal lookup, AbuseIPDB, OTX AlienVault, MITRE ATT&CK mapping | Public TI APIs |
-| **File / Hash** | Hash lookup, malware analysis summary, file metadata extraction | VirusTotal, MalwareBazaar |
-| **Certificate** | SSL cert details, cert chain, crt.sh transparency log search | crt.sh, Censys |
-| **Cryptocurrency** | Wallet balance, transaction history, cluster analysis | Blockchain APIs |
+| Package                  | Transforms                                                                              | Data Sources                    |
+| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------- |
+| **DNS & Infrastructure** | DNS lookup, reverse DNS, WHOIS, subdomain enumeration, zone transfer, MX/NS/TXT records | Public DNS, WHOIS databases     |
+| **IP Intelligence**      | Geolocation, ASN lookup, port scan summary, reverse IP                                  | MaxMind, RDAP, Shodan (API key) |
+| **Web / URL**            | Screenshot, technology detection, robots.txt, sitemap parsing, link extraction          | Direct HTTP requests            |
+| **Email**                | Email to domain, email verification, breach lookup, email header analysis               | HIBP API, DNS                   |
+| **Social Media**         | Username search, profile scraping, social connections                                   | Public APIs and scraping        |
+| **Search Engines**       | Google dorking, Bing search, cached page retrieval                                      | Search APIs                     |
+| **Threat Intelligence**  | VirusTotal lookup, AbuseIPDB, OTX AlienVault, MITRE ATT&CK mapping                      | Public TI APIs                  |
+| **File / Hash**          | Hash lookup, malware analysis summary, file metadata extraction                         | VirusTotal, MalwareBazaar       |
+| **Certificate**          | SSL cert details, cert chain, crt.sh transparency log search                            | crt.sh, Censys                  |
+| **Cryptocurrency**       | Wallet balance, transaction history, cluster analysis                                   | Blockchain APIs                 |
 
 ---
 
@@ -269,41 +277,41 @@ class Edge:
 
 **Goal:** Core engine with basic UI and a handful of transforms.
 
-| Week | Milestone | Deliverables |
-|---|---|---|
-| 1–2 | Project setup | Monorepo structure, CI/CD pipeline, contribution guidelines, license selection |
-| 3–4 | Entity system | Base entity model, built-in entity types, entity registry, YAML schema loader |
-| 5–6 | Transform engine | Base transform interface, local transform runner, async execution, settings/config |
-| 7–8 | Graph engine | In-memory graph model, add/remove/merge operations, basic layout algorithms |
-| 9–10 | Basic UI | React app scaffold, graph canvas (Cytoscape.js), entity palette, detail inspector |
-| 11–12 | First transforms | DNS transforms (5–8), IP geolocation, WHOIS, email-to-domain |
-| 12 | **Alpha Release** | Functional local app with basic transforms and graph visualization |
+| Week  | Milestone         | Deliverables                                                                       |
+| ----- | ----------------- | ---------------------------------------------------------------------------------- |
+| 1–2   | Project setup     | Monorepo structure, CI/CD pipeline, contribution guidelines, license selection     |
+| 3–4   | Entity system     | Base entity model, built-in entity types, entity registry, YAML schema loader      |
+| 5–6   | Transform engine  | Base transform interface, local transform runner, async execution, settings/config |
+| 7–8   | Graph engine      | In-memory graph model, add/remove/merge operations, basic layout algorithms        |
+| 9–10  | Basic UI          | React app scaffold, graph canvas (Cytoscape.js), entity palette, detail inspector  |
+| 11–12 | First transforms  | DNS transforms (5–8), IP geolocation, WHOIS, email-to-domain                       |
+| 12    | **Alpha Release** | Functional local app with basic transforms and graph visualization                 |
 
 ### Phase 2: Enrichment (Months 4–6)
 
 **Goal:** Full-featured UI, extensive transform library, import/export.
 
-| Week | Milestone | Deliverables |
-|---|---|---|
-| 13–14 | Transform Hub | CLI tool for installing transforms, package format spec, local registry |
-| 15–16 | Advanced UI | Search/filter, table view, right-click context menus, undo/redo, multi-select |
-| 17–18 | More transforms | Social media, web analysis, threat intelligence, certificate, search engine transforms |
-| 19–20 | Import / Export | GraphML, CSV, JSON, Maltego MTGX import, PDF/PNG graph export |
-| 21–22 | Graph analysis | Shortest path, centrality, community detection, link analysis tools |
-| 23–24 | Desktop packaging | Electron/Tauri wrapper, auto-update, system tray, cross-platform builds |
-| 24 | **Beta Release** | Full-featured desktop app with 30+ transforms and graph analysis |
+| Week  | Milestone         | Deliverables                                                                           |
+| ----- | ----------------- | -------------------------------------------------------------------------------------- |
+| 13–14 | Transform Hub     | CLI tool for installing transforms, package format spec, local registry                |
+| 15–16 | Advanced UI       | Search/filter, table view, right-click context menus, undo/redo, multi-select          |
+| 17–18 | More transforms   | Social media, web analysis, threat intelligence, certificate, search engine transforms |
+| 19–20 | Import / Export   | GraphML, CSV, JSON, Maltego MTGX import, PDF/PNG graph export                          |
+| 21–22 | Graph analysis    | Shortest path, centrality, community detection, link analysis tools                    |
+| 23–24 | Desktop packaging | Electron/Tauri wrapper, auto-update, system tray, cross-platform builds                |
+| 24    | **Beta Release**  | Full-featured desktop app with 30+ transforms and graph analysis                       |
 
 ### Phase 3: Scale & Collaborate (Months 7–9)
 
 **Goal:** Server mode, multi-user collaboration, plugin marketplace.
 
-| Week | Milestone | Deliverables |
-|---|---|---|
-| 25–27 | Server mode | Backend API server, user authentication, project sharing, PostgreSQL/Neo4j persistence |
-| 28–30 | Real-time collaboration | WebSocket sync, conflict resolution, user cursors, shared graph editing |
-| 31–33 | Transform Distribution Server | Remote TDS protocol, public TDS hosting, transform sandboxing |
-| 34–36 | Plugin ecosystem | Online transform registry/marketplace, ratings, automated security scanning |
-| 36 | **v1.0 Stable Release** | Production-ready platform with collaboration features |
+| Week  | Milestone                     | Deliverables                                                                           |
+| ----- | ----------------------------- | -------------------------------------------------------------------------------------- |
+| 25–27 | Server mode                   | Backend API server, user authentication, project sharing, PostgreSQL/Neo4j persistence |
+| 28–30 | Real-time collaboration       | WebSocket sync, conflict resolution, user cursors, shared graph editing                |
+| 31–33 | Transform Distribution Server | Remote TDS protocol, public TDS hosting, transform sandboxing                          |
+| 34–36 | Plugin ecosystem              | Online transform registry/marketplace, ratings, automated security scanning            |
+| 36    | **v1.0 Stable Release**       | Production-ready platform with collaboration features                                  |
 
 ### Phase 4: Advanced Features (Months 10–12+)
 
@@ -440,11 +448,11 @@ class DomainToIP(BaseTransform):
     input_entity_types = ["Domain"]
     output_entity_types = ["IPAddress"]
     category = "DNS"
-    
+
     async def run(self, entity, config):
         import socket
         result = TransformResult()
-        
+
         try:
             ips = socket.getaddrinfo(entity.value, None)
             seen = set()
@@ -465,11 +473,12 @@ class DomainToIP(BaseTransform):
                     ))
         except socket.gaierror as e:
             result.messages.append(f"DNS resolution failed: {e}")
-        
+
         return result
 ```
 
 **Transform Package Structure:**
+
 ```
 ogi-dns-transforms/
 ├── ogi_transform.yaml        # Package metadata
@@ -518,51 +527,51 @@ ogi-dns-transforms/
 
 ## 13. Comparable / Related Open Source Projects
 
-| Project | Relationship | Notes |
-|---|---|---|
-| **SpiderFoot** | Complementary / inspiration | Python-based OSINT automation — lacks rich graph UI |
-| **TheHive / Cortex** | Complementary | Incident response + analyzers — can be integrated as transform source |
-| **Gephi** | Inspiration (graph viz) | Powerful graph analysis but not OSINT-focused |
-| **Recon-ng** | Complementary | CLI-based recon framework — transforms could wrap recon-ng modules |
-| **OSRFramework** | Complementary | Username enumeration toolset |
-| **Obsidian (graph view)** | UI inspiration | Beautiful graph rendering in a knowledge tool |
+| Project                   | Relationship                | Notes                                                                 |
+| ------------------------- | --------------------------- | --------------------------------------------------------------------- |
+| **SpiderFoot**            | Complementary / inspiration | Python-based OSINT automation — lacks rich graph UI                   |
+| **TheHive / Cortex**      | Complementary               | Incident response + analyzers — can be integrated as transform source |
+| **Gephi**                 | Inspiration (graph viz)     | Powerful graph analysis but not OSINT-focused                         |
+| **Recon-ng**              | Complementary               | CLI-based recon framework — transforms could wrap recon-ng modules    |
+| **OSRFramework**          | Complementary               | Username enumeration toolset                                          |
+| **Obsidian (graph view)** | UI inspiration              | Beautiful graph rendering in a knowledge tool                         |
 
 ---
 
 ## 14. Success Metrics
 
-| Metric | 6-Month Target | 12-Month Target |
-|---|---|---|
-| GitHub Stars | 1,000 | 5,000 |
-| Active Contributors | 15 | 50 |
-| Published Transforms | 30 | 100+ |
-| Monthly Active Users (estimated) | 500 | 5,000 |
-| Community Transform Packages | 5 | 25 |
+| Metric                           | 6-Month Target | 12-Month Target |
+| -------------------------------- | -------------- | --------------- |
+| GitHub Stars                     | 1,000          | 5,000           |
+| Active Contributors              | 15             | 50              |
+| Published Transforms             | 30             | 100+            |
+| Monthly Active Users (estimated) | 500            | 5,000           |
+| Community Transform Packages     | 5              | 25              |
 
 ---
 
 ## 15. Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Third-party API changes/deprecation | High | Medium | Abstraction layer; community-maintained adapters |
-| Low contributor engagement | Medium | High | Good docs, easy onboarding, bounty programs |
-| Legal issues (scraping, OSINT ethics) | Medium | High | Clear usage policies, ethical guidelines, responsible disclosure |
-| Performance with large graphs (10K+ nodes) | Medium | Medium | Lazy rendering, pagination, WebGL canvas option |
-| Feature creep / scope bloat | Medium | Medium | Strict phase gating, MVP focus, community voting on features |
+| Risk                                       | Likelihood | Impact | Mitigation                                                       |
+| ------------------------------------------ | ---------- | ------ | ---------------------------------------------------------------- |
+| Third-party API changes/deprecation        | High       | Medium | Abstraction layer; community-maintained adapters                 |
+| Low contributor engagement                 | Medium     | High   | Good docs, easy onboarding, bounty programs                      |
+| Legal issues (scraping, OSINT ethics)      | Medium     | High   | Clear usage policies, ethical guidelines, responsible disclosure |
+| Performance with large graphs (10K+ nodes) | Medium     | Medium | Lazy rendering, pagination, WebGL canvas option                  |
+| Feature creep / scope bloat                | Medium     | Medium | Strict phase gating, MVP focus, community voting on features     |
 
 ---
 
 ## 16. Estimated Resource Requirements
 
-| Role | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
-|---|---|---|---|---|
-| Core Backend Developer | 2 | 2 | 2 | 1 |
-| Frontend Developer | 1 | 2 | 2 | 1 |
-| Transform Developer / OSINT Specialist | 1 | 2 | 1 | 1 |
-| DevOps / Infrastructure | 0.5 | 0.5 | 1 | 0.5 |
-| Technical Writer / Docs | 0.5 | 0.5 | 1 | 0.5 |
-| Community Manager | 0 | 0.5 | 1 | 1 |
+| Role                                   | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
+| -------------------------------------- | ------- | ------- | ------- | ------- |
+| Core Backend Developer                 | 2       | 2       | 2       | 1       |
+| Frontend Developer                     | 1       | 2       | 2       | 1       |
+| Transform Developer / OSINT Specialist | 1       | 2       | 1       | 1       |
+| DevOps / Infrastructure                | 0.5     | 0.5     | 1       | 0.5     |
+| Technical Writer / Docs                | 0.5     | 0.5     | 1       | 0.5     |
+| Community Manager                      | 0       | 0.5     | 1       | 1       |
 
 ---
 
@@ -583,4 +592,4 @@ Month 10+: Timeline view → Geo view → ML features → Report builder
 
 ---
 
-*This plan is a living document. All timelines and technology choices should be validated with the core team and adjusted based on contributor availability and community feedback.*
+_This plan is a living document. All timelines and technology choices should be validated with the core team and adjusted based on contributor availability and community feedback._
