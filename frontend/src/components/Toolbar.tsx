@@ -1,12 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
-import { ExportImportDialog } from "./ExportImportDialog";
-import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Undo2, Redo2, User, Lock, Unlock, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { TransformHub } from "./marketplace/TransformHub";
-import { ShareDialog } from "./ShareDialog";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useUndoStore } from "../stores/undoStore";
@@ -20,7 +17,7 @@ import { toast } from "sonner";
 import { useTransformJobStore } from "../stores/transformJobStore";
 
 export function Toolbar() {
-  const { currentProject, updateProject } = useProjectStore();
+  const { currentProject } = useProjectStore();
   const {
     graph,
     entities,
@@ -48,12 +45,9 @@ export function Toolbar() {
   const submitJob = useTransformJobStore((s) => s.submitJob);
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
-  const [showExportImport, setShowExportImport] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [showBulkTransforms, setShowBulkTransforms] = useState(false);
@@ -62,15 +56,6 @@ export function Toolbar() {
   const [selectedLayout, setSelectedLayout] = useState<GraphLayoutPreset>("force");
   const { user, authEnabled } = useAuthStore();
   const isViewer = useIsViewer();
-
-  const handleTogglePrivacy = async () => {
-    if (!currentProject) return;
-    try {
-      await updateProject(currentProject.id, { is_public: !currentProject.is_public });
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const applySelectedLayout = () => {
     if (graph.order < 2) return;
@@ -91,13 +76,6 @@ export function Toolbar() {
     getSigmaRef()?.refresh();
     getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
   };
-
-  // Listen for keyboard shortcut toggle
-  useEffect(() => {
-    const handler = () => setShowShortcuts((v) => !v);
-    window.addEventListener("ogi-toggle-shortcuts", handler);
-    return () => window.removeEventListener("ogi-toggle-shortcuts", handler);
-  }, []);
 
   const handleZoomIn = () => getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
   const handleZoomOut = () => getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
@@ -196,18 +174,6 @@ export function Toolbar() {
       )}
 
       <div className="flex-1" />
-
-      {/* Graph stats */}
-      <span className="text-[10px] text-text-muted">
-        {entities.size} entities, {edges.size} edges
-      </span>
-      {selectedNodeIds.size > 0 && (
-        <span className="text-[10px] text-accent">
-          {selectedNodeIds.size} selected
-        </span>
-      )}
-
-      <div className="w-px h-4 bg-border" />
 
       {/* Undo / Redo */}
       <button
@@ -495,48 +461,6 @@ export function Toolbar() {
       </button>
 
       <div className="w-px h-4 bg-border" />
-
-      <button
-        onClick={() => setShowExportImport(true)}
-        className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Export / Import"
-      >
-        <Download size={12} />
-        Export
-      </button>
-
-      <button
-        onClick={() => setShowShortcuts(true)}
-        className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        title="Keyboard shortcuts"
-      >
-        <Keyboard size={14} />
-      </button>
-
-      <div className="w-px h-4 bg-border" />
-
-      {/* Privacy Toggle & Share */}
-      {currentProject && (!currentProject.owner_id || currentProject.owner_id === user?.id) && !isViewer && (
-        <>
-          <button
-            onClick={() => setShowShare(true)}
-            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text"
-            title="Share Project"
-          >
-            <Users size={14} />
-          </button>
-          
-          <button
-            onClick={handleTogglePrivacy}
-            className={`p-1.5 rounded hover:bg-surface-hover ${currentProject.is_public ? 'text-green-400' : 'text-text-muted hover:text-text'}`}
-            title={currentProject.is_public ? "Public Project (Click to make Private)" : "Private Project (Click to make Public)"}
-          >
-            {currentProject.is_public ? <Unlock size={14} /> : <Lock size={14} />}
-          </button>
-          <div className="w-px h-4 bg-border" />
-        </>
-      )}
-
       {/* User profile */}
       <button
         onClick={() => setShowProfile(true)}
@@ -552,14 +476,6 @@ export function Toolbar() {
         )}
       </button>
 
-      <ExportImportDialog
-        open={showExportImport}
-        onClose={() => setShowExportImport(false)}
-      />
-      <KeyboardShortcutsDialog
-        open={showShortcuts}
-        onClose={() => setShowShortcuts(false)}
-      />
       <ProfileDialog
         open={showProfile}
         onClose={() => setShowProfile(false)}
@@ -574,13 +490,6 @@ export function Toolbar() {
         open={showPlugins}
         onClose={() => setShowPlugins(false)}
       />
-      {currentProject && (
-        <ShareDialog
-          open={showShare}
-          onClose={() => setShowShare(false)}
-          projectId={currentProject.id}
-        />
-      )}
     </div>
   );
 }

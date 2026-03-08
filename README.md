@@ -331,7 +331,7 @@ List-style settings accept either:
 | `OGI_FRONTEND_PORT`                             | Local Docker frontend port mapping                   | `3000`                                              |
 | `OGI_IMAGE_TAG`                                 | Prod image tag for compose/Coolify-style deploys     | `latest`                                            |
 | `OGI_BACKEND_IMAGE`                             | Optional backend image override                      | `ghcr.io/khashashin/ogi-backend`                    |
-| `OGI_WORKER_IMAGE`                              | Optional worker image override                       | `ghcr.io/khashashin/ogi-worker`                     |
+| `OGI_WORKER_IMAGE`                              | Optional worker image override. Defaults to backend image because worker and backend share the same image build. | `ghcr.io/khashashin/ogi-backend` |
 | `OGI_FRONTEND_IMAGE`                            | Optional frontend image override                     | `ghcr.io/khashashin/ogi-frontend`                   |
 | `OGI_CLI_BEARER_TOKEN`                          | Optional CLI bearer token for auth-enabled backends  | unset                                               |
 
