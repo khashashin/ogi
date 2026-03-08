@@ -3,6 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
+import { supabase } from "../lib/supabase";
 
 interface GraphStats {
   entity_count: number;
@@ -25,13 +26,62 @@ interface ImportSummary {
   edges_skipped: number;
 }
 
+interface ProjectMember {
+  project_id: string;
+  user_id: string;
+  role: string;
+  display_name: string;
+  email: string;
+}
+
+interface ProjectMemberCreate {
+  email: string;
+  role: string;
+}
+
+interface ProjectMemberUpdate {
+  role: string;
+}
+
+interface PluginInfo {
+  name: string;
+  version: string;
+  display_name: string;
+  description: string;
+  author: string;
+  enabled: boolean;
+  transform_count: number;
+  transform_names: string[];
+}
+
 const BASE_URL = "/api/v1";
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!supabase) return {};
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    return { Authorization: `Bearer ${session.access_token}` };
+  }
+  return {};
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...options?.headers,
+    },
     ...options,
   });
+  if (res.status === 401) {
+    // Session expired or invalid — trigger sign-out
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    throw new Error("Unauthorized — please sign in again");
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API error ${res.status}: ${body}`);
@@ -121,20 +171,24 @@ export const api = {
 
   import: {
     json: async (projectId: string, file: File) => {
+      const authHeaders = await getAuthHeaders();
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${BASE_URL}/projects/${projectId}/import/json`, {
         method: "POST",
+        headers: { ...authHeaders },
         body: formData,
       });
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
       return res.json() as Promise<ImportSummary>;
     },
     csv: async (projectId: string, file: File) => {
+      const authHeaders = await getAuthHeaders();
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${BASE_URL}/projects/${projectId}/import/csv`, {
         method: "POST",
+        headers: { ...authHeaders },
         body: formData,
       });
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
@@ -157,5 +211,44 @@ export const api = {
         }),
       }),
     getRun: (runId: string) => request<TransformRun>(`/transforms/runs/${runId}`),
+  },
+
+  apiKeys: {
+    list: () => request<{ service_name: string }[]>("/settings/api-keys"),
+    save: (serviceName: string, key: string) =>
+      request<{ service_name: string }>("/settings/api-keys", {
+        method: "POST",
+        body: JSON.stringify({ service_name: serviceName, key }),
+      }),
+    delete: (serviceName: string) =>
+      request<void>(`/settings/api-keys/${serviceName}`, { method: "DELETE" }),
+  },
+
+  plugins: {
+    list: () => request<PluginInfo[]>("/plugins"),
+    get: (name: string) => request<PluginInfo>(`/plugins/${name}`),
+    toggle: (name: string) =>
+      request<PluginInfo>(`/plugins/${name}/enable`, { method: "POST" }),
+    reload: (name: string) =>
+      request<PluginInfo>(`/plugins/${name}/reload`, { method: "POST" }),
+  },
+
+  members: {
+    list: (projectId: string) =>
+      request<ProjectMember[]>(`/projects/${projectId}/members`),
+    add: (projectId: string, data: ProjectMemberCreate) =>
+      request<ProjectMember>(`/projects/${projectId}/members`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (projectId: string, userId: string, data: ProjectMemberUpdate) =>
+      request<ProjectMember>(`/projects/${projectId}/members/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    remove: (projectId: string, userId: string) =>
+      request<void>(`/projects/${projectId}/members/${userId}`, {
+        method: "DELETE",
+      }),
   },
 };

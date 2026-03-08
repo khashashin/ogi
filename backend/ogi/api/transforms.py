@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ogi.models import TransformInfo, TransformRun, EdgeCreate
+from ogi.models import TransformInfo, TransformRun, EdgeCreate, UserProfile
 from ogi.transforms.base import TransformConfig
+from ogi.api.auth import get_current_user
 from ogi.api.dependencies import (
     get_transform_engine,
     get_entity_store,
@@ -24,19 +25,26 @@ class RunTransformRequest(BaseModel):
 
 
 @router.get("", response_model=list[TransformInfo])
-async def list_transforms() -> list[TransformInfo]:
+async def list_transforms(
+    current_user: UserProfile = Depends(get_current_user),
+) -> list[TransformInfo]:
     engine = get_transform_engine()
     return engine.list_transforms()
 
 
 @router.get("/entity-types")
-async def list_entity_types() -> list[dict[str, str]]:
+async def list_entity_types(
+    current_user: UserProfile = Depends(get_current_user),
+) -> list[dict[str, str]]:
     registry = get_entity_registry()
     return registry.list_types_dict()
 
 
 @router.get("/for-entity/{entity_id}", response_model=list[TransformInfo])
-async def list_transforms_for_entity(entity_id: UUID) -> list[TransformInfo]:
+async def list_transforms_for_entity(
+    entity_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> list[TransformInfo]:
     entity_store = get_entity_store()
     entity = await entity_store.get(entity_id)
     if entity is None:
@@ -46,7 +54,11 @@ async def list_transforms_for_entity(entity_id: UUID) -> list[TransformInfo]:
 
 
 @router.post("/{name}/run", response_model=TransformRun)
-async def run_transform(name: str, request: RunTransformRequest) -> TransformRun:
+async def run_transform(
+    name: str,
+    request: RunTransformRequest,
+    current_user: UserProfile = Depends(get_current_user),
+) -> TransformRun:
     entity_store = get_entity_store()
     entity = await entity_store.get(request.entity_id)
     if entity is None:
@@ -128,7 +140,10 @@ async def run_transform(name: str, request: RunTransformRequest) -> TransformRun
 
 
 @router.get("/runs/{run_id}", response_model=TransformRun)
-async def get_run(run_id: UUID) -> TransformRun:
+async def get_run(
+    run_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> TransformRun:
     # Try in-memory first, then DB
     engine = get_transform_engine()
     run = engine.get_run(run_id)
@@ -142,6 +157,9 @@ async def get_run(run_id: UUID) -> TransformRun:
 
 
 @router.get("/project/{project_id}/runs", response_model=list[TransformRun])
-async def list_project_runs(project_id: UUID) -> list[TransformRun]:
+async def list_project_runs(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+) -> list[TransformRun]:
     run_store = get_transform_run_store()
     return await run_store.list_by_project(project_id)

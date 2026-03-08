@@ -89,6 +89,13 @@ class TransformEngine:
     def get_run(self, run_id: UUID) -> TransformRun | None:
         return self._runs.get(run_id)
 
+    def load_plugins(self, plugin_dirs: list[str]) -> "PluginEngine":
+        """Discover and load plugin transforms from the given directories."""
+        from ogi.engine.plugin_engine import PluginEngine
+        engine = PluginEngine(plugin_dirs)
+        engine.load_all(self)
+        return engine
+
     def auto_discover(self) -> None:
         """Register all built-in transforms."""
         from ogi.transforms.dns.domain_to_ip import DomainToIP

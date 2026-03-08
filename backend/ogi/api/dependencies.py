@@ -4,10 +4,12 @@ from uuid import UUID
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.graph_engine import GraphEngine
 from ogi.engine.transform_engine import TransformEngine
+from ogi.engine.plugin_engine import PluginEngine
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
+from ogi.store.api_key_store import ApiKeyStore
 
 _project_store: ProjectStore | None = None
 _entity_store: EntityStore | None = None
@@ -15,6 +17,8 @@ _edge_store: EdgeStore | None = None
 _transform_run_store: TransformRunStore | None = None
 _transform_engine: TransformEngine | None = None
 _entity_registry: EntityRegistry | None = None
+_plugin_engine: PluginEngine | None = None
+_api_key_store: ApiKeyStore | None = None
 _graph_engines: dict[UUID, GraphEngine] = {}
 
 
@@ -39,6 +43,16 @@ def init_transform_engine(engine: TransformEngine) -> None:
 def init_entity_registry(registry: EntityRegistry) -> None:
     global _entity_registry
     _entity_registry = registry
+
+
+def init_api_key_store(store: ApiKeyStore) -> None:
+    global _api_key_store
+    _api_key_store = store
+
+
+def init_plugin_engine(engine: PluginEngine) -> None:
+    global _plugin_engine
+    _plugin_engine = engine
 
 
 def get_project_store() -> ProjectStore:
@@ -69,6 +83,16 @@ def get_entity_registry() -> EntityRegistry:
 def get_transform_run_store() -> TransformRunStore:
     assert _transform_run_store is not None
     return _transform_run_store
+
+
+def get_api_key_store() -> ApiKeyStore:
+    assert _api_key_store is not None
+    return _api_key_store
+
+
+def get_plugin_engine() -> PluginEngine:
+    assert _plugin_engine is not None
+    return _plugin_engine
 
 
 def get_graph_engine(project_id: UUID) -> GraphEngine:

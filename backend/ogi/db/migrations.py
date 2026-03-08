@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import aiosqlite
 
 
-SCHEMA_SQL = """
+# ---------- SQLite schema ----------
+
+SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -64,6 +68,121 @@ CREATE INDEX IF NOT EXISTS idx_transform_runs_project ON transform_runs(project_
 """
 
 
-async def run_migrations(db: aiosqlite.Connection) -> None:
-    await db.executescript(SCHEMA_SQL)
+async def run_sqlite_migrations(db: aiosqlite.Connection) -> None:
+    await db.executescript(SQLITE_SCHEMA)
     await db.commit()
+
+
+# ---------- PostgreSQL schema ----------
+
+PG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY,
+    email TEXT,
+    display_name TEXT,
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    owner_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'viewer',
+    PRIMARY KEY (project_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS entities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    properties JSONB NOT NULL DEFAULT '{}',
+    icon TEXT NOT NULL DEFAULT '',
+    weight INTEGER NOT NULL DEFAULT 1,
+    notes TEXT NOT NULL DEFAULT '',
+    tags JSONB NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL DEFAULT 'manual',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    source_id UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    target_id UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    label TEXT NOT NULL DEFAULT '',
+    weight INTEGER NOT NULL DEFAULT 1,
+    properties JSONB NOT NULL DEFAULT '{}',
+    bidirectional BOOLEAN NOT NULL DEFAULT false,
+    source_transform TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS transform_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    transform_name TEXT NOT NULL,
+    input_entity_id UUID NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result JSONB,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS plugins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    version TEXT,
+    description TEXT,
+    author TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    installed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    service_name TEXT NOT NULL,
+    encrypted_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id, service_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
+CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
+CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
+CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
+CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
+CREATE INDEX IF NOT EXISTS idx_transform_runs_project ON transform_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+"""
+
+
+async def run_pg_migrations(pool: "asyncpg.Pool") -> None:  # type: ignore[name-defined]
+    import asyncpg as _asyncpg  # noqa: F811
+
+    async with pool.acquire() as conn:
+        conn: _asyncpg.Connection
+        await conn.execute(PG_SCHEMA)
+
+
+# ---------- Unified entry point ----------
+
+async def run_migrations(db: object) -> None:
+    """Run migrations for the active database backend."""
+    if isinstance(db, aiosqlite.Connection):
+        await run_sqlite_migrations(db)
+    else:
+        await run_pg_migrations(db)  # type: ignore[arg-type]

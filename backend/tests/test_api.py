@@ -2,8 +2,9 @@ import os
 import pytest
 from httpx import AsyncClient, ASGITransport
 
-# Use in-memory DB for tests
+# Use in-memory SQLite DB for tests
 os.environ.setdefault("OGI_DB_PATH", ":memory:")
+os.environ.setdefault("OGI_USE_SQLITE", "true")
 
 from ogi.main import app
 

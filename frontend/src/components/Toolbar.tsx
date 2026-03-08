@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
+import { ProfileDialog } from "./ProfileDialog";
+import { ApiKeySettings } from "./ApiKeySettings";
+import { PluginManager } from "./PluginManager";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useUndoStore } from "../stores/undoStore";
+import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function Toolbar() {
@@ -19,6 +23,10 @@ export function Toolbar() {
   const [showProjectList, setShowProjectList] = useState(false);
   const [showExportImport, setShowExportImport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
+  const { user, authEnabled } = useAuthStore();
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -216,6 +224,23 @@ export function Toolbar() {
         <Keyboard size={14} />
       </button>
 
+      <div className="w-px h-4 bg-border" />
+
+      {/* User profile */}
+      <button
+        onClick={() => setShowProfile(true)}
+        className="flex items-center justify-center w-6 h-6 rounded-full bg-accent text-white text-[10px] font-semibold hover:opacity-80"
+        title={authEnabled && user?.email ? user.email : "Profile & Settings"}
+      >
+        {authEnabled && user ? (
+          ((user.user_metadata?.display_name as string) ?? user.email ?? "")
+            .slice(0, 2)
+            .toUpperCase() || <User size={12} />
+        ) : (
+          <User size={12} />
+        )}
+      </button>
+
       <ExportImportDialog
         open={showExportImport}
         onClose={() => setShowExportImport(false)}
@@ -223,6 +248,20 @@ export function Toolbar() {
       <KeyboardShortcutsDialog
         open={showShortcuts}
         onClose={() => setShowShortcuts(false)}
+      />
+      <ProfileDialog
+        open={showProfile}
+        onClose={() => setShowProfile(false)}
+        onOpenApiKeys={() => setShowApiKeys(true)}
+        onOpenPlugins={() => setShowPlugins(true)}
+      />
+      <ApiKeySettings
+        open={showApiKeys}
+        onClose={() => setShowApiKeys(false)}
+      />
+      <PluginManager
+        open={showPlugins}
+        onClose={() => setShowPlugins(false)}
       />
     </div>
   );

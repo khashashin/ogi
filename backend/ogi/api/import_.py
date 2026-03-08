@@ -3,10 +3,11 @@ import io
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
-from ogi.models import Entity, EntityType, Edge, EdgeCreate
+from ogi.models import Entity, EntityType, Edge, EdgeCreate, UserProfile
+from ogi.api.auth import get_current_user
 from ogi.api.dependencies import get_entity_store, get_edge_store, get_graph_engine
 
 router = APIRouter(prefix="/projects/{project_id}/import", tags=["import"])
@@ -21,7 +22,11 @@ class ImportSummary(BaseModel):
 
 
 @router.post("/json", response_model=ImportSummary)
-async def import_json(project_id: UUID, file: UploadFile = File(...)) -> ImportSummary:
+async def import_json(
+    project_id: UUID,
+    file: UploadFile = File(...),
+    current_user: UserProfile = Depends(get_current_user),
+) -> ImportSummary:
     content = await file.read()
     try:
         data = json.loads(content)
@@ -82,7 +87,11 @@ async def import_json(project_id: UUID, file: UploadFile = File(...)) -> ImportS
 
 
 @router.post("/csv", response_model=ImportSummary)
-async def import_csv(project_id: UUID, file: UploadFile = File(...)) -> ImportSummary:
+async def import_csv(
+    project_id: UUID,
+    file: UploadFile = File(...),
+    current_user: UserProfile = Depends(get_current_user),
+) -> ImportSummary:
     """Import entities from a CSV file. Expected columns: type, value, properties (JSON), weight, notes, tags, source"""
     content = (await file.read()).decode("utf-8")
     reader = csv.DictReader(io.StringIO(content))

@@ -5,16 +5,51 @@ import zipfile
 from uuid import UUID
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
+from ogi.models import UserProfile
+from ogi.api.auth import get_current_user
 from ogi.api.dependencies import get_entity_store, get_edge_store, get_project_store
+from ogi.config import settings
 
 router = APIRouter(prefix="/projects/{project_id}/export", tags=["export"])
 
 
+def _get_supabase_storage():  # type: ignore[no-untyped-def]
+    """Return Supabase storage client or None if not configured."""
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        return None
+    try:
+        from supabase import create_client
+        client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        return client.storage
+    except Exception:
+        return None
+
+
+async def _upload_to_storage(
+    project_id: UUID, filename: str, content: bytes, content_type: str,
+) -> str | None:
+    """Upload content to Supabase Storage, return signed URL or None."""
+    storage = _get_supabase_storage()
+    if storage is None:
+        return None
+    try:
+        path = f"{project_id}/{filename}"
+        storage.from_("exports").upload(path, content, {"content-type": content_type})
+        signed = storage.from_("exports").create_signed_url(path, 3600)
+        return signed.get("signedURL") or signed.get("signedUrl")
+    except Exception:
+        return None
+
+
 @router.get("/json")
-async def export_json(project_id: UUID) -> Response:
+async def export_json(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    cloud: bool = Query(False, description="Upload to Supabase Storage"),
+) -> Response:
     project_store = get_project_store()
     entity_store = get_entity_store()
     edge_store = get_edge_store()
@@ -35,6 +70,17 @@ async def export_json(project_id: UUID) -> Response:
 
     content = json.dumps(data, indent=2, default=str)
     filename = f"{project.name if project else 'export'}.ogi.json"
+
+    if cloud:
+        url = await _upload_to_storage(
+            project_id, filename, content.encode(), "application/json"
+        )
+        if url:
+            return Response(
+                content=json.dumps({"url": url}),
+                media_type="application/json",
+            )
+
     return Response(
         content=content,
         media_type="application/json",
@@ -43,7 +89,11 @@ async def export_json(project_id: UUID) -> Response:
 
 
 @router.get("/csv")
-async def export_csv(project_id: UUID) -> Response:
+async def export_csv(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    cloud: bool = Query(False, description="Upload to Supabase Storage"),
+) -> Response:
     project_store = get_project_store()
     entity_store = get_entity_store()
     edge_store = get_edge_store()
@@ -79,15 +129,31 @@ async def export_csv(project_id: UUID) -> Response:
         zf.writestr("edges.csv", edge_buf.getvalue())
 
     filename = f"{project.name if project else 'export'}.csv.zip"
+    zip_bytes = zip_buffer.getvalue()
+
+    if cloud:
+        url = await _upload_to_storage(
+            project_id, filename, zip_bytes, "application/zip"
+        )
+        if url:
+            return Response(
+                content=json.dumps({"url": url}),
+                media_type="application/json",
+            )
+
     return Response(
-        content=zip_buffer.getvalue(),
+        content=zip_bytes,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @router.get("/graphml")
-async def export_graphml(project_id: UUID) -> Response:
+async def export_graphml(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    cloud: bool = Query(False, description="Upload to Supabase Storage"),
+) -> Response:
     entity_store = get_entity_store()
     edge_store = get_edge_store()
 
@@ -140,8 +206,20 @@ async def export_graphml(project_id: UUID) -> Response:
         weight_data.text = str(edge.weight)
 
     content = tostring(graphml, encoding="unicode", xml_declaration=True)
+    filename = "export.graphml"
+
+    if cloud:
+        url = await _upload_to_storage(
+            project_id, filename, content.encode(), "application/xml"
+        )
+        if url:
+            return Response(
+                content=json.dumps({"url": url}),
+                media_type="application/json",
+            )
+
     return Response(
         content=content,
         media_type="application/xml",
-        headers={"Content-Disposition": 'attachment; filename="export.graphml"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

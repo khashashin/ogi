@@ -2,12 +2,17 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { Layout } from "./components/Layout";
+import { AuthGuard } from "./components/AuthGuard";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
+import { useRealtimeSync } from "./hooks/useRealtimeSync";
 
-function App() {
+function AppContent() {
   const { fetchProjects, currentProject, loading, error } = useProjectStore();
   const { loadGraph, loading: graphLoading } = useGraphStore();
+
+  // Subscribe to real-time changes when Supabase is configured
+  useRealtimeSync(currentProject?.id ?? null);
 
   useEffect(() => {
     fetchProjects();
@@ -46,6 +51,16 @@ function App() {
           <span className="text-xs text-text-muted">Loading graph...</span>
         </div>
       )}
+    </>
+  );
+}
+
+function App() {
+  return (
+    <>
+      <AuthGuard>
+        <AppContent />
+      </AuthGuard>
       <Toaster
         theme="dark"
         position="bottom-right"
