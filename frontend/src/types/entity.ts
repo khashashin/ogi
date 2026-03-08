@@ -1,5 +1,6 @@
 export const EntityType = {
   Person: "Person",
+  Username: "Username",
   Domain: "Domain",
   IPAddress: "IPAddress",
   EmailAddress: "EmailAddress",
@@ -38,6 +39,7 @@ export interface EntityTypeMeta {
 
 export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.Person]: { type: EntityType.Person, icon: "user", color: "#6366f1", category: "People" },
+  [EntityType.Username]: { type: EntityType.Username, icon: "at-sign", color: "#ec4899", category: "People" },
   [EntityType.Domain]: { type: EntityType.Domain, icon: "globe", color: "#22d3ee", category: "Infrastructure" },
   [EntityType.IPAddress]: { type: EntityType.IPAddress, icon: "server", color: "#f59e0b", category: "Infrastructure" },
   [EntityType.EmailAddress]: { type: EntityType.EmailAddress, icon: "mail", color: "#a78bfa", category: "People" },

@@ -38,6 +38,7 @@ const CUSTOM_SVG_ICONS = new Set(["subdomain", "nsrecord"]);
 
 const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
   [EntityType.Person]: "Enter first and last name",
+  [EntityType.Username]: "Enter username or handle",
   [EntityType.Organization]: "Enter organization name",
   [EntityType.Domain]: "Enter domain, e.g. example.com",
   [EntityType.Subdomain]: "Enter subdomain, e.g. api.example.com",
