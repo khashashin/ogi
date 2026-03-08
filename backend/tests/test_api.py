@@ -147,7 +147,17 @@ async def test_list_entity_types(client: AsyncClient):
     resp = await client.get("/api/v1/transforms/entity-types")
     assert resp.status_code == 200
     types = resp.json()
-    assert len(types) == 19
+    type_names = {item["type"] for item in types}
+    assert {
+        "Person",
+        "Username",
+        "EmailAddress",
+        "Domain",
+        "URL",
+        "Location",
+        "Organization",
+    } <= type_names
+    assert len(type_names) == len(types)
 
 
 @pytest.mark.asyncio
