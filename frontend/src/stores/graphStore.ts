@@ -27,6 +27,7 @@ export const DEFAULT_FILTER_STATE: GraphFilterState = {
 };
 
 type CenterView = "graph" | "table" | "map";
+export type SelectionMode = "replace" | "add" | "toggle";
 
 interface NodePositions {
   [nodeId: string]: { x: number; y: number };
@@ -190,6 +191,7 @@ interface GraphState {
   graph: Graph;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  selectedNodeIds: Set<string>;
   entities: Map<string, Entity>;
   edges: Map<string, Edge>;
   manualHiddenNodeIds: Set<string>;
@@ -212,8 +214,10 @@ interface GraphState {
   addEdge: (projectId: string, edge: Edge) => void;
   removeEdge: (projectId: string, edgeId: string) => Promise<void>;
   updateEdge: (projectId: string, edgeId: string, data: EdgeUpdate) => Promise<Edge | null>;
-  selectNode: (nodeId: string | null) => void;
+  selectNode: (nodeId: string | null, mode?: SelectionMode) => void;
+  selectNodes: (nodeIds: string[], mode?: SelectionMode) => void;
   selectEdge: (edgeId: string | null) => void;
+  clearSelection: () => void;
   hideNode: (projectId: string, nodeId: string) => void;
   hideEdge: (projectId: string, edgeId: string) => void;
   hideConnectedEdges: (projectId: string, nodeId: string) => void;
@@ -241,6 +245,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   graph: createGraph(),
   selectedNodeId: null,
   selectedEdgeId: null,
+  selectedNodeIds: new Set(),
   entities: new Map(),
   edges: new Map(),
   manualHiddenNodeIds: new Set(),
@@ -310,6 +315,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         loading: false,
         selectedNodeId: null,
         selectedEdgeId: null,
+        selectedNodeIds: new Set(),
         nodeOverlay: null,
         analysisResults: null,
       });
@@ -371,6 +377,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         loading: false,
         selectedNodeId: null,
         selectedEdgeId: null,
+        selectedNodeIds: new Set(),
         nodeOverlay: null,
       });
     } catch (e) {
@@ -441,6 +448,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       edgeAttrs: connectedEdgeAttrs,
     });
 
+    const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => id !== entityId));
+    const nextSelectedNodeId =
+      get().selectedNodeId === entityId ? (nextSelectedNodeIds.values().next().value ?? null) : get().selectedNodeId;
     set({
       graph,
       entities: new Map(entities),
@@ -460,7 +470,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         ),
         new Set([...manualHiddenEdgeIds].filter((id) => edges.has(id))),
       ),
-      selectedNodeId: get().selectedNodeId === entityId ? null : get().selectedNodeId,
+      selectedNodeId: nextSelectedNodeId,
+      selectedNodeIds: nextSelectedNodeIds,
     });
   },
 
@@ -522,8 +533,43 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return updated;
   },
 
-  selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null }),
-  selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null }),
+  selectNode: (nodeId, mode = "replace") =>
+    set((state) => {
+      if (nodeId === null) {
+        return { selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: new Set<string>() };
+      }
+      const next = mode === "replace" ? new Set<string>() : new Set(state.selectedNodeIds);
+      if (mode === "toggle") {
+        if (next.has(nodeId)) next.delete(nodeId);
+        else next.add(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return {
+        selectedNodeId: next.has(nodeId) ? nodeId : (next.values().next().value ?? null),
+        selectedEdgeId: null,
+        selectedNodeIds: next,
+      };
+    }),
+  selectNodes: (nodeIds, mode = "replace") =>
+    set((state) => {
+      const next = mode === "replace" ? new Set<string>() : new Set(state.selectedNodeIds);
+      if (mode === "toggle") {
+        for (const id of nodeIds) {
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+        }
+      } else {
+        for (const id of nodeIds) next.add(id);
+      }
+      return {
+        selectedNodeId: next.values().next().value ?? null,
+        selectedEdgeId: null,
+        selectedNodeIds: next,
+      };
+    }),
+  selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null, selectedNodeIds: new Set() }),
+  clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null, selectedNodeIds: new Set() }),
   hideNode: (projectId, nodeId) => {
     const { entities, edges, filterState, manualHiddenNodeIds, manualHiddenEdgeIds } = get();
     if (!entities.has(nodeId)) return;
@@ -534,11 +580,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       entityIds: [...nextManualHiddenNodeIds],
       edgeIds: [...manualHiddenEdgeIds],
     });
+    const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => id !== nodeId));
+    const nextSelectedNodeId =
+      get().selectedNodeId === nodeId ? (nextSelectedNodeIds.values().next().value ?? null) : get().selectedNodeId;
     set({
       manualHiddenNodeIds: nextManualHiddenNodeIds,
       hiddenNodeIds,
       hiddenEdgeIds,
-      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+      selectedNodeId: nextSelectedNodeId,
+      selectedNodeIds: nextSelectedNodeIds,
     });
   },
   hideEdge: (projectId, edgeId) => {
@@ -573,9 +623,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
   hideSelected: (projectId) => {
-    const { selectedNodeId, selectedEdgeId } = get();
-    if (selectedNodeId) {
-      get().hideNode(projectId, selectedNodeId);
+    const selectedNodeIds = [...get().selectedNodeIds];
+    const { selectedEdgeId } = get();
+    if (selectedNodeIds.length > 0) {
+      for (const id of selectedNodeIds) {
+        get().hideNode(projectId, id);
+      }
       return;
     }
     if (selectedEdgeId) {
@@ -653,6 +706,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       graph: createGraph(),
       selectedNodeId: null,
       selectedEdgeId: null,
+      selectedNodeIds: new Set(),
       entities: new Map(),
       edges: new Map(),
       manualHiddenNodeIds: new Set(),

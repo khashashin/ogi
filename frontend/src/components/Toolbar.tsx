@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye } from "lucide-react";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -14,6 +14,10 @@ import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { applyGraphLayout, GRAPH_LAYOUT_OPTIONS, type GraphLayoutPreset } from "../lib/graphLayouts";
+import { api } from "../api/client";
+import type { TransformInfo } from "../types/transform";
+import { toast } from "sonner";
+import { useTransformJobStore } from "../stores/transformJobStore";
 
 export function Toolbar() {
   const { currentProject, updateProject } = useProjectStore();
@@ -27,6 +31,7 @@ export function Toolbar() {
     performUndo,
     performRedo,
     selectedNodeId,
+    selectedNodeIds,
     selectedEdgeId,
     manualHiddenNodeIds,
     manualHiddenEdgeIds,
@@ -35,6 +40,7 @@ export function Toolbar() {
     unhideNode,
     unhideEdge,
   } = useGraphStore();
+  const submitJob = useTransformJobStore((s) => s.submitJob);
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showExportImport, setShowExportImport] = useState(false);
@@ -44,6 +50,10 @@ export function Toolbar() {
   const [showPlugins, setShowPlugins] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showBulkTransforms, setShowBulkTransforms] = useState(false);
+  const [allTransforms, setAllTransforms] = useState<TransformInfo[]>([]);
+  const [bulkRunning, setBulkRunning] = useState<string | null>(null);
   const [selectedLayout, setSelectedLayout] = useState<GraphLayoutPreset>("force");
   const { user, authEnabled } = useAuthStore();
   const isViewer = useIsViewer();
@@ -82,6 +92,69 @@ export function Toolbar() {
     .map((id) => edges.get(id))
     .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge));
   const hasSelection = Boolean(selectedNodeId || selectedEdgeId);
+  const selectedEntities = [...selectedNodeIds]
+    .map((id) => entities.get(id))
+    .filter((entity): entity is NonNullable<typeof entity> => Boolean(entity));
+  const applicableBulkTransforms = allTransforms
+    .map((transform) => ({
+      transform,
+      count: selectedEntities.filter((entity) => transform.input_types.includes(entity.type)).length,
+    }))
+    .filter((item) => item.count > 0);
+
+  useEffect(() => {
+    if (!showBulkTransforms || allTransforms.length > 0) return;
+    api.transforms.list().then(setAllTransforms).catch(() => setAllTransforms([]));
+  }, [showBulkTransforms, allTransforms.length]);
+
+  const handleBulkDelete = async () => {
+    if (!currentProject || selectedEntities.length === 0) return;
+    if (!window.confirm(`Delete ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}?`)) return;
+    for (const entity of selectedEntities) {
+      await useGraphStore.getState().removeEntity(currentProject.id, entity.id);
+    }
+    toast.success(`Deleted ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`);
+    setShowBulkActions(false);
+  };
+
+  const handleBulkTag = async () => {
+    if (!currentProject || selectedEntities.length === 0) return;
+    const tag = window.prompt("Tag to add to selected entities:");
+    if (!tag) return;
+    const normalized = tag.trim();
+    if (!normalized) return;
+    const nextEntities = new Map(useGraphStore.getState().entities);
+    for (const entity of selectedEntities) {
+      const nextTags = [...new Set([...entity.tags, normalized])];
+      const updated = await api.entities.update(currentProject.id, entity.id, { tags: nextTags });
+      nextEntities.set(entity.id, updated);
+    }
+    useGraphStore.setState({ entities: nextEntities });
+    toast.success(`Added tag to ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`);
+    setShowBulkActions(false);
+  };
+
+  const handleBulkTransform = async (transform: TransformInfo) => {
+    if (!currentProject) return;
+    const applicable = selectedEntities.filter((entity) => transform.input_types.includes(entity.type));
+    if (applicable.length === 0) return;
+    if (applicable.length > 25 && !window.confirm(`Queue ${applicable.length} runs for ${transform.display_name}?`)) return;
+    setBulkRunning(transform.name);
+    try {
+      for (const entity of applicable) {
+        const run = await api.transforms.run(transform.name, entity.id, currentProject.id);
+        submitJob(run);
+      }
+      toast.success(`Queued ${applicable.length} run${applicable.length === 1 ? "" : "s"} for ${transform.display_name}`);
+      setShowBulkTransforms(false);
+      setShowBulkActions(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Bulk transform failed: ${msg}`);
+    } finally {
+      setBulkRunning(null);
+    }
+  };
 
   return (
     <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
@@ -110,6 +183,11 @@ export function Toolbar() {
       <span className="text-[10px] text-text-muted">
         {entities.size} entities, {edges.size} edges
       </span>
+      {selectedNodeIds.size > 0 && (
+        <span className="text-[10px] text-accent">
+          {selectedNodeIds.size} selected
+        </span>
+      )}
 
       <div className="w-px h-4 bg-border" />
 
@@ -188,6 +266,74 @@ export function Toolbar() {
 
           {!isViewer && (
             <>
+              {selectedNodeIds.size > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowBulkActions((open) => !open)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-surface-hover rounded"
+                    title="Bulk actions"
+                  >
+                    <Tags size={12} />
+                    Bulk
+                  </button>
+                  {showBulkActions && (
+                    <div className="absolute right-0 top-8 z-50 w-64 rounded border border-border bg-surface shadow-lg p-2 space-y-1">
+                      <div className="text-[11px] text-text-muted px-1 pb-1">
+                        {selectedNodeIds.size} selected entit{selectedNodeIds.size === 1 ? "y" : "ies"}
+                      </div>
+                      <button
+                        onClick={() => currentProject && hideSelected(currentProject.id)}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
+                      >
+                        <EyeOff size={12} />
+                        Hide selected
+                      </button>
+                      <button
+                        onClick={handleBulkTag}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
+                      >
+                        <Tags size={12} />
+                        Add tag
+                      </button>
+                      <button
+                        onClick={() => setShowBulkTransforms((open) => !open)}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
+                      >
+                        <Play size={12} />
+                        Run transform...
+                      </button>
+                      {showBulkTransforms && (
+                        <div className="max-h-56 overflow-auto rounded bg-bg p-1 space-y-1">
+                          {applicableBulkTransforms.length === 0 ? (
+                            <div className="px-2 py-1 text-[11px] text-text-muted">No shared transforms for this selection.</div>
+                          ) : (
+                            applicableBulkTransforms.map(({ transform, count }) => (
+                              <button
+                                key={transform.name}
+                                onClick={() => handleBulkTransform(transform)}
+                                disabled={bulkRunning !== null}
+                                className="w-full rounded px-2 py-1.5 text-left text-xs text-text hover:bg-surface-hover disabled:opacity-50"
+                              >
+                                {bulkRunning === transform.name ? "Queuing..." : transform.display_name}
+                                <div className="text-[10px] text-text-muted">{count} selected nodes</div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                      <div className="border-t border-border my-1" />
+                      <button
+                        onClick={handleBulkDelete}
+                        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-danger hover:bg-surface-hover"
+                      >
+                        <Trash2 size={12} />
+                        Delete selected
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={() => currentProject && hideSelected(currentProject.id)}
                 disabled={!currentProject || !hasSelection}

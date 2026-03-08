@@ -9,7 +9,7 @@ type SortKey = "type" | "value" | "source" | "weight" | "created_at";
 export function TableView() {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortAsc, setSortAsc] = useState(false);
-  const { entities, hiddenNodeIds, searchQuery, selectedNodeId, selectNode } = useGraphStore();
+  const { entities, hiddenNodeIds, searchQuery, selectedNodeIds, selectNode } = useGraphStore();
 
   const rows = useMemo(() => {
     const list = Array.from(entities.values()).filter((entity) => {
@@ -85,11 +85,11 @@ export function TableView() {
           </thead>
           <tbody>
             {rows.map((entity) => {
-              const selected = selectedNodeId === entity.id;
+              const selected = selectedNodeIds.has(entity.id);
               return (
                 <tr
                   key={entity.id}
-                  onClick={() => selectNode(entity.id)}
+                  onClick={(e) => selectNode(entity.id, e.ctrlKey || e.metaKey || e.shiftKey ? "toggle" : "replace")}
                   className={`cursor-pointer border-b border-border/60 ${
                     selected ? "bg-accent/10" : "hover:bg-surface-hover/40"
                   }`}
