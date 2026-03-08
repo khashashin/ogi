@@ -17,37 +17,28 @@ from fastapi import Request, HTTPException
 from ogi.config import settings
 from ogi.models import UserProfile
 
+from supabase import create_client, Client
+
 # A fixed anonymous profile returned when auth is disabled (local dev)
 _ANON_USER = UserProfile(
     id=UUID("00000000-0000-0000-0000-000000000000"),
     email="local@localhost",
-    display_name="Local User",
 )
 
+_supabase_client: Client | None = None
 
-def _decode_jwt(token: str) -> dict[str, object]:
-    """Decode and verify a Supabase-issued JWT."""
-    from jose import jwt, JWTError
-
-    try:
-        payload: dict[str, object] = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-        return payload
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
-
+def get_supabase_client() -> Client | None:
+    global _supabase_client
+    if _supabase_client is None and settings.supabase_url and settings.supabase_anon_key:
+        _supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
+    return _supabase_client
 
 async def get_current_user(request: Request) -> UserProfile:
-    """FastAPI dependency: extract the authenticated user from the request.
+    """FastAPI dependency: extract and intensely verify the authenticated user.
 
-    If Supabase JWT secret is not configured (local dev mode), returns a
-    fixed anonymous profile.
+    If Supabase credentials are not configured (local dev mode), returns a fixed anonymous profile.
     """
-    if not settings.supabase_jwt_secret:
+    if not settings.supabase_url or not settings.supabase_anon_key:
         return _ANON_USER
 
     auth_header = request.headers.get("Authorization", "")
@@ -58,16 +49,24 @@ async def get_current_user(request: Request) -> UserProfile:
     if not token:
         raise HTTPException(status_code=401, detail="Empty token")
 
-    payload = _decode_jwt(token)
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token missing sub claim")
+    supabase = get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client missing configuration")
+
+    try:
+        # Ask Supabase Auth (GoTrue) to securely validate the JWT token.
+        # This checks the signature, expiration, and revocation status natively.
+        response = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        user = response.user
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
 
     return UserProfile(
-        id=UUID(str(user_id)),
-        email=str(payload.get("email", "")),
+        id=UUID(str(user.id)),
+        email=str(user.email or ""),
     )
-
 
 async def get_optional_user(request: Request) -> UserProfile | None:
     """Like ``get_current_user`` but returns ``None`` instead of raising."""
