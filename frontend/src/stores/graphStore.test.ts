@@ -181,4 +181,66 @@ describe("graphStore filters", () => {
     expect(state.hiddenNodeIds.has(a.id)).toBe(false);
     expect(state.hiddenEdgeIds.has(edge.id)).toBe(false);
   });
+
+  it("pins selected nodes and can clear all pins", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+      ]),
+      selectedNodeId: a.id,
+      selectedNodeIds: new Set([a.id, b.id]),
+    });
+
+    useGraphStore.getState().pinSelected("p-1");
+    expect(useGraphStore.getState().pinnedNodeIds.has(a.id)).toBe(true);
+    expect(useGraphStore.getState().pinnedNodeIds.has(b.id)).toBe(true);
+
+    useGraphStore.getState().unpinAll("p-1");
+    expect(useGraphStore.getState().pinnedNodeIds.size).toBe(0);
+  });
+
+  it("pins only visible nodes when locking current positions", () => {
+    const visible = makeEntity("e-visible");
+    const hidden = makeEntity("e-hidden", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [visible.id, visible],
+        [hidden.id, hidden],
+      ]),
+      hiddenNodeIds: new Set([hidden.id]),
+    });
+
+    useGraphStore.getState().pinVisible("p-1");
+
+    const state = useGraphStore.getState();
+    expect(state.pinnedNodeIds.has(visible.id)).toBe(true);
+    expect(state.pinnedNodeIds.has(hidden.id)).toBe(false);
+  });
+
+  it("persists pins in local storage and reloads them by project", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+      ]),
+      selectedNodeIds: new Set([a.id]),
+    });
+
+    useGraphStore.getState().pinSelected("p-1");
+    expect(JSON.parse(localStorage.getItem("ogi-pinned-p-1") || "{}")).toEqual({
+      entityIds: [a.id],
+    });
+
+    useGraphStore.setState({ pinnedNodeIds: new Set() });
+    const persisted = JSON.parse(localStorage.getItem("ogi-pinned-p-1") || "{}");
+    useGraphStore.setState({ pinnedNodeIds: new Set(persisted.entityIds) });
+
+    expect(useGraphStore.getState().pinnedNodeIds.has(a.id)).toBe(true);
+    expect(useGraphStore.getState().pinnedNodeIds.has(b.id)).toBe(false);
+  });
 });
