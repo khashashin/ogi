@@ -24,6 +24,7 @@ from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
 from ogi.transforms.location.location_to_geocode import LocationToGeocode
 from ogi.transforms.location.location_to_nearby_asns import LocationToNearbyASNs
+from ogi.transforms.location.location_to_reverse_geocode import LocationToReverseGeocode
 from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
 from ogi.transforms.location.location_to_timezone import LocationToTimezone
 from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
@@ -527,6 +528,45 @@ async def test_location_search_normalize_rate_limited(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_location_search_reverse_geocode_parses_address_fields(monkeypatch: pytest.MonkeyPatch):
+    LocationSearchStore._reverse_memory_cache.clear()
+    store = LocationSearchStore(_FakeSession(cache_row=None))
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(
+            get_response=_FakeResponse(
+                json_data={
+                    "display_name": "Bahnhofstrasse, 8001 Zurich, Switzerland",
+                    "lat": "47.3769",
+                    "lon": "8.5417",
+                    "importance": 0.6,
+                    "place_rank": 30,
+                    "address": {
+                        "road": "Bahnhofstrasse",
+                        "city": "Zurich",
+                        "county": "Bezirk Zurich",
+                        "state": "Zurich",
+                        "country": "Switzerland",
+                        "postcode": "8001",
+                    },
+                }
+            )
+        )
+
+    monkeypatch.setattr("ogi.store.location_search_store.httpx.AsyncClient", fake_client)
+    result = await store.reverse_geocode(47.3769, 8.5417)
+
+    assert result.display_name == "Bahnhofstrasse, 8001 Zurich, Switzerland"
+    assert result.road == "Bahnhofstrasse"
+    assert result.city == "Zurich"
+    assert result.county == "Bezirk Zurich"
+    assert result.region == "Zurich"
+    assert result.country == "Switzerland"
+    assert result.postcode == "8001"
+    assert result.address_hierarchy["road"] == "Bahnhofstrasse"
+
+
+@pytest.mark.asyncio
 async def test_location_to_geocode_with_mocked_store(monkeypatch: pytest.MonkeyPatch):
     transform = LocationToGeocode()
     entity = Entity(type=EntityType.LOCATION, value="NYC", project_id=uuid4())
@@ -569,6 +609,66 @@ async def test_location_to_geocode_with_mocked_store(monkeypatch: pytest.MonkeyP
     assert out.properties["country"] == "USA"
     assert any(msg == "Confidence: 0.84." for msg in result.messages)
     assert any(msg == "Used upstream geocoder." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_reverse_geocode_maps_address_properties(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToReverseGeocode()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Point",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417},
+    )
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_reverse_geocode(self, lat: float, lon: float):
+        assert lat == pytest.approx(47.3769)
+        assert lon == pytest.approx(8.5417)
+        return LocationGeocodeResult(
+            query="rev:47.3769:8.5417",
+            lat=47.3769,
+            lon=8.5417,
+            display_name="Bahnhofstrasse, 8001 Zurich, Switzerland",
+            confidence=0.82,
+            source="nominatim",
+            road="Bahnhofstrasse",
+            city="Zurich",
+            county="Bezirk Zurich",
+            region="Zurich",
+            country="Switzerland",
+            postcode="8001",
+            address_hierarchy={
+                "road": "Bahnhofstrasse",
+                "city": "Zurich",
+                "state": "Zurich",
+                "country": "Switzerland",
+            },
+        )
+
+    monkeypatch.setattr("ogi.transforms.location.location_to_reverse_geocode.get_session", lambda: _SessionCtx())
+    monkeypatch.setattr(LocationSearchStore, "reverse_geocode", fake_reverse_geocode)
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities
+    out = result.entities[0]
+    assert out.properties["road"] == "Bahnhofstrasse"
+    assert out.properties["city"] == "Zurich"
+    assert out.properties["county"] == "Bezirk Zurich"
+    assert out.properties["region"] == "Zurich"
+    assert out.properties["country"] == "Switzerland"
+    assert out.properties["postcode"] == "8001"
+    assert out.properties["address_hierarchy"]["road"] == "Bahnhofstrasse"
+    assert any("Address summary: Bahnhofstrasse, Zurich, Zurich, Switzerland." == msg for msg in result.messages)
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,7 @@ def test_auto_discover(engine: TransformEngine):
         "website_to_people",
         "location_to_geocode",
         "location_to_nearby_asns",
+        "location_to_reverse_geocode",
         "location_to_weather_snapshot",
         "url_to_links",
         "url_to_content",
