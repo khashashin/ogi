@@ -2197,6 +2197,49 @@ async def test_map_routes_endpoint_returns_routes_for_geo_edges(client: AsyncCli
 
 
 @pytest.mark.asyncio
+async def test_map_store_upsert_cache_recovers_from_duplicate_insert(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.db.database import get_session
+    from ogi.models import GeocodeCache
+    from ogi.store.map_store import MapStore
+
+    async for session in get_session():
+        session.add(
+            GeocodeCache(
+                query="nyc",
+                lat=40.7128,
+                lon=-74.0060,
+                display_name="New York, NY",
+                confidence=0.7,
+                source="cache",
+            )
+        )
+        await session.commit()
+
+        store = MapStore(session)
+
+        calls = 0
+
+        async def miss_then_reload(query: str):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return None
+            return (await session.execute(select(GeocodeCache).where(GeocodeCache.query == query))).scalar_one_or_none()
+
+        monkeypatch.setattr(store, "_get_cache", miss_then_reload)
+
+        row = await store._upsert_cache("NYC", 40.7130, -74.0059, 0.9, source="entity", display_name="New York City")
+        assert row.query == "nyc"
+        assert row.source == "entity"
+        assert row.display_name == "New York City"
+
+        rows = list((await session.execute(select(GeocodeCache).where(GeocodeCache.query == "nyc"))).scalars().all())
+        assert len(rows) == 1
+        assert rows[0].confidence == 0.9
+        break
+
+
+@pytest.mark.asyncio
 async def test_location_suggest_returns_cached_results(client: AsyncClient):
     from ogi.db.database import get_session
     from ogi.models import GeocodeCache
