@@ -37,7 +37,7 @@ export function ResetPasswordPage() {
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-bg">
       <div className="w-full max-w-sm p-6 bg-surface border border-border rounded-lg shadow-lg">
-        <h1 className="text-lg font-semibold text-text mb-1">OGI</h1>
+        <h1 className="text-lg font-semibold text-text mb-1">OpenGraph Intel</h1>
         <p className="text-xs text-text-muted mb-6">Set a new password</p>
 
         {success ? (
@@ -50,7 +50,7 @@ export function ResetPasswordPage() {
               onClick={clearRecovery}
               className="px-4 py-2 text-sm bg-accent text-white rounded hover:bg-accent-hover"
             >
-              Continue to OGI
+              Continue to OpenGraph Intel
             </button>
           </div>
         ) : (

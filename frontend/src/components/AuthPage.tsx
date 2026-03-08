@@ -59,7 +59,7 @@ export function AuthPage() {
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-bg">
       <div className="w-full max-w-sm p-6 bg-surface border border-border rounded-lg shadow-lg">
-        <h1 className="text-lg font-semibold text-text mb-1">OGI</h1>
+        <h1 className="text-lg font-semibold text-text mb-1">OpenGraph Intel</h1>
         <p className="text-xs text-text-muted mb-6">{title}</p>
 
         {signupSuccess ? (
