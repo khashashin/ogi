@@ -12,14 +12,17 @@ export function BrowseTab() {
     searchResults,
     loading,
     installing,
+    updating,
     toggling,
     canManage,
     searchQuery,
     selectedCategory,
     selectedTier,
     installedPlugins,
+    availableUpdates,
     searchTransforms,
     installTransform,
+    updateTransform,
     enablePlugin,
     disablePlugin,
     setSelectedCategory,
@@ -44,6 +47,7 @@ export function BrowseTab() {
   };
 
   const pluginBySlug = new Map(installedPlugins.map((plugin) => [plugin.name, plugin]));
+  const updatesBySlug = new Map(availableUpdates.map((item) => [item.slug, item]));
 
   const handleInstall = (transform: RegistryTransform) => {
     const warning = buildInstallRiskWarning(transform);
@@ -65,8 +69,11 @@ export function BrowseTab() {
           installing={installing === selectedTransform.slug}
           toggling={toggling === selectedTransform.slug}
           onInstall={() => handleInstall(selectedTransform)}
+          onUpdate={() => updateTransform(selectedTransform.slug)}
           onEnable={() => enablePlugin(selectedTransform.slug)}
           onDisable={() => disablePlugin(selectedTransform.slug)}
+          updateAvailable={updatesBySlug.has(selectedTransform.slug)}
+          updating={updating === selectedTransform.slug}
           onBack={() => setSelectedTransform(null)}
         />
       </div>
@@ -122,8 +129,11 @@ export function BrowseTab() {
                 enabled={Boolean(installedPlugin?.enabled)}
                 canManage={canManage}
                 installing={installing === t.slug}
+                updateAvailable={updatesBySlug.has(t.slug)}
+                updating={updating === t.slug}
                 toggling={toggling === t.slug}
                 onInstall={() => handleInstall(t)}
+                onUpdate={() => updateTransform(t.slug)}
                 onEnable={() => enablePlugin(t.slug)}
                 onDisable={() => disablePlugin(t.slug)}
                 onClick={() => setSelectedTransform(t)}

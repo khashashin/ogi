@@ -1,5 +1,6 @@
 export const EntityType = {
   Person: "Person",
+  Username: "Username",
   Domain: "Domain",
   IPAddress: "IPAddress",
   EmailAddress: "EmailAddress",
@@ -21,6 +22,13 @@ export const EntityType = {
 } as const;
 
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
+export type PropertyValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: PropertyValue }
+  | PropertyValue[];
 
 export interface EntityTypeMeta {
   type: EntityType;
@@ -31,6 +39,7 @@ export interface EntityTypeMeta {
 
 export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.Person]: { type: EntityType.Person, icon: "user", color: "#6366f1", category: "People" },
+  [EntityType.Username]: { type: EntityType.Username, icon: "at-sign", color: "#ec4899", category: "People" },
   [EntityType.Domain]: { type: EntityType.Domain, icon: "globe", color: "#22d3ee", category: "Infrastructure" },
   [EntityType.IPAddress]: { type: EntityType.IPAddress, icon: "server", color: "#f59e0b", category: "Infrastructure" },
   [EntityType.EmailAddress]: { type: EntityType.EmailAddress, icon: "mail", color: "#a78bfa", category: "People" },
@@ -55,7 +64,7 @@ export interface Entity {
   id: string;
   type: EntityType;
   value: string;
-  properties: Record<string, string | number | boolean | null>;
+  properties: Record<string, PropertyValue>;
   icon: string;
   weight: number;
   notes: string;
@@ -70,7 +79,7 @@ export interface Entity {
 export interface EntityCreate {
   type: EntityType;
   value: string;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
   weight?: number;
   notes?: string;
   tags?: string[];
@@ -80,7 +89,7 @@ export interface EntityCreate {
 
 export interface EntityUpdate {
   value?: string;
-  properties?: Record<string, string | number | boolean | null>;
+  properties?: Record<string, PropertyValue>;
   weight?: number;
   notes?: string;
   tags?: string[];

@@ -5,6 +5,7 @@ import { api } from "../../api/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { hasNetworkAndSecretRisk } from "../../lib/pluginRisk";
+import { useRegistryStore } from "../../stores/registryStore";
 
 interface InstalledTabProps {
   plugins: PluginInfo[];
@@ -16,6 +17,7 @@ interface InstalledTabProps {
 export function InstalledTab({ plugins, usageReport, canManage, onRefresh }: InstalledTabProps) {
   const [toggling, setToggling] = useState<string | null>(null);
   const [reloading, setReloading] = useState<string | null>(null);
+  const { availableUpdates, updateTransform, updating } = useRegistryStore();
 
   const handleToggle = async (name: string) => {
     setToggling(name);
@@ -50,6 +52,7 @@ export function InstalledTab({ plugins, usageReport, canManage, onRefresh }: Ins
 
   const enabledPlugins = plugins.filter((plugin) => plugin.enabled);
   const usageByPlugin = new Map(usageReport.map((item) => [item.plugin_name, item]));
+  const updatesByPlugin = new Map(availableUpdates.map((item) => [item.slug, item]));
 
   if (enabledPlugins.length === 0) {
     return (
@@ -85,6 +88,11 @@ export function InstalledTab({ plugins, usageReport, canManage, onRefresh }: Ins
               </div>
               {plugin.description && (
                 <p className="text-xs text-text-muted mt-0.5">{plugin.description}</p>
+              )}
+              {updatesByPlugin.has(plugin.name) && (
+                <p className="mt-1 text-[10px] text-accent">
+                  Update available: v{updatesByPlugin.get(plugin.name)?.latest_version}
+                </p>
               )}
               <div className="flex items-center gap-3 mt-1 text-[10px] text-text-muted">
                 {plugin.author && <span>by {plugin.author}</span>}
@@ -137,8 +145,30 @@ export function InstalledTab({ plugins, usageReport, canManage, onRefresh }: Ins
             <div className="flex items-center gap-1 flex-shrink-0">
               {canManage && (
                 <button
+                  onClick={async () => {
+                    try {
+                      await updateTransform(plugin.name);
+                      await onRefresh();
+                      toast.success(`Updated plugin: ${plugin.name}`);
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : String(err);
+                      toast.error(`Failed to update plugin: ${msg}`);
+                    }
+                  }}
+                  disabled={Boolean(updating) || reloading === plugin.name || toggling === plugin.name || !updatesByPlugin.has(plugin.name)}
+                  className="p-1 text-text-muted hover:text-text disabled:opacity-50"
+                  title={updatesByPlugin.has(plugin.name) ? `Update to v${updatesByPlugin.get(plugin.name)?.latest_version}` : "No update available"}
+                >
+                  <RefreshCw
+                    size={14}
+                    className={updating === plugin.name ? "animate-spin text-accent" : updatesByPlugin.has(plugin.name) ? "text-accent" : ""}
+                  />
+                </button>
+              )}
+              {canManage && (
+                <button
                   onClick={() => handleReload(plugin.name)}
-                  disabled={reloading === plugin.name || toggling === plugin.name}
+                  disabled={Boolean(updating) || reloading === plugin.name || toggling === plugin.name}
                   className="p-1 text-text-muted hover:text-text disabled:opacity-50"
                   title="Reload plugin"
                 >

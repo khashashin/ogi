@@ -39,14 +39,14 @@ def _reload_plugin_runtime(name: str) -> int:
     plugin_engine = get_plugin_engine()
     transform_engine = get_transform_engine()
 
-    # Ensure plugin metadata exists in memory for newly installed plugins.
-    plugin = plugin_engine.get_plugin(name)
-    if plugin is None:
-        for discovered in plugin_engine.discover():
-            if discovered.name == name:
-                plugin_engine.plugins[name] = discovered
-                plugin = discovered
-                break
+    # Refresh plugin manifest metadata from disk so version/description/input types
+    # reflect the latest installed files after install or update.
+    plugin = None
+    for discovered in plugin_engine.discover():
+        if discovered.name == name:
+            plugin_engine.plugins[name] = discovered
+            plugin = discovered
+            break
 
     # Remove previously loaded transforms from this plugin.
     old_names = plugin_engine._plugin_transforms.get(name, [])
@@ -256,11 +256,21 @@ async def update_transform(
             },
         ),
     )
+    loaded_count = 0
+    load_warning = ""
+    try:
+        loaded_count = _reload_plugin_runtime(slug)
+    except Exception:
+        load_warning = " Updated on disk; restart backend if it does not appear immediately."
     return InstallResult(
         slug=slug,
         version=version,
         files_installed=0,
-        message=f"'{slug}' updated to v{version}",
+        message=(
+            f"'{slug}' updated to v{version}"
+            f"{' and reloaded' if loaded_count > 0 else ''}."
+            f"{load_warning}"
+        ),
     )
 
 

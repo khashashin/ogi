@@ -1,4 +1,4 @@
-import { Download, Loader2, Check, Lock, ToggleLeft, ToggleRight } from "lucide-react";
+import { Download, Loader2, Check, Lock, RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
 
 interface InstallButtonProps {
   available: boolean;
@@ -6,8 +6,11 @@ interface InstallButtonProps {
   canManage: boolean;
   bundled: boolean;
   installing: boolean;
+  updateAvailable: boolean;
+  updating: boolean;
   toggling: boolean;
   onInstall: () => void;
+  onUpdate: () => void;
   onEnable: () => void;
   onDisable: () => void;
 }
@@ -18,8 +21,11 @@ export function InstallButton({
   canManage,
   bundled,
   installing,
+  updateAvailable,
+  updating,
   toggling,
   onInstall,
+  onUpdate,
   onEnable,
   onDisable,
 }: InstallButtonProps) {
@@ -41,7 +47,29 @@ export function InstallButton({
     );
   }
 
+  if (updating) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-accent bg-accent/10 rounded">
+        <Loader2 size={10} className="animate-spin" />
+        Updating...
+      </span>
+    );
+  }
+
   if (available) {
+    if (updateAvailable && canManage) {
+      return (
+        <button
+          onClick={onUpdate}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-accent bg-accent/10 rounded hover:bg-accent/20 transition-colors"
+          title="Update plugin"
+        >
+          <RefreshCw size={10} />
+          Update
+        </button>
+      );
+    }
+
     if (enabled) {
       return (
         <button

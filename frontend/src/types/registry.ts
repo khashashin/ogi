@@ -84,6 +84,12 @@ export interface InstalledTransform {
   files: string[];
 }
 
+export interface UpdateCheckItem {
+  slug: string;
+  installed_version: string;
+  latest_version: string;
+}
+
 export interface PluginInfo {
   name: string;
   version: string;

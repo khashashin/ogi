@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { ENTITY_TYPE_META } from "../types/entity";
+import type { PropertyValue } from "../types/entity";
 import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { useIsViewer } from "../hooks/useIsViewer";
@@ -38,7 +39,7 @@ export function EntityInspector() {
   const [edgeWeight, setEdgeWeight] = useState("1");
   const [edgePropKey, setEdgePropKey] = useState("");
   const [edgePropVal, setEdgePropVal] = useState("");
-  const [edgePropsDraft, setEdgePropsDraft] = useState<Record<string, string | number | boolean | null>>({});
+  const [edgePropsDraft, setEdgePropsDraft] = useState<Record<string, PropertyValue>>({});
   const [savingEdge, setSavingEdge] = useState(false);
 
   const isViewer = useIsViewer();
@@ -252,7 +253,7 @@ export function EntityInspector() {
                 <div key={key} className="flex items-center justify-between text-xs group">
                   <span className="text-text-muted">{key}</span>
                   <div className="flex items-center gap-1">
-                    <span className="text-text">{String(val)}</span>
+                    <span className="text-text">{formatPropertyValue(val)}</span>
                     {!isViewer && (
                       <button
                         onClick={() => removeEdgeProperty(key)}
@@ -369,7 +370,9 @@ export function EntityInspector() {
               <div key={key} className="flex items-center justify-between text-xs group">
                 <span className="text-text-muted">{key}</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-text">{String(val)}</span>
+                  <span className="text-text whitespace-pre-wrap text-right max-w-[14rem] break-words">
+                    {formatPropertyValue(val)}
+                  </span>
                   {!isViewer && (
                     <button
                       onClick={() => {
@@ -593,4 +596,22 @@ function formatEntitySourceLabel(source: string): string {
     return "Imported via";
   }
   return "Last updated by";
+}
+
+function formatPropertyValue(value: PropertyValue): string {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => formatPropertyValue(item as PropertyValue)).join(", ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, entry]) => `${key}: ${formatPropertyValue(entry as PropertyValue)}`)
+      .join("\n");
+  }
+  return String(value);
 }
