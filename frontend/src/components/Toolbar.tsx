@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -14,13 +14,14 @@ import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function Toolbar() {
-  const { currentProject, projects, selectProject, createProject } = useProjectStore();
+  const { currentProject, projects, selectProject, createProject, updateProject } = useProjectStore();
   const { graph, loadGraph, entities, edges, persistPositions, performUndo, performRedo } = useGraphStore();
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectList, setShowProjectList] = useState(false);
+  const [newProjectPublic, setNewProjectPublic] = useState(false);
   const [showExportImport, setShowExportImport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -30,9 +31,19 @@ export function Toolbar() {
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    await createProject(newProjectName.trim());
+    await createProject(newProjectName.trim(), undefined, newProjectPublic);
     setNewProjectName("");
+    setNewProjectPublic(false);
     setShowNewProject(false);
+  };
+
+  const handleTogglePrivacy = async () => {
+    if (!currentProject) return;
+    try {
+      await updateProject(currentProject.id, { is_public: !currentProject.is_public });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSelectProject = async (project: typeof projects[0]) => {
@@ -112,6 +123,16 @@ export function Toolbar() {
             autoFocus
             className="px-2 py-1 text-xs bg-bg border border-border rounded text-text w-40 focus:outline-none focus:border-accent"
           />
+          <label className="flex items-center gap-1 text-[10px] text-text-muted cursor-pointer ml-1 mr-1">
+            <input
+              type="checkbox"
+              checked={newProjectPublic}
+              onChange={(e) => setNewProjectPublic(e.target.checked)}
+              className="accent-accent"
+              title="Make public"
+            />
+            Public
+          </label>
           <button
             onClick={handleCreateProject}
             className="px-2 py-1 text-xs bg-accent text-white rounded hover:bg-accent-hover"
@@ -225,6 +246,20 @@ export function Toolbar() {
       </button>
 
       <div className="w-px h-4 bg-border" />
+
+      {/* Privacy Toggle */}
+      {currentProject && (!currentProject.owner_id || currentProject.owner_id === user?.id) && (
+        <>
+          <button
+            onClick={handleTogglePrivacy}
+            className={`p-1.5 rounded hover:bg-surface-hover ${currentProject.is_public ? 'text-green-400' : 'text-text-muted hover:text-text'}`}
+            title={currentProject.is_public ? "Public Project (Click to make Private)" : "Private Project (Click to make Public)"}
+          >
+            {currentProject.is_public ? <Unlock size={14} /> : <Lock size={14} />}
+          </button>
+          <div className="w-px h-4 bg-border" />
+        </>
+      )}
 
       {/* User profile */}
       <button

@@ -8,7 +8,8 @@ interface ProjectState {
   loading: boolean;
   error: string | null;
   fetchProjects: () => Promise<void>;
-  createProject: (name: string, description?: string) => Promise<Project>;
+  createProject: (name: string, description?: string, is_public?: boolean) => Promise<Project>;
+  updateProject: (id: string, data: import("../types/project").ProjectUpdate) => Promise<Project>;
   selectProject: (project: Project) => void;
   deleteProject: (id: string) => Promise<void>;
 }
@@ -32,11 +33,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: async (name, description) => {
-    const project = await api.projects.create({ name, description });
+  createProject: async (name, description, is_public) => {
+    const project = await api.projects.create({ name, description, is_public });
     set((state) => ({
       projects: [project, ...state.projects],
       currentProject: project,
+    }));
+    return project;
+  },
+
+  updateProject: async (id, data) => {
+    const project = await api.projects.update(id, data);
+    set((state) => ({
+      projects: state.projects.map((p) => (p.id === id ? project : p)),
+      currentProject: state.currentProject?.id === id ? project : state.currentProject,
     }));
     return project;
   },

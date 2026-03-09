@@ -8,6 +8,8 @@ class Project(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     name: str
     description: str = ""
+    owner_id: UUID | None = None
+    is_public: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -15,8 +17,10 @@ class Project(BaseModel):
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
+    is_public: bool = False
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    is_public: bool | None = None
