@@ -45,18 +45,37 @@ def _default_lock(registry_repo: str, ogi_version: str) -> LockFile:
     )
 
 
-def read_lockfile(plugins_dir: Path) -> LockFile:
+def _apply_lock_defaults(lock: LockFile, registry_repo: str, ogi_version: str) -> LockFile:
+    if "lock_version" not in lock:
+        lock["lock_version"] = 1
+    if "generated_at" not in lock:
+        lock["generated_at"] = datetime.now(timezone.utc).isoformat()
+    if not lock.get("registry_repo") and registry_repo:
+        lock["registry_repo"] = registry_repo
+    if not lock.get("ogi_version") and ogi_version:
+        lock["ogi_version"] = ogi_version
+    if "transforms" not in lock:
+        lock["transforms"] = {}
+    return lock
+
+
+def read_lockfile(
+    plugins_dir: Path,
+    *,
+    registry_repo: str = "",
+    ogi_version: str = "",
+) -> LockFile:
     """Read the lock file from *plugins_dir*, returning an empty lock if missing."""
     lock_path = plugins_dir / LOCK_FILENAME
     if not lock_path.exists():
-        return _default_lock("", "")
+        return _default_lock(registry_repo, ogi_version)
     try:
         with open(lock_path) as f:
             data: LockFile = json.load(f)
-        return data
+        return _apply_lock_defaults(data, registry_repo, ogi_version)
     except Exception as exc:
         logger.warning("Failed to read lock file %s: %s", lock_path, exc)
-        return _default_lock("", "")
+        return _default_lock(registry_repo, ogi_version)
 
 
 def write_lockfile(plugins_dir: Path, lock: LockFile) -> None:

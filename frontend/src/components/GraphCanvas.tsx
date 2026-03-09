@@ -9,8 +9,6 @@ const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
 const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
-const DRAG_DAMPING = 0.1;
-
 function drawHighlightedNodeHover(
   context: CanvasRenderingContext2D,
   data: {
@@ -145,16 +143,16 @@ export function GraphCanvas() {
     startX: number;
     startY: number;
     hasMoved: boolean;
-    anchorOffset: { x: number; y: number };
-    groupOffsets: Map<string, { x: number; y: number }>;
+    startGraphPointer: { x: number; y: number };
+    initialNodePositions: Map<string, { x: number; y: number }>;
   }>({
     dragging: false,
     draggedNode: null,
     startX: 0,
     startY: 0,
     hasMoved: false,
-    anchorOffset: { x: 0, y: 0 },
-    groupOffsets: new Map(),
+    startGraphPointer: { x: 0, y: 0 },
+    initialNodePositions: new Map(),
   });
 
   const initSigma = useCallback(() => {
@@ -229,7 +227,7 @@ export function GraphCanvas() {
       ds.hasMoved = false;
       ds.startX = event.x;
       ds.startY = event.y;
-      ds.groupOffsets = new Map();
+      ds.initialNodePositions = new Map();
 
       const dragGroup =
         selectedNodeIdsRef.current.size > 1 &&
@@ -238,17 +236,7 @@ export function GraphCanvas() {
               (groupNodeId) => !pinnedNodeIdsRef.current.has(groupNodeId),
             )
           : [node];
-      const draggedNodeAttrs = graph.getNodeAttributes(node) as {
-        x?: number;
-        y?: number;
-      };
-      const draggedX = Number(draggedNodeAttrs.x) || 0;
-      const draggedY = Number(draggedNodeAttrs.y) || 0;
-      const pointerGraphPos = renderer.viewportToGraph(event);
-      ds.anchorOffset = {
-        x: draggedX - pointerGraphPos.x,
-        y: draggedY - pointerGraphPos.y,
-      };
+      ds.startGraphPointer = renderer.viewportToGraph(event);
 
       for (const groupNodeId of dragGroup) {
         if (!graph.hasNode(groupNodeId)) continue;
@@ -256,11 +244,13 @@ export function GraphCanvas() {
           x?: number;
           y?: number;
         };
-        ds.groupOffsets.set(groupNodeId, {
-          x: (Number(attrs.x) || 0) - draggedX,
-          y: (Number(attrs.y) || 0) - draggedY,
+        ds.initialNodePositions.set(groupNodeId, {
+          x: Number(attrs.x) || 0,
+          y: Number(attrs.y) || 0,
         });
       }
+
+      renderer.setCustomBBox(renderer.getBBox());
 
       // Disable camera on drag
       renderer.getCamera().disable();
@@ -268,9 +258,20 @@ export function GraphCanvas() {
 
     renderer
       .getMouseCaptor()
-      .on("mousemovebody", (event: { x: number; y: number }) => {
+      .on(
+        "mousemovebody",
+        (event: {
+          x: number;
+          y: number;
+          preventSigmaDefault?: () => void;
+          original?: Event;
+        }) => {
         const ds = dragStateRef.current;
         if (!ds.dragging || !ds.draggedNode) return;
+
+        event.preventSigmaDefault?.();
+        event.original?.preventDefault?.();
+        event.original?.stopPropagation?.();
 
         // Check if user has moved enough to count as drag
         const dx = event.x - ds.startX;
@@ -280,43 +281,21 @@ export function GraphCanvas() {
         }
 
         // Convert viewport coords to graph coords
-        const pos = renderer.viewportToGraph(event);
-        const targetDraggedNodePos = {
-          x: pos.x + ds.anchorOffset.x,
-          y: pos.y + ds.anchorOffset.y,
+        const pointerGraphPos = renderer.viewportToGraph(event);
+        const delta = {
+          x: pointerGraphPos.x - ds.startGraphPointer.x,
+          y: pointerGraphPos.y - ds.startGraphPointer.y,
         };
-        const currentDraggedNodeAttrs = graph.getNodeAttributes(
-          ds.draggedNode,
-        ) as { x?: number; y?: number };
-        const currentDraggedNodePos = {
-          x: Number(currentDraggedNodeAttrs.x) || 0,
-          y: Number(currentDraggedNodeAttrs.y) || 0,
-        };
-        const draggedNodePos = {
-          x:
-            currentDraggedNodePos.x +
-            (targetDraggedNodePos.x - currentDraggedNodePos.x) * DRAG_DAMPING,
-          y:
-            currentDraggedNodePos.y +
-            (targetDraggedNodePos.y - currentDraggedNodePos.y) * DRAG_DAMPING,
-        };
-        if (ds.groupOffsets.size > 0) {
-          for (const [groupNodeId, offset] of ds.groupOffsets.entries()) {
-            if (!graph.hasNode(groupNodeId)) continue;
-            graph.setNodeAttribute(
-              groupNodeId,
-              "x",
-              draggedNodePos.x + offset.x,
-            );
-            graph.setNodeAttribute(
-              groupNodeId,
-              "y",
-              draggedNodePos.y + offset.y,
-            );
-          }
-        } else {
-          graph.setNodeAttribute(ds.draggedNode, "x", draggedNodePos.x);
-          graph.setNodeAttribute(ds.draggedNode, "y", draggedNodePos.y);
+
+        for (const [groupNodeId, initialPosition] of ds.initialNodePositions) {
+          if (!graph.hasNode(groupNodeId)) continue;
+
+          const targetPosition = {
+            x: initialPosition.x + delta.x,
+            y: initialPosition.y + delta.y,
+          };
+          graph.setNodeAttribute(groupNodeId, "x", targetPosition.x);
+          graph.setNodeAttribute(groupNodeId, "y", targetPosition.y);
         }
       });
 
@@ -328,8 +307,10 @@ export function GraphCanvas() {
       }
       ds.dragging = false;
       ds.draggedNode = null;
-      ds.anchorOffset = { x: 0, y: 0 };
-      ds.groupOffsets = new Map();
+      ds.startGraphPointer = { x: 0, y: 0 };
+      ds.initialNodePositions = new Map();
+
+      renderer.setCustomBBox(null);
 
       // Re-enable camera
       renderer.getCamera().enable();
