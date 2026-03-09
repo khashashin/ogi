@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlmodel import Field, SQLModel, Column, JSON, DateTime
+from sqlmodel import Field, SQLModel, Column, JSON, DateTime, String
 
 from .entity import Entity, EntityType
 from .edge import Edge
