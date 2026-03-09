@@ -22,6 +22,8 @@ dependencies = [
     "dnspython>=2.8.0",
     "httpx>=0.28.1",
     "python-multipart>=0.0.22",
+    "sqlmodel>=0.0.37",
+    "alembic>=1.18.4",
 ]
 
 [project.optional-dependencies]

@@ -3,8 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from ogi.models import Project, ProjectCreate, ProjectUpdate, UserProfile
+from ogi.api.auth import get_current_user, require_project_viewer, require_project_editor, require_project_owner
 from ogi.api.dependencies import get_project_store
-from ogi.api.auth import get_current_user
+from ogi.store.project_store import ProjectStore
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -13,32 +14,30 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def create_project(
     data: ProjectCreate,
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
 ) -> Project:
-    store = get_project_store()
     return await store.create(data, current_user.id)
 
 
 @router.get("", response_model=list[Project])
 async def list_projects(
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
 ) -> list[Project]:
-    store = get_project_store()
     return await store.list_all(current_user.id)
 
 
 @router.get("/{project_id}", response_model=Project)
 async def get_project(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
 ) -> Project:
-    store = get_project_store()
     project = await store.get(project_id)
-    if project is None:
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-        
-    if project.owner_id and project.owner_id != current_user.id and not project.is_public:
-        raise HTTPException(status_code=403, detail="Not authorized to access this project")
-        
+
     return project
 
 
@@ -46,35 +45,31 @@ async def get_project(
 async def update_project(
     project_id: UUID,
     data: ProjectUpdate,
+    role: str = Depends(require_project_editor),
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
 ) -> Project:
-    store = get_project_store()
     project = await store.get(project_id)
-    if project is None:
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-        
-    if project.owner_id and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the project owner can update it")
-        
-    project = await store.update(project_id, data)
-    if project is None:
+
+    updated = await store.update(project_id, data)
+    if not updated:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return updated
 
 
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(
     project_id: UUID,
+    role: str = Depends(require_project_owner),
     current_user: UserProfile = Depends(get_current_user),
+    store: ProjectStore = Depends(get_project_store),
 ) -> None:
-    store = get_project_store()
     project = await store.get(project_id)
-    if project is None:
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-        
-    if project.owner_id and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the project owner can delete it")
-        
+
     deleted = await store.delete(project_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")

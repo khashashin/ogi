@@ -9,8 +9,11 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
 from ogi.models import UserProfile
-from ogi.api.auth import get_current_user
+from ogi.api.auth import get_current_user, require_project_viewer
 from ogi.api.dependencies import get_entity_store, get_edge_store, get_project_store
+from ogi.store.project_store import ProjectStore
+from ogi.store.entity_store import EntityStore
+from ogi.store.edge_store import EdgeStore
 from ogi.config import settings
 
 router = APIRouter(prefix="/projects/{project_id}/export", tags=["export"])
@@ -47,12 +50,13 @@ async def _upload_to_storage(
 @router.get("/json")
 async def export_json(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
+    project_store: ProjectStore = Depends(get_project_store),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_store: EdgeStore = Depends(get_edge_store),
 ) -> Response:
-    project_store = get_project_store()
-    entity_store = get_entity_store()
-    edge_store = get_edge_store()
 
     project = await project_store.get(project_id)
     entities = await entity_store.list_by_project(project_id)
@@ -91,12 +95,13 @@ async def export_json(
 @router.get("/csv")
 async def export_csv(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
+    project_store: ProjectStore = Depends(get_project_store),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_store: EdgeStore = Depends(get_edge_store),
 ) -> Response:
-    project_store = get_project_store()
-    entity_store = get_entity_store()
-    edge_store = get_edge_store()
 
     project = await project_store.get(project_id)
     entities = await entity_store.list_by_project(project_id)
@@ -151,11 +156,12 @@ async def export_csv(
 @router.get("/graphml")
 async def export_graphml(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
     cloud: bool = Query(False, description="Upload to Supabase Storage"),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_store: EdgeStore = Depends(get_edge_store),
 ) -> Response:
-    entity_store = get_entity_store()
-    edge_store = get_edge_store()
 
     entities = await entity_store.list_by_project(project_id)
     edges = await edge_store.list_by_project(project_id)

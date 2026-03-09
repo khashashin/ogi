@@ -1,39 +1,28 @@
+import logging
+import traceback
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ogi.config import settings
-from ogi.db.database import get_sqlite_db, close_db, create_pg_pool
-from ogi.db.migrations import run_migrations
+from ogi.db.database import init_db, close_db
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.transform_engine import TransformEngine
-from ogi.store.project_store import ProjectStore
-from ogi.store.entity_store import EntityStore
-from ogi.store.edge_store import EdgeStore
-from ogi.store.transform_run_store import TransformRunStore
-from ogi.store.api_key_store import ApiKeyStore
-from ogi.api.dependencies import init_stores, init_transform_engine, init_entity_registry, init_plugin_engine, init_api_key_store
+from ogi.api.dependencies import init_transform_engine, init_entity_registry, init_plugin_engine
 from ogi.api.router import api_router
+
+# Configure logging so all errors are visible in the terminal
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("ogi")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Startup — choose DB backend
-    if settings.use_sqlite:
-        db = await get_sqlite_db()
-    else:
-        db = await create_pg_pool()
-
-    await run_migrations(db)
-
-    init_stores(
-        project_store=ProjectStore(db),
-        entity_store=EntityStore(db),
-        edge_store=EdgeStore(db),
-        transform_run_store=TransformRunStore(db),
-    )
+    # Startup DB connection
+    await init_db()
 
     registry = EntityRegistry.instance()
     init_entity_registry(registry)
@@ -43,7 +32,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     plugin_engine = transform_engine.load_plugins(settings.plugin_dirs)
     init_transform_engine(transform_engine)
     init_plugin_engine(plugin_engine)
-    init_api_key_store(ApiKeyStore(db))
 
     yield
 
@@ -67,6 +55,14 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all: log the full traceback so 500s are never silent."""
+    logger.error("Unhandled exception on %s %s", request.method, request.url)
+    logger.error(traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 @app.get("/health")

@@ -5,7 +5,9 @@ from pydantic import BaseModel
 
 from ogi.models import Entity, Edge, UserProfile
 from ogi.api.dependencies import get_graph_engine, get_entity_store, get_edge_store
-from ogi.api.auth import get_current_user
+from ogi.api.auth import get_current_user, require_project_viewer
+from ogi.store.entity_store import EntityStore
+from ogi.store.edge_store import EdgeStore
 from ogi.engine import analysis
 
 router = APIRouter(prefix="/projects/{project_id}/graph", tags=["graph"])
@@ -18,15 +20,16 @@ class GraphData:
 @router.get("")
 async def get_graph(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_store: EdgeStore = Depends(get_edge_store),
 ) -> dict[str, list[Entity] | list[Edge]]:
     """Get full graph data for a project (loads from DB into engine if needed)."""
     engine = get_graph_engine(project_id)
 
     # Hydrate from DB on first access
     if not engine._hydrated:
-        entity_store = get_entity_store()
-        edge_store = get_edge_store()
         entities = await entity_store.list_by_project(project_id)
         edges = await edge_store.list_by_project(project_id)
         for entity in entities:
@@ -49,6 +52,7 @@ async def get_graph(
 async def get_neighbors(
     project_id: UUID,
     entity_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
 ) -> dict[str, list[Entity] | list[Edge]]:
     engine = get_graph_engine(project_id)
@@ -60,6 +64,7 @@ async def get_neighbors(
 @router.get("/stats")
 async def get_stats(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
 ) -> dict[str, int | float]:
     engine = get_graph_engine(project_id)
@@ -74,6 +79,7 @@ class AnalyzeRequest(BaseModel):
 async def analyze_graph(
     project_id: UUID,
     request: AnalyzeRequest,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
 ) -> dict[str, object]:
     engine = get_graph_engine(project_id)

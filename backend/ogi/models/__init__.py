@@ -5,6 +5,7 @@ from .transform import TransformResult, TransformRun, TransformInfo, TransformSt
 from .graph import Graph
 from .auth import UserProfile, ProjectMember, ProjectMemberCreate, ProjectMemberUpdate
 from .plugin import PluginInfo
+from .api_key import ApiKey
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -14,4 +15,5 @@ __all__ = [
     "Graph",
     "UserProfile", "ProjectMember", "ProjectMemberCreate", "ProjectMemberUpdate",
     "PluginInfo",
+    "ApiKey",
 ]

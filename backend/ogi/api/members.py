@@ -4,114 +4,129 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select, delete
 
 from ogi.models import UserProfile, ProjectMember, ProjectMemberCreate, ProjectMemberUpdate
-from ogi.api.auth import get_current_user
+from ogi.models.auth import ProjectMemberRead
+from ogi.api.auth import get_current_user, require_project_viewer, require_project_owner
 from ogi.api.dependencies import get_project_store
+from ogi.db.database import get_session
 from ogi.config import settings
 
 router = APIRouter(prefix="/projects/{project_id}/members", tags=["members"])
 
 
-# ---- helpers ----
-
-async def _pool():  # type: ignore[no-untyped-def]
-    """Return the asyncpg pool (members only work with PostgreSQL)."""
-    from ogi.db.database import get_pg_pool
-    return get_pg_pool()
-
-
-# ---- endpoints ----
-
-@router.get("", response_model=list[ProjectMember])
+@router.get("", response_model=list[ProjectMemberRead])
 async def list_members(
     project_id: UUID,
+    role: str = Depends(require_project_viewer),
     current_user: UserProfile = Depends(get_current_user),
-) -> list[ProjectMember]:
+    session: AsyncSession = Depends(get_session),
+) -> list[ProjectMemberRead]:
     if settings.use_sqlite:
-        return []  # members not supported in SQLite mode
-    pool = await _pool()
-    rows = await pool.fetch(
-        """SELECT pm.project_id, pm.user_id, pm.role,
-                  COALESCE(p.display_name, '') AS display_name,
-                  COALESCE(p.email, '') AS email
-           FROM project_members pm
-           LEFT JOIN profiles p ON p.id = pm.user_id
-           WHERE pm.project_id = $1""",
-        project_id,
+        return []
+
+    # Join ProjectMember with UserProfile (profiles table)
+    stmt = (
+        select(ProjectMember, UserProfile)
+        .join(UserProfile, ProjectMember.user_id == UserProfile.id, isouter=True)
+        .where(ProjectMember.project_id == project_id)
     )
-    return [
-        ProjectMember(
-            project_id=r["project_id"],
-            user_id=r["user_id"],
-            role=r["role"],
-            display_name=r["display_name"],
-            email=r["email"],
+    result = await session.execute(stmt)
+    
+    response = []
+    for member, profile in result.all():
+        response.append(
+            ProjectMemberRead(
+                project_id=member.project_id,
+                user_id=member.user_id,
+                role=member.role,
+                display_name=profile.display_name if profile else "",
+                email=profile.email if profile else "",
+            )
         )
-        for r in rows
-    ]
+    return response
 
 
-@router.post("", response_model=ProjectMember, status_code=201)
+@router.post("", response_model=ProjectMemberRead, status_code=201)
 async def add_member(
     project_id: UUID,
     data: ProjectMemberCreate,
+    role: str = Depends(require_project_owner),
     current_user: UserProfile = Depends(get_current_user),
-) -> ProjectMember:
+    session: AsyncSession = Depends(get_session),
+) -> ProjectMemberRead:
     if settings.use_sqlite:
         raise HTTPException(status_code=501, detail="Members not supported in SQLite mode")
 
-    pool = await _pool()
-
     # Look up user by email
-    profile = await pool.fetchrow("SELECT id, display_name, email FROM profiles WHERE email = $1", data.email)
+    stmt = select(UserProfile).where(UserProfile.email == data.email)
+    result = await session.execute(stmt)
+    profile = result.scalar_one_or_none()
+    
     if not profile:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id: UUID = profile["id"]
-
-    try:
-        await pool.execute(
-            "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3)",
-            project_id, user_id, data.role,
-        )
-    except Exception:
+    # Check if already a member
+    existing_stmt = select(ProjectMember).where(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == profile.id
+    )
+    existing_result = await session.execute(existing_stmt)
+    if existing_result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="User is already a member")
 
-    return ProjectMember(
+    member = ProjectMember(project_id=project_id, user_id=profile.id, role=data.role)
+    session.add(member)
+    await session.commit()
+
+    return ProjectMemberRead(
         project_id=project_id,
-        user_id=user_id,
+        user_id=profile.id,
         role=data.role,
-        display_name=profile["display_name"] or "",
-        email=profile["email"] or "",
+        display_name=profile.display_name,
+        email=profile.email,
     )
 
 
-@router.patch("/{user_id}", response_model=ProjectMember)
+@router.patch("/{user_id}", response_model=ProjectMemberRead)
 async def update_member(
     project_id: UUID,
     user_id: UUID,
     data: ProjectMemberUpdate,
+    role: str = Depends(require_project_owner),
     current_user: UserProfile = Depends(get_current_user),
-) -> ProjectMember:
+    session: AsyncSession = Depends(get_session),
+) -> ProjectMemberRead:
     if settings.use_sqlite:
         raise HTTPException(status_code=501, detail="Members not supported in SQLite mode")
 
-    pool = await _pool()
-    result = await pool.execute(
-        "UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3",
-        data.role, project_id, user_id,
+    stmt = select(ProjectMember).where(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id
     )
-    if result == "UPDATE 0":
+    result = await session.execute(stmt)
+    member = result.scalar_one_or_none()
+    
+    if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    profile = await pool.fetchrow("SELECT display_name, email FROM profiles WHERE id = $1", user_id)
-    return ProjectMember(
+    member.role = data.role
+    session.add(member)
+    await session.commit()
+
+    # Get profile for response
+    profile_stmt = select(UserProfile).where(UserProfile.id == user_id)
+    profile_result = await session.execute(profile_stmt)
+    profile = profile_result.scalar_one_or_none()
+
+    return ProjectMemberRead(
         project_id=project_id,
         user_id=user_id,
         role=data.role,
-        display_name=(profile["display_name"] if profile else "") or "",
-        email=(profile["email"] if profile else "") or "",
+        display_name=profile.display_name if profile else "",
+        email=profile.email if profile else "",
     )
 
 
@@ -119,15 +134,22 @@ async def update_member(
 async def remove_member(
     project_id: UUID,
     user_id: UUID,
+    role: str = Depends(require_project_owner),
     current_user: UserProfile = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> None:
     if settings.use_sqlite:
         raise HTTPException(status_code=501, detail="Members not supported in SQLite mode")
 
-    pool = await _pool()
-    result = await pool.execute(
-        "DELETE FROM project_members WHERE project_id = $1 AND user_id = $2",
-        project_id, user_id,
+    stmt = select(ProjectMember).where(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id
     )
-    if result == "DELETE 0":
+    result = await session.execute(stmt)
+    member = result.scalar_one_or_none()
+    
+    if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    await session.delete(member)
+    await session.commit()

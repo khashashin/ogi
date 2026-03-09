@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from sqlmodel import Field, SQLModel, Column, JSON, DateTime
 
 
 class EntityType(str, Enum):
@@ -50,19 +52,21 @@ ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
 }
 
 
-class Entity(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
+class Entity(SQLModel, table=True):
+    __tablename__ = "entities"
+    
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     type: EntityType
     value: str
-    properties: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     icon: str = ""
     weight: int = 1
     notes: str = ""
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     source: str = "manual"
-    project_id: UUID | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    project_id: UUID = Field(foreign_key="projects.id", ondelete="CASCADE")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
 
     def model_post_init(self, _context: object) -> None:
         if not self.icon:
@@ -71,19 +75,19 @@ class Entity(BaseModel):
                 self.icon = meta["icon"]
 
 
-class EntityCreate(BaseModel):
+class EntityCreate(SQLModel):
     type: EntityType
     value: str
-    properties: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
     weight: int = 1
     notes: str = ""
     tags: list[str] = Field(default_factory=list)
     source: str = "manual"
 
 
-class EntityUpdate(BaseModel):
+class EntityUpdate(SQLModel):
     value: str | None = None
-    properties: dict[str, str | int | float | bool | None] | None = None
+    properties: dict[str, Any] | None = None
     weight: int | None = None
     notes: str | None = None
     tags: list[str] | None = None

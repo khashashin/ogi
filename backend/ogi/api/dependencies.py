@@ -1,6 +1,12 @@
 """Shared singletons for API route handlers."""
+from collections.abc import AsyncGenerator
+from typing import Annotated
 from uuid import UUID
 
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ogi.db.database import get_session
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.graph_engine import GraphEngine
 from ogi.engine.transform_engine import TransformEngine
@@ -11,28 +17,20 @@ from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.api_key_store import ApiKeyStore
 
-_project_store: ProjectStore | None = None
-_entity_store: EntityStore | None = None
-_edge_store: EdgeStore | None = None
-_transform_run_store: TransformRunStore | None = None
 _transform_engine: TransformEngine | None = None
 _entity_registry: EntityRegistry | None = None
 _plugin_engine: PluginEngine | None = None
-_api_key_store: ApiKeyStore | None = None
 _graph_engines: dict[UUID, GraphEngine] = {}
 
-
+# We still need to fake the init_stores for main.py signature compatibility for now,
+# but we just ignore the arguments since stores are now request-scoped
 def init_stores(
-    project_store: ProjectStore,
-    entity_store: EntityStore,
-    edge_store: EdgeStore,
+    project_store: ProjectStore | None = None,
+    entity_store: EntityStore | None = None,
+    edge_store: EdgeStore | None = None,
     transform_run_store: TransformRunStore | None = None,
 ) -> None:
-    global _project_store, _entity_store, _edge_store, _transform_run_store
-    _project_store = project_store
-    _entity_store = entity_store
-    _edge_store = edge_store
-    _transform_run_store = transform_run_store
+    pass
 
 
 def init_transform_engine(engine: TransformEngine) -> None:
@@ -45,9 +43,8 @@ def init_entity_registry(registry: EntityRegistry) -> None:
     _entity_registry = registry
 
 
-def init_api_key_store(store: ApiKeyStore) -> None:
-    global _api_key_store
-    _api_key_store = store
+def init_api_key_store(store: ApiKeyStore | None = None) -> None:
+    pass
 
 
 def init_plugin_engine(engine: PluginEngine) -> None:
@@ -55,19 +52,16 @@ def init_plugin_engine(engine: PluginEngine) -> None:
     _plugin_engine = engine
 
 
-def get_project_store() -> ProjectStore:
-    assert _project_store is not None
-    return _project_store
+async def get_project_store(session: AsyncSession = Depends(get_session)) -> ProjectStore:
+    return ProjectStore(session)
 
 
-def get_entity_store() -> EntityStore:
-    assert _entity_store is not None
-    return _entity_store
+async def get_entity_store(session: AsyncSession = Depends(get_session)) -> EntityStore:
+    return EntityStore(session)
 
 
-def get_edge_store() -> EdgeStore:
-    assert _edge_store is not None
-    return _edge_store
+async def get_edge_store(session: AsyncSession = Depends(get_session)) -> EdgeStore:
+    return EdgeStore(session)
 
 
 def get_transform_engine() -> TransformEngine:
@@ -80,14 +74,12 @@ def get_entity_registry() -> EntityRegistry:
     return _entity_registry
 
 
-def get_transform_run_store() -> TransformRunStore:
-    assert _transform_run_store is not None
-    return _transform_run_store
+async def get_transform_run_store(session: AsyncSession = Depends(get_session)) -> TransformRunStore:
+    return TransformRunStore(session)
 
 
-def get_api_key_store() -> ApiKeyStore:
-    assert _api_key_store is not None
-    return _api_key_store
+async def get_api_key_store(session: AsyncSession = Depends(get_session)) -> ApiKeyStore:
+    return ApiKeyStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

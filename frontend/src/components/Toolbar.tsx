@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock } from "lucide-react";
+import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { PluginManager } from "./PluginManager";
+import { ShareDialog } from "./ShareDialog";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
@@ -27,6 +28,7 @@ export function Toolbar() {
   const [showProfile, setShowProfile] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const { user, authEnabled } = useAuthStore();
 
   const handleCreateProject = async () => {
@@ -247,9 +249,17 @@ export function Toolbar() {
 
       <div className="w-px h-4 bg-border" />
 
-      {/* Privacy Toggle */}
+      {/* Privacy Toggle & Share */}
       {currentProject && (!currentProject.owner_id || currentProject.owner_id === user?.id) && (
         <>
+          <button
+            onClick={() => setShowShare(true)}
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text"
+            title="Share Project"
+          >
+            <Users size={14} />
+          </button>
+          
           <button
             onClick={handleTogglePrivacy}
             className={`p-1.5 rounded hover:bg-surface-hover ${currentProject.is_public ? 'text-green-400' : 'text-text-muted hover:text-text'}`}
@@ -298,6 +308,13 @@ export function Toolbar() {
         open={showPlugins}
         onClose={() => setShowPlugins(false)}
       />
+      {currentProject && (
+        <ShareDialog
+          open={showShare}
+          onClose={() => setShowShare(false)}
+          projectId={currentProject.id}
+        />
+      )}
     </div>
   );
 }

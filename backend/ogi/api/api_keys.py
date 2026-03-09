@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from ogi.models import UserProfile
 from ogi.api.auth import get_current_user
 from ogi.api.dependencies import get_api_key_store
+from ogi.store.api_key_store import ApiKeyStore
 
 router = APIRouter(prefix="/settings/api-keys", tags=["api-keys"])
 
@@ -27,8 +28,8 @@ class ApiKeyEntry(BaseModel):
 @router.get("", response_model=list[ApiKeyEntry])
 async def list_api_keys(
     current_user: UserProfile = Depends(get_current_user),
+    store: ApiKeyStore = Depends(get_api_key_store),
 ) -> list[ApiKeyEntry]:
-    store = get_api_key_store()
     services = await store.list_services(current_user.id)
     return [ApiKeyEntry(service_name=s) for s in services]
 
@@ -37,8 +38,8 @@ async def list_api_keys(
 async def save_api_key(
     data: ApiKeyCreate,
     current_user: UserProfile = Depends(get_current_user),
+    store: ApiKeyStore = Depends(get_api_key_store),
 ) -> ApiKeyEntry:
-    store = get_api_key_store()
     await store.set_key(current_user.id, data.service_name, data.key)
     return ApiKeyEntry(service_name=data.service_name)
 
@@ -47,8 +48,8 @@ async def save_api_key(
 async def delete_api_key(
     service_name: str,
     current_user: UserProfile = Depends(get_current_user),
+    store: ApiKeyStore = Depends(get_api_key_store),
 ) -> None:
-    store = get_api_key_store()
     deleted = await store.delete_key(current_user.id, service_name)
     if not deleted:
         raise HTTPException(status_code=404, detail="API key not found")
