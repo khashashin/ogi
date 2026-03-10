@@ -41,8 +41,9 @@ class BaseTransform(ABC):
 
     @classmethod
     def effective_max_value(cls, setting_name: str, declared_max: float | None) -> float | None:
-        override = settings.transform_setting_max_overrides.get(setting_name)
-        if setting_name in settings.transform_setting_max_overrides:
+        overrides = getattr(settings, "transform_setting_max_overrides", {}) or {}
+        override = overrides.get(setting_name)
+        if setting_name in overrides:
             return override
         return declared_max
 
