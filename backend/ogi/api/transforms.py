@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ogi.models import TransformInfo, TransformRun, EdgeCreate, UserProfile
+from ogi.models import TransformInfo, TransformRun, TransformResult, EdgeCreate, UserProfile
 from ogi.transforms.base import TransformConfig
 from ogi.api.auth import get_current_user, require_project_viewer
 from ogi.api.dependencies import (
@@ -85,7 +85,10 @@ async def run_transform(
         raise HTTPException(status_code=400, detail=str(e))
 
     # Persist discovered entities and edges, deduplicating by type+value
-    if run.result:
+    # run.result is stored as a JSON dict; parse it back into a TransformResult
+    result_data = run.result
+    if result_data:
+        transform_result = TransformResult.model_validate(result_data)
         es = entity_store
         graph = get_graph_engine(request.project_id)
 
@@ -96,13 +99,13 @@ async def run_transform(
         if not graph.get_entity(entity.id):
             graph.add_entity(entity)
 
-        for new_entity in run.result.entities:
+        for new_entity in transform_result.entities:
             saved = await es.save(request.project_id, new_entity)
             id_map[new_entity.id] = saved.id
             if not graph.get_entity(saved.id):
                 graph.add_entity(saved)
 
-        for new_edge in run.result.edges:
+        for new_edge in transform_result.edges:
             # Remap edge endpoints to the actual persisted entity IDs
             actual_source = id_map.get(new_edge.source_id, new_edge.source_id)
             actual_target = id_map.get(new_edge.target_id, new_edge.target_id)
@@ -129,19 +132,22 @@ async def run_transform(
                 pass
 
         # Update the result to reflect deduplicated IDs so the frontend gets correct data
-        persisted_entity_ids = {id_map.get(e.id, e.id) for e in run.result.entities}
+        persisted_entity_ids = {id_map.get(e.id, e.id) for e in transform_result.entities}
         # Include the input entity so edges connecting to it are found
         persisted_entity_ids.add(entity.id)
 
-        run.result.entities = [
+        transform_result.entities = [
             es_entity for eid in persisted_entity_ids
             if eid != entity.id and (es_entity := graph.get_entity(eid)) is not None
         ]
         # Return all edges where both endpoints are in the set of involved entities
-        run.result.edges = [
+        transform_result.edges = [
             e for e in graph.edges.values()
             if e.source_id in persisted_entity_ids and e.target_id in persisted_entity_ids
         ]
+
+        # Serialize back to dict for DB storage
+        run.result = transform_result.model_dump(mode="json")
 
     # Persist the run
     await run_store.save(run)

@@ -76,11 +76,11 @@ class TransformEngine:
         try:
             result = await transform.run(entity, config or TransformConfig())
             run.status = TransformStatus.COMPLETED
-            run.result = result
+            run.result = result.model_dump(mode="json")
         except Exception as e:
             run.status = TransformStatus.FAILED
             run.error = str(e)
-            run.result = TransformResult(messages=[f"Error: {e}"])
+            run.result = TransformResult(messages=[f"Error: {e}"]).model_dump(mode="json")
 
         run.completed_at = datetime.now(timezone.utc)
         self._runs[run.id] = run
