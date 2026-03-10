@@ -155,7 +155,7 @@ def _plugin_allowed_for_api_key_injection(
 def _base_default_settings(transform: object) -> dict[str, str]:
     return {
         s.name: s.default
-        for s in getattr(transform, "settings", [])
+        for s in transform.effective_settings()
         if isinstance(s, TransformSetting) and s.default
     }
 
@@ -175,7 +175,7 @@ def _sanitize_settings(
 ) -> dict[str, str]:
     allowed: dict[str, TransformSetting] = {
         s.name: s
-        for s in getattr(transform, "settings", [])
+        for s in transform.effective_settings()
         if isinstance(s, TransformSetting)
     }
     sanitized: dict[str, str] = {}
@@ -266,7 +266,7 @@ async def get_transform_settings(
     )
     return TransformSettingsResponse(
         transform_name=name,
-        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        settings_schema=[s.model_dump(mode="json") for s in transform.effective_settings()],
         defaults=defaults,
         global_settings=global_settings,
         user_settings=user_settings,
@@ -296,7 +296,7 @@ async def save_user_transform_settings(
     )
     return TransformSettingsResponse(
         transform_name=name,
-        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        settings_schema=[s.model_dump(mode="json") for s in transform.effective_settings()],
         defaults=defaults,
         global_settings=global_settings,
         user_settings=user_settings,
@@ -327,7 +327,7 @@ async def save_global_transform_settings(
     )
     return TransformSettingsResponse(
         transform_name=name,
-        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        settings_schema=[s.model_dump(mode="json") for s in transform.effective_settings()],
         defaults=defaults,
         global_settings=global_settings,
         user_settings=user_settings,

@@ -3,8 +3,6 @@ import httpx
 from ogi.models import Entity, EntityType, Edge, TransformResult
 from ogi.transforms.base import BaseTransform, TransformConfig
 
-MAX_URLS = 50
-
 
 class DomainToURLs(BaseTransform):
     name = "domain_to_urls"
@@ -15,10 +13,12 @@ class DomainToURLs(BaseTransform):
     category = "Web"
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
+        del config
         domain = entity.value
         entities: list[Entity] = []
         edges: list[Edge] = []
         messages: list[str] = []
+        max_urls = self.get_effective_setting_max("max_urls", 50)
 
         robots_url = f"https://{domain}/robots.txt"
 
@@ -64,8 +64,8 @@ class DomainToURLs(BaseTransform):
                 )
 
             total_found = len(found_paths)
-            truncated = total_found > MAX_URLS
-            found_paths = found_paths[:MAX_URLS]
+            truncated = max_urls is not None and total_found > int(max_urls)
+            found_paths = found_paths[: int(max_urls) if max_urls is not None else None]
 
             for url_value in found_paths:
                 url_entity = Entity(
@@ -86,7 +86,7 @@ class DomainToURLs(BaseTransform):
 
             messages.append(f"Found {total_found} URLs in robots.txt")
             if truncated:
-                messages.append(f"Results limited to {MAX_URLS} URLs")
+                messages.append(f"Results limited to {int(max_urls)} URLs")
 
         except httpx.TimeoutException:
             messages.append(f"Timeout fetching robots.txt from {domain}")

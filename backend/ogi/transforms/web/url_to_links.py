@@ -12,7 +12,6 @@ HREF_PATTERN = re.compile(
     r"""<a\s[^>]*href\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))""",
     re.IGNORECASE,
 )
-MAX_LINKS = 100
 
 
 class URLToLinks(BaseTransform):
@@ -29,6 +28,7 @@ class URLToLinks(BaseTransform):
         entities: list[Entity] = []
         edges: list[Edge] = []
         messages: list[str] = []
+        max_links = self.get_effective_setting_max("max_links", 100)
 
         if not source_url:
             return TransformResult(messages=["Empty URL value"])
@@ -70,7 +70,7 @@ class URLToLinks(BaseTransform):
             discovered_urls.add(normalized)
             discovered_domains.add(parsed.hostname.lower() if parsed.hostname else "")
 
-            if len(discovered_urls) >= MAX_LINKS:
+            if max_links is not None and len(discovered_urls) >= int(max_links):
                 break
 
         discovered_domains.discard("")
