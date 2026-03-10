@@ -22,8 +22,7 @@ class URLToLinks(BaseTransform):
     output_types = [EntityType.URL, EntityType.DOMAIN]
     category = "Web"
 
-    async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
-        del config
+    async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         source_url = entity.value.strip()
         entities: list[Entity] = []
         edges: list[Edge] = []

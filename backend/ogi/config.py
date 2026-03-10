@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 from typing import Any
+from typing_extensions import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -37,7 +38,7 @@ class Settings(BaseSettings):
     # Transform Hub / Registry
     registry_repo: str = "opengraphintel/ogi-transforms"
     registry_cache_ttl: int = 3600  # seconds
-    transform_setting_max_overrides: dict[str, float | None] = {}
+    transform_setting_max_overrides: Annotated[dict[str, float | None], NoDecode] = {}
     # Optional GitHub token for higher GitHub API limits and private registry access.
     github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
     api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
