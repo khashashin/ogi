@@ -26,6 +26,23 @@ interface ImportSummary {
   edges_skipped: number;
 }
 
+interface DiscoverProject {
+  id: string;
+  name: string;
+  description: string;
+  owner_id: string | null;
+  owner_name: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  is_bookmarked: boolean;
+}
+
+interface MyProjectItem extends DiscoverProject {
+  source: "owned" | "member" | "bookmarked";
+  role: string;
+}
+
 interface ProjectMember {
   project_id: string;
   user_id: string;
@@ -94,6 +111,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   projects: {
     list: () => request<Project[]>("/projects"),
+    my: () => request<MyProjectItem[]>("/projects/my"),
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (data: ProjectCreate) =>
       request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }),
@@ -104,6 +122,10 @@ export const api = {
       }),
     delete: (id: string) =>
       request<void>(`/projects/${id}`, { method: "DELETE" }),
+    bookmark: (id: string) =>
+      request<{ status: string }>(`/projects/${id}/bookmark`, { method: "POST" }),
+    unbookmark: (id: string) =>
+      request<void>(`/projects/${id}/bookmark`, { method: "DELETE" }),
   },
 
   entities: {
@@ -251,4 +273,14 @@ export const api = {
         method: "DELETE",
       }),
   },
+
+  discover: {
+    list: (search?: string) => {
+      const params = search ? `?q=${encodeURIComponent(search)}` : "";
+      return request<DiscoverProject[]>(`/discover${params}`);
+    },
+  },
 };
+
+export type { DiscoverProject, MyProjectItem, ProjectMember };
+
