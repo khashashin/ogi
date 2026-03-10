@@ -94,8 +94,7 @@ class PersonToUsernames(BaseTransform):
                 results.append((username, confidence, rationale))
         return results
 
-    async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
-        del config
+    async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
 
         generated: dict[str, tuple[float, str]] = {}
         for raw_name, source in self._candidate_names(entity):

@@ -64,9 +64,12 @@ class URLToContent(BaseTransform):
         if not allow_local and self._is_blocked_host(parsed.hostname or ""):
             return TransformResult(messages=[f"Blocked potentially unsafe target host: {parsed.hostname}"])
 
-        max_chars = self._parse_positive_int(
+        max_chars = self.parse_int_setting(
             config.settings.get("max_content_chars", "12000"),
+            setting_name="max_content_chars",
             default=12000,
+            min_value=1000,
+            declared_max=200000,
         )
 
         try:
@@ -109,16 +112,6 @@ class URLToContent(BaseTransform):
             messages.append(f"Error fetching content from {url}: {err}")
 
         return TransformResult(entities=entities, edges=edges, messages=messages)
-
-    @staticmethod
-    def _parse_positive_int(raw: str, default: int) -> int:
-        try:
-            value = int(raw)
-            if value <= 0:
-                return default
-            return value
-        except (ValueError, TypeError):
-            return default
 
     @staticmethod
     def _parse_bool(raw: str, default: bool) -> bool:

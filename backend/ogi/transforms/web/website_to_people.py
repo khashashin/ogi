@@ -48,7 +48,13 @@ class WebsiteToPeople(BaseTransform):
             return TransformResult(messages=["OpenAI API key required. Save it in API Keys (service: openai)."])
 
         model = config.settings.get("openai_model", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
-        max_people = self._parse_max_people(config.settings.get("max_people", "500"))
+        max_people = self.parse_int_setting(
+            config.settings.get("max_people", "500"),
+            setting_name="max_people",
+            default=500,
+            min_value=1,
+            declared_max=500,
+        )
 
         base_url = self._resolve_base_url(entity)
         if not base_url:
@@ -280,13 +286,6 @@ class WebsiteToPeople(BaseTransform):
                 }
             )
         return out
-
-    def _parse_max_people(self, value: str) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = 500
-        return max(1, min(parsed, 500))
 
     def _response_text(self, payload: dict) -> str:
         direct = payload.get("output_text")

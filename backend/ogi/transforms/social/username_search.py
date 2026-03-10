@@ -115,7 +115,13 @@ class UsernameSearch(BaseTransform):
         if not username:
             return TransformResult(messages=["No username value available for scanning."])
 
-        min_len = self._get_int(config, "min_username_length", 4, 1, 64)
+        min_len = self.parse_int_setting(
+            config.settings.get("min_username_length", "4"),
+            setting_name="min_username_length",
+            default=4,
+            min_value=1,
+            declared_max=64,
+        )
         if len(username) < min_len:
             return TransformResult(messages=[f"Skipped '{username}': below minimum username length {min_len}."])
 
@@ -124,8 +130,20 @@ class UsernameSearch(BaseTransform):
 
         must_have_name = self._get_bool(config, "must_have_name", True)
         scan_permutations = self._get_bool(config, "scan_permutations", False)
-        max_sites = self._get_int(config, "max_sites", 25, 1, 200)
-        concurrency = self._get_int(config, "concurrency", 10, 1, 50)
+        max_sites = self.parse_int_setting(
+            config.settings.get("max_sites", "25"),
+            setting_name="max_sites",
+            default=25,
+            min_value=1,
+            declared_max=200,
+        )
+        concurrency = self.parse_int_setting(
+            config.settings.get("concurrency", "10"),
+            setting_name="concurrency",
+            default=10,
+            min_value=1,
+            declared_max=50,
+        )
 
         candidates = [username]
         if scan_permutations:
@@ -400,13 +418,3 @@ class UsernameSearch(BaseTransform):
             return default
         return raw.strip().lower() in {"1", "true", "yes", "on"}
 
-    @staticmethod
-    def _get_int(config: TransformConfig, key: str, default: int, minimum: int, maximum: int) -> int:
-        raw = config.settings.get(key)
-        if raw is None:
-            return default
-        try:
-            parsed = int(raw)
-        except ValueError:
-            return default
-        return max(minimum, min(maximum, parsed))
