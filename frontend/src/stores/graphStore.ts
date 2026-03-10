@@ -30,6 +30,29 @@ function savePositions(projectId: string, graph: Graph): void {
   localStorage.setItem(`ogi-positions-${projectId}`, JSON.stringify(positions));
 }
 
+/** Visual overlays that temporarily override node rendering in the graph canvas. */
+interface SearchOverlay {
+  type: "search";
+  matchIds: Set<string>;
+  focusId: string | null;
+}
+
+interface AnalysisScoresOverlay {
+  type: "analysis-scores";
+  scores: Record<string, number>;
+  maxScore: number;
+}
+
+interface AnalysisCommunitiesOverlay {
+  type: "analysis-communities";
+  colors: Record<string, string>;
+}
+
+export type NodeOverlay =
+  | SearchOverlay
+  | AnalysisScoresOverlay
+  | AnalysisCommunitiesOverlay;
+
 interface GraphState {
   graph: Graph;
   selectedNodeId: string | null;
@@ -38,6 +61,7 @@ interface GraphState {
   edges: Map<string, Edge>;
   loading: boolean;
   error: string | null;
+  nodeOverlay: NodeOverlay | null;
 
   loadGraph: (projectId: string) => Promise<void>;
   addEntity: (projectId: string, entity: Entity) => void;
@@ -46,6 +70,7 @@ interface GraphState {
   removeEdge: (projectId: string, edgeId: string) => Promise<void>;
   selectNode: (nodeId: string | null) => void;
   selectEdge: (edgeId: string | null) => void;
+  setNodeOverlay: (overlay: NodeOverlay | null) => void;
   clearGraph: () => void;
   persistPositions: (projectId: string) => void;
   performUndo: (projectId: string) => Promise<void>;
@@ -64,6 +89,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   edges: new Map(),
   loading: false,
   error: null,
+  nodeOverlay: null,
 
   loadGraph: async (projectId) => {
     set({ loading: true, error: null });
@@ -100,7 +126,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
 
-      set({ graph, entities, edges, loading: false, selectedNodeId: null, selectedEdgeId: null });
+      set({ graph, entities, edges, loading: false, selectedNodeId: null, selectedEdgeId: null, nodeOverlay: null });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
@@ -202,6 +228,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null }),
   selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null }),
+  setNodeOverlay: (overlay) => set({ nodeOverlay: overlay }),
 
   clearGraph: () => {
     useUndoStore.getState().clear();
@@ -211,6 +238,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedEdgeId: null,
       entities: new Map(),
       edges: new Map(),
+      nodeOverlay: null,
     });
   },
 

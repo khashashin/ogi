@@ -8,7 +8,7 @@ import { setSigmaRef } from "../stores/sigmaRef";
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectEdge, selectedNodeId, persistPositions } = useGraphStore();
+  const { graph, selectNode, selectEdge, selectedNodeId, nodeOverlay, persistPositions } = useGraphStore();
   const { currentProject } = useProjectStore();
 
   // Drag state refs (avoid re-renders during drag)
@@ -159,13 +159,42 @@ export function GraphCanvas() {
     };
   }, [initSigma]);
 
-  // Highlight selected node
+  // Unified node/edge reducer — handles selection highlight + overlays (search, analysis).
+  // GraphCanvas is the sole owner of nodeReducer/edgeReducer to prevent competing overwrites.
   useEffect(() => {
     if (!sigmaRef.current) return;
     const renderer = sigmaRef.current;
 
     renderer.setSetting("nodeReducer", (node, data) => {
-      if (selectedNodeId && node !== selectedNodeId) {
+      // 1. Overlay takes priority when active
+      if (nodeOverlay) {
+        if (nodeOverlay.type === "search") {
+          if (nodeOverlay.matchIds.size > 0) {
+            if (node === nodeOverlay.focusId) {
+              return { ...data, highlighted: true, zIndex: 2, size: (data.size ?? 8) + 4 };
+            }
+            if (nodeOverlay.matchIds.has(node)) {
+              return { ...data, highlighted: true, zIndex: 1 };
+            }
+            return { ...data, color: `${data.color}22`, label: "" };
+          }
+          // Search active but no matches — pass through to selection
+        }
+        if (nodeOverlay.type === "analysis-scores") {
+          const score = nodeOverlay.scores[node] ?? 0;
+          const normalized = score / nodeOverlay.maxScore;
+          return { ...data, size: 6 + normalized * 20 };
+        }
+        if (nodeOverlay.type === "analysis-communities") {
+          return { ...data, color: nodeOverlay.colors[node] ?? data.color };
+        }
+      }
+
+      // 2. Selection highlight
+      if (selectedNodeId) {
+        if (node === selectedNodeId) {
+          return { ...data, highlighted: true, size: (data.size ?? 8) + 3 };
+        }
         const isNeighbor = graph.hasNode(selectedNodeId) && graph.areNeighbors(node, selectedNodeId);
         return {
           ...data,
@@ -173,14 +202,12 @@ export function GraphCanvas() {
           label: isNeighbor ? data.label : "",
         };
       }
-      if (node === selectedNodeId) {
-        return { ...data, highlighted: true, size: (data.size ?? 8) + 3 };
-      }
+
       return data;
     });
 
     renderer.setSetting("edgeReducer", (edge, data) => {
-      if (selectedNodeId) {
+      if (selectedNodeId && !nodeOverlay) {
         const src = graph.source(edge);
         const tgt = graph.target(edge);
         if (src !== selectedNodeId && tgt !== selectedNodeId) {
@@ -191,7 +218,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, graph]);
+  }, [selectedNodeId, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {
