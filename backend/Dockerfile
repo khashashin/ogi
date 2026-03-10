@@ -15,16 +15,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy package metadata and source before install so CLI entry points resolve modules.
+# Copy package metadata first so dependency/browser layers survive normal source edits.
 COPY pyproject.toml ./
 RUN printf "# OGI backend image\n" > README.md
-COPY ogi/ ogi/
 
-# Install project + dependencies into the venv
-RUN uv pip install -e ".[web_extract]"
+# Install Playwright package first so browser binaries can be cached separately
+# from application source changes.
+RUN uv pip install "playwright>=1.58.0"
 
 # Install Playwright browser binaries and required system packages
 RUN playwright install --with-deps chromium
+
+# Copy package source and then install the full project + extras.
+COPY ogi/ ogi/
+RUN uv pip install -e ".[web_extract]"
 
 # Copy non-package runtime files
 COPY alembic/ alembic/
