@@ -14,6 +14,7 @@ import { useGraphStore } from "../stores/graphStore";
 import { useUndoStore } from "../stores/undoStore";
 import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 export function Toolbar() {
   const { currentProject, updateProject } = useProjectStore();
@@ -27,6 +28,7 @@ export function Toolbar() {
   const [showPlugins, setShowPlugins] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const { user, authEnabled } = useAuthStore();
+  const isViewer = useIsViewer();
 
   const handleTogglePrivacy = async () => {
     if (!currentProject) return;
@@ -97,7 +99,7 @@ export function Toolbar() {
       {/* Undo / Redo */}
       <button
         onClick={() => currentProject && performUndo(currentProject.id)}
-        disabled={!canUndo}
+        disabled={!canUndo || isViewer}
         className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
         title="Undo (Ctrl+Z)"
       >
@@ -105,7 +107,7 @@ export function Toolbar() {
       </button>
       <button
         onClick={() => currentProject && performRedo(currentProject.id)}
-        disabled={!canRedo}
+        disabled={!canRedo || isViewer}
         className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
         title="Redo (Ctrl+Y)"
       >
@@ -177,7 +179,7 @@ export function Toolbar() {
       <div className="w-px h-4 bg-border" />
 
       {/* Privacy Toggle & Share */}
-      {currentProject && (!currentProject.owner_id || currentProject.owner_id === user?.id) && (
+      {currentProject && (!currentProject.owner_id || currentProject.owner_id === user?.id) && !isViewer && (
         <>
           <button
             onClick={() => setShowShare(true)}

@@ -37,6 +37,17 @@ class ProjectUpdate(SQLModel):
     is_public: bool | None = None
 
 
+class ProjectWithRole(SQLModel):
+    id: UUID
+    name: str
+    description: str = ""
+    owner_id: Optional[UUID] = None
+    is_public: bool = False
+    created_at: datetime
+    updated_at: datetime
+    role: str
+
+
 class ProjectDiscoverRead(SQLModel):
     id: UUID
     name: str

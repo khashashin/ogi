@@ -1,8 +1,8 @@
 """initial_schema
 
-Revision ID: 8d9ca6951e29
+Revision ID: cd7b6a14b944
 Revises: 
-Create Date: 2026-03-01 10:25:58.190947
+Create Date: 2026-03-01 12:05:20.019272
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8d9ca6951e29'
+revision: str = 'cd7b6a14b944'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -79,6 +79,14 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('project_bookmarks',
+    sa.Column('user_id', sa.Uuid(), nullable=False),
+    sa.Column('project_id', sa.Uuid(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_id'], ['profiles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('user_id', 'project_id')
+    )
     op.create_table('project_members',
     sa.Column('project_id', sa.Uuid(), nullable=False),
     sa.Column('user_id', sa.Uuid(), nullable=False),
@@ -125,6 +133,7 @@ def downgrade() -> None:
     op.drop_table('edges')
     op.drop_table('transform_runs')
     op.drop_table('project_members')
+    op.drop_table('project_bookmarks')
     op.drop_table('entities')
     op.drop_table('projects')
     op.drop_table('api_keys')

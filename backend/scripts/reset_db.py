@@ -26,7 +26,7 @@ async def reset_database() -> None:
     if db_url and db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    print(f"🔌 Connecting to: {db_url.split('@')[1] if '@' in db_url else db_url}")
+    print(f"Connecting to: {db_url.split('@')[1] if '@' in db_url else db_url}")
 
     engine = create_async_engine(db_url)
     async with engine.begin() as conn:
@@ -34,7 +34,7 @@ async def reset_database() -> None:
         await conn.execute(text("CREATE SCHEMA public"))
         # Grant permissions
         await conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
-        print("✅ Database schema reset (all tables dropped)")
+        print("Database schema reset (all tables dropped)")
     await engine.dispose()
 
 
@@ -52,7 +52,7 @@ def delete_migrations() -> None:
     if os.path.isdir(cache_dir):
         for f in glob.glob(os.path.join(cache_dir, "*")):
             os.remove(f)
-    print(f"🗑️  Deleted {count} migration file(s)")
+    print(f"Deleted {count} migration file(s)")
 
 
 def generate_migration() -> None:
@@ -66,9 +66,9 @@ def generate_migration() -> None:
         text=True,
     )
     if result.returncode != 0:
-        print(f"❌ Autogenerate failed:\n{result.stderr}")
+        print(f"Autogenerate failed:\n{result.stderr}")
         sys.exit(1)
-    print("📝 Generated initial_schema migration")
+    print("Generated initial_schema migration")
 
 
 def apply_migration() -> None:
@@ -82,9 +82,9 @@ def apply_migration() -> None:
         text=True,
     )
     if result.returncode != 0:
-        print(f"❌ Migration failed:\n{result.stderr}")
+        print(f"Migration failed:\n{result.stderr}")
         sys.exit(1)
-    print("🚀 Migration applied — database is ready!")
+    print("Migration applied -- database is ready!")
 
 
 def main() -> None:
@@ -108,7 +108,7 @@ def main() -> None:
         apply_migration()
 
     print("=" * 50)
-    print("  Done! ✨")
+    print("  Done!")
     print("=" * 50)
 
 

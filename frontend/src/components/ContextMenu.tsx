@@ -6,6 +6,7 @@ import { useProjectStore } from "../stores/projectStore";
 import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { getSigmaRef } from "../stores/sigmaRef";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 interface MenuState {
   visible: boolean;
@@ -30,6 +31,7 @@ export function ContextMenu() {
 
   const { entities, removeEntity, removeEdge, selectNode } = useGraphStore();
   const { currentProject } = useProjectStore();
+  const isViewer = useIsViewer();
 
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
 
@@ -189,7 +191,7 @@ export function ContextMenu() {
             Copy Value
           </button>
 
-          {transforms.length > 0 && (
+          {!isViewer && transforms.length > 0 && (
             <>
               <div className="border-t border-border my-1" />
               {showTransforms ? (
@@ -220,15 +222,19 @@ export function ContextMenu() {
             </>
           )}
 
-          <div className="border-t border-border my-1" />
-          <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
-            <Trash2 size={12} />
-            Delete Entity
-          </button>
+          {!isViewer && (
+            <>
+              <div className="border-t border-border my-1" />
+              <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
+                <Trash2 size={12} />
+                Delete Entity
+              </button>
+            </>
+          )}
         </>
       )}
 
-      {menu.type === "edge" && (
+      {menu.type === "edge" && !isViewer && (
         <>
           <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
             <Trash2 size={12} />

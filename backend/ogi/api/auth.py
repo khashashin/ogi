@@ -77,9 +77,14 @@ async def get_current_user(
     profile = await session.get(UserProfile, user_id)
     if not profile:
         profile = UserProfile(id=user_id, email=email)
-        session.add(profile)
-        await session.commit()
-        await session.refresh(profile)
+        profile = await session.merge(profile)
+        try:
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            profile = await session.get(UserProfile, user_id)
+            if not profile:
+                raise
     elif profile.email != email:
         profile.email = email
         session.add(profile)

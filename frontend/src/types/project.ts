@@ -6,6 +6,7 @@ export interface Project {
   updated_at: string;
   owner_id: string | null;
   is_public: boolean;
+  role?: string;
 }
 
 export interface ProjectCreate {
