@@ -1,25 +1,23 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { useAuthStore } from "../stores/authStore";
 import { Loader2 } from "lucide-react";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
-export function AuthPage() {
+interface AuthPageProps {
+  mode: AuthMode;
+}
+
+export function AuthPage({ mode }: AuthPageProps) {
   const { signIn, signUp, resetPassword } = useAuthStore();
-  const [mode, setMode] = useState<AuthMode>("signin");
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-
-  const switchMode = (m: AuthMode) => {
-    setMode(m);
-    setError(null);
-    setSignupSuccess(false);
-    setResetSent(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +44,8 @@ export function AuthPage() {
       setError(err);
     } else if (mode === "signup") {
       setSignupSuccess(true);
+    } else {
+      navigate("/");
     }
   };
 
@@ -112,43 +112,43 @@ export function AuthPage() {
         <div className="mt-4 flex flex-col items-center gap-1">
           {mode === "signin" && (
             <>
-              <button
-                onClick={() => switchMode("forgot")}
+              <Link
+                to="/forgot-password"
                 className="text-xs text-text-muted hover:text-accent"
               >
                 Forgot password?
-              </button>
+              </Link>
               <p className="text-xs text-text-muted">
                 Don&apos;t have an account?{" "}
-                <button
-                  onClick={() => switchMode("signup")}
+                <Link
+                  to="/signup"
                   className="text-accent hover:underline"
                 >
                   Sign up
-                </button>
+                </Link>
               </p>
             </>
           )}
           {mode === "signup" && (
             <p className="text-xs text-text-muted">
               Already have an account?{" "}
-              <button
-                onClick={() => switchMode("signin")}
+              <Link
+                to="/login"
                 className="text-accent hover:underline"
               >
                 Sign in
-              </button>
+              </Link>
             </p>
           )}
           {mode === "forgot" && (
             <p className="text-xs text-text-muted">
               Back to{" "}
-              <button
-                onClick={() => switchMode("signin")}
+              <Link
+                to="/login"
                 className="text-accent hover:underline"
               >
                 Sign in
-              </button>
+              </Link>
             </p>
           )}
         </div>

@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuthStore } from "../stores/authStore";
 import { Loader2, CheckCircle } from "lucide-react";
 
 export function ResetPasswordPage() {
   const { updatePassword, clearRecovery } = useAuthStore();
+  const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,10 @@ export function ResetPasswordPage() {
               Password updated successfully!
             </p>
             <button
-              onClick={clearRecovery}
+              onClick={() => {
+                clearRecovery();
+                navigate("/");
+              }}
               className="px-4 py-2 text-sm bg-accent text-white rounded hover:bg-accent-hover"
             >
               Continue to OpenGraph Intel

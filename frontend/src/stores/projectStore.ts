@@ -8,6 +8,7 @@ interface ProjectState {
   loading: boolean;
   error: string | null;
   fetchProjects: () => Promise<void>;
+  loadProjectById: (id: string) => Promise<void>;
   createProject: (name: string, description?: string, is_public?: boolean) => Promise<Project>;
   updateProject: (id: string, data: import("../types/project").ProjectUpdate) => Promise<Project>;
   selectProject: (project: Project) => void;
@@ -28,6 +29,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (!get().currentProject && projects.length > 0) {
         set({ currentProject: projects[0] });
       }
+    } catch (e) {
+      set({ error: String(e), loading: false });
+    }
+  },
+
+  loadProjectById: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const project = await api.projects.get(id);
+      set({ currentProject: project, loading: false });
     } catch (e) {
       set({ error: String(e), loading: false });
     }

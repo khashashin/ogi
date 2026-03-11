@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, FolderOpen, LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users } from "lucide-react";
+import { Link } from "react-router";
+import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -15,14 +16,10 @@ import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function Toolbar() {
-  const { currentProject, projects, selectProject, createProject, updateProject } = useProjectStore();
-  const { graph, loadGraph, entities, edges, persistPositions, performUndo, performRedo } = useGraphStore();
+  const { currentProject, updateProject } = useProjectStore();
+  const { graph, entities, edges, persistPositions, performUndo, performRedo } = useGraphStore();
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [showProjectList, setShowProjectList] = useState(false);
-  const [newProjectPublic, setNewProjectPublic] = useState(false);
   const [showExportImport, setShowExportImport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -31,14 +28,6 @@ export function Toolbar() {
   const [showShare, setShowShare] = useState(false);
   const { user, authEnabled } = useAuthStore();
 
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
-    await createProject(newProjectName.trim(), undefined, newProjectPublic);
-    setNewProjectName("");
-    setNewProjectPublic(false);
-    setShowNewProject(false);
-  };
-
   const handleTogglePrivacy = async () => {
     if (!currentProject) return;
     try {
@@ -46,12 +35,6 @@ export function Toolbar() {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const handleSelectProject = async (project: typeof projects[0]) => {
-    selectProject(project);
-    await loadGraph(project.id);
-    setShowProjectList(false);
   };
 
   const runForceLayout = () => {
@@ -86,76 +69,20 @@ export function Toolbar() {
 
   return (
     <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
-      {/* Project selector */}
-      <div className="relative">
-        <button
-          onClick={() => setShowProjectList(!showProjectList)}
-          className="flex items-center gap-1.5 px-2 py-1 text-sm text-text hover:bg-surface-hover rounded"
-        >
-          <FolderOpen size={14} />
-          <span>{currentProject?.name ?? "No Project"}</span>
-        </button>
-        {showProjectList && (
-          <div className="absolute top-full left-0 mt-1 w-56 bg-surface border border-border rounded shadow-lg z-50">
-            {projects.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handleSelectProject(p)}
-                className="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
-              >
-                {p.name}
-              </button>
-            ))}
-            {projects.length === 0 && (
-              <p className="px-3 py-2 text-xs text-text-muted">No projects yet</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* New project */}
-      {showNewProject ? (
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            placeholder="Project name"
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
-            autoFocus
-            className="px-2 py-1 text-xs bg-bg border border-border rounded text-text w-40 focus:outline-none focus:border-accent"
-          />
-          <label className="flex items-center gap-1 text-[10px] text-text-muted cursor-pointer ml-1 mr-1">
-            <input
-              type="checkbox"
-              checked={newProjectPublic}
-              onChange={(e) => setNewProjectPublic(e.target.checked)}
-              className="accent-accent"
-              title="Make public"
-            />
-            Public
-          </label>
-          <button
-            onClick={handleCreateProject}
-            className="px-2 py-1 text-xs bg-accent text-white rounded hover:bg-accent-hover"
-          >
-            Create
-          </button>
-          <button
-            onClick={() => setShowNewProject(false)}
-            className="px-2 py-1 text-xs text-text-muted hover:text-text"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowNewProject(true)}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-surface-hover rounded"
-        >
-          <Plus size={12} />
-          New
-        </button>
+      {/* Dashboard link + breadcrumb */}
+      <Link
+        to="/"
+        className="text-sm font-semibold text-text hover:text-accent transition-colors"
+      >
+        OGI
+      </Link>
+      {currentProject && (
+        <>
+          <ChevronRight size={12} className="text-text-muted" />
+          <span className="text-sm text-text truncate max-w-48">
+            {currentProject.name}
+          </span>
+        </>
       )}
 
       <div className="flex-1" />
