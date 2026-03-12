@@ -430,6 +430,11 @@ interface GraphState {
   setAnalysisResults: (results: AnalysisResults | null) => void;
   clearGraph: () => void;
   persistPositions: (projectId: string) => void;
+  recordNodeMove: (
+    projectId: string,
+    positionsBefore: Record<string, { x: number; y: number }>,
+    positionsAfter: Record<string, { x: number; y: number }>,
+  ) => void;
   performUndo: (projectId: string) => Promise<void>;
   performRedo: (projectId: string) => Promise<void>;
 }
@@ -1250,6 +1255,33 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     savePositions(projectId, graph);
   },
 
+  recordNodeMove: (projectId, positionsBefore, positionsAfter) => {
+    const nodeIds = Object.keys(positionsAfter);
+    if (nodeIds.length === 0) return;
+
+    const changedNodeIds = nodeIds.filter((nodeId) => {
+      const before = positionsBefore[nodeId];
+      const after = positionsAfter[nodeId];
+      return before && after && (before.x !== after.x || before.y !== after.y);
+    });
+
+    if (changedNodeIds.length === 0) return;
+
+    const beforeFiltered = Object.fromEntries(
+      changedNodeIds.map((nodeId) => [nodeId, positionsBefore[nodeId]]),
+    );
+    const afterFiltered = Object.fromEntries(
+      changedNodeIds.map((nodeId) => [nodeId, positionsAfter[nodeId]]),
+    );
+
+    useUndoStore.getState().push({
+      type: "move_nodes",
+      positionsBefore: beforeFiltered,
+      positionsAfter: afterFiltered,
+    });
+    savePositions(projectId, get().graph);
+  },
+
   performUndo: async (projectId) => {
     const action = useUndoStore.getState().undo();
     if (!action) return;
@@ -1339,6 +1371,16 @@ async function applyReverse(
       }
       break;
     }
+    case "move_nodes": {
+      for (const [nodeId, position] of Object.entries(action.positionsBefore)) {
+        if (!graph.hasNode(nodeId)) continue;
+        graph.setNodeAttribute(nodeId, "x", position.x);
+        graph.setNodeAttribute(nodeId, "y", position.y);
+      }
+      savePositions(projectId, graph);
+      set({ graph });
+      break;
+    }
     case "batch": {
       // Undo batch in reverse order
       for (let i = action.actions.length - 1; i >= 0; i--) {
@@ -1410,6 +1452,16 @@ async function applyForward(
       if (graph.hasEdge(action.edge.id)) graph.dropEdge(action.edge.id);
       edges.delete(action.edge.id);
       set({ graph, edges: new Map(edges) });
+      break;
+    }
+    case "move_nodes": {
+      for (const [nodeId, position] of Object.entries(action.positionsAfter)) {
+        if (!graph.hasNode(nodeId)) continue;
+        graph.setNodeAttribute(nodeId, "x", position.x);
+        graph.setNodeAttribute(nodeId, "y", position.y);
+      }
+      savePositions(projectId, graph);
+      set({ graph });
       break;
     }
     case "batch": {

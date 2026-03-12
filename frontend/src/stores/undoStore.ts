@@ -8,6 +8,11 @@ type UndoAction =
   | { type: "remove_entity"; entity: Entity; nodeAttrs: Record<string, unknown>; edges: Edge[]; edgeAttrs: Record<string, Record<string, unknown>> }
   | { type: "add_edge"; edge: Edge; edgeAttrs: Record<string, unknown> }
   | { type: "remove_edge"; edge: Edge; edgeAttrs: Record<string, unknown> }
+  | {
+      type: "move_nodes";
+      positionsBefore: Record<string, { x: number; y: number }>;
+      positionsAfter: Record<string, { x: number; y: number }>;
+    }
   | { type: "batch"; actions: UndoAction[] };
 
 const MAX_HISTORY = 50;
