@@ -9,11 +9,13 @@ import { Toolbar } from "./Toolbar";
 import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 type BottomTab = "transforms" | "analysis";
 
 export function Layout() {
   useKeyboardShortcuts();
+  const isViewer = useIsViewer();
   const [bottomTab, setBottomTab] = useState<BottomTab>("transforms");
 
   return (
@@ -21,13 +23,17 @@ export function Layout() {
       <Toolbar />
       <Group orientation="horizontal" className="flex-1">
         {/* Left sidebar: Entity Palette */}
-        <Panel defaultSize={10} minSize={2}>
-          <div className="h-full bg-surface border-r border-border overflow-hidden">
-            <EntityPalette />
-          </div>
-        </Panel>
+        {!isViewer && (
+          <>
+            <Panel defaultSize={10} minSize={2}>
+              <div className="h-full bg-surface border-r border-border overflow-hidden">
+                <EntityPalette />
+              </div>
+            </Panel>
 
-        <Separator className="w-1 bg-border hover:bg-accent transition-colors cursor-col-resize" />
+            <Separator className="w-1 bg-border hover:bg-accent transition-colors cursor-col-resize" />
+          </>
+        )}
 
         {/* Center: Graph + Bottom panel */}
         <Panel defaultSize={80} minSize={30}>
@@ -39,38 +45,42 @@ export function Layout() {
               </div>
             </Panel>
 
-            <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
+            {!isViewer && (
+              <>
+                <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
 
-            <Panel defaultSize={30} minSize={15}>
-              <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
-                {/* Bottom panel tabs */}
-                <div className="flex border-b border-border">
-                  <button
-                    onClick={() => setBottomTab("transforms")}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      bottomTab === "transforms"
-                        ? "text-text border-b-2 border-accent"
-                        : "text-text-muted hover:text-text"
-                    }`}
-                  >
-                    Transforms
-                  </button>
-                  <button
-                    onClick={() => setBottomTab("analysis")}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      bottomTab === "analysis"
-                        ? "text-text border-b-2 border-accent"
-                        : "text-text-muted hover:text-text"
-                    }`}
-                  >
-                    Analysis
-                  </button>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  {bottomTab === "transforms" ? <TransformPanel /> : <AnalysisPanel />}
-                </div>
-              </div>
-            </Panel>
+                <Panel defaultSize={30} minSize={15}>
+                  <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
+                    {/* Bottom panel tabs */}
+                    <div className="flex border-b border-border">
+                      <button
+                        onClick={() => setBottomTab("transforms")}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          bottomTab === "transforms"
+                            ? "text-text border-b-2 border-accent"
+                            : "text-text-muted hover:text-text"
+                        }`}
+                      >
+                        Transforms
+                      </button>
+                      <button
+                        onClick={() => setBottomTab("analysis")}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          bottomTab === "analysis"
+                            ? "text-text border-b-2 border-accent"
+                            : "text-text-muted hover:text-text"
+                        }`}
+                      >
+                        Analysis
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      {bottomTab === "transforms" ? <TransformPanel /> : <AnalysisPanel />}
+                    </div>
+                  </div>
+                </Panel>
+              </>
+            )}
           </Group>
         </Panel>
 
