@@ -236,10 +236,12 @@ function ProjectSection({ title, projects, onOpen, onDelete, showDelete }: Proje
                 <span className="text-sm font-medium text-text truncate">{p.name}</span>
               </div>
               <div className="flex items-center gap-1">
-                {p.is_public ? (
-                  <Unlock size={12} className="text-green-400" />
-                ) : (
-                  <Lock size={12} className="text-text-muted" />
+                {title !== "Bookmarked" && (
+                  p.is_public ? (
+                    <Unlock size={12} className="text-green-400" />
+                  ) : (
+                    <Lock size={12} className="text-text-muted" />
+                  )
                 )}
                 {showDelete && onDelete && (
                   <button
