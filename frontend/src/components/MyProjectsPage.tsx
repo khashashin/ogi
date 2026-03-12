@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
-import { Loader2, Plus, Trash2, Lock, Unlock, User, FolderOpen } from "lucide-react";
+import { Loader2, Plus, Trash2, Lock, Unlock, User, FolderOpen, LogOut } from "lucide-react";
 import { api } from "../api/client";
 import type { MyProjectItem } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
@@ -62,6 +62,25 @@ export function MyProjectsPage() {
     try {
       await deleteProject(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleUnbookmark = async (id: string) => {
+    try {
+      await api.projects.unbookmark(id);
+      setProjects((prev) => prev.filter((p) => !(p.id === id && p.source === "bookmarked")));
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleLeave = async (id: string) => {
+    if (!user) return;
+    try {
+      await api.members.remove(id, user.id);
+      setProjects((prev) => prev.filter((p) => !(p.id === id && p.source === "member")));
     } catch (err) {
       setError(String(err));
     }
@@ -187,11 +206,15 @@ export function MyProjectsPage() {
               title="Shared with me"
               projects={shared}
               onOpen={(id) => navigate(`/projects/${id}`)}
+              onDelete={handleLeave}
+              showDelete
             />
             <ProjectSection
               title="Bookmarked"
               projects={bookmarked}
               onOpen={(id) => navigate(`/projects/${id}`)}
+              onDelete={handleUnbookmark}
+              showDelete
             />
           </>
         )}
@@ -250,9 +273,9 @@ function ProjectSection({ title, projects, onOpen, onDelete, showDelete }: Proje
                       onDelete(p.id);
                     }}
                     className="p-1 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete project"
+                    title={title === "Bookmarked" ? "Remove bookmark" : title === "Shared with me" ? "Leave project" : "Delete project"}
                   >
-                    <Trash2 size={12} />
+                    {title === "Shared with me" ? <LogOut size={12} /> : <Trash2 size={12} />}
                   </button>
                 )}
               </div>
