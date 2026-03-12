@@ -8,6 +8,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { PluginManager } from "./PluginManager";
+import { Seo } from "./Seo";
 
 export function MyProjectsPage() {
   const navigate = useNavigate();
@@ -96,10 +97,16 @@ export function MyProjectsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg">
+    <>
+      <Seo
+        title="My Projects | OpenGraph Intel"
+        description="Access your OpenGraph Intel investigations, manage shared projects, and launch graph-based analysis workspaces."
+        path="/projects"
+      />
+      <div className="min-h-screen bg-bg">
       {/* Top bar */}
       <header className="flex items-center h-12 px-4 bg-surface border-b border-border">
-        <span className="text-sm font-semibold text-text mr-6">OpenGraph Intel</span>
+        <Link to="/" className="text-sm font-semibold text-text mr-6">OpenGraph Intel</Link>
         <nav className="flex items-center gap-4">
           <span className="text-sm text-accent font-medium">My Projects</span>
           <Link to="/discover" className="text-sm text-text-muted hover:text-text">
@@ -244,7 +251,8 @@ export function MyProjectsPage() {
         open={showPlugins}
         onClose={() => setShowPlugins(false)}
       />
-    </div>
+      </div>
+    </>
   );
 }
 
