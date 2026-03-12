@@ -30,7 +30,7 @@ function renderWithRouter(initialPath: string) {
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<div>HOME</div>} />
+            <Route path="/projects" element={<div>PROJECTS</div>} />
           </Route>
           <Route path="/login" element={<div>LOGIN</div>} />
           <Route path="/reset-password" element={<div>RESET</div>} />
@@ -63,14 +63,14 @@ describe("ProtectedRoute", () => {
 
   it("passes through when auth is disabled (local mode)", () => {
     authState.authEnabled = false;
-    const { container, unmount } = renderWithRouter("/");
-    expect(container.textContent).toContain("HOME");
+    const { container, unmount } = renderWithRouter("/projects");
+    expect(container.textContent).toContain("PROJECTS");
     expect(authState.initialize).toHaveBeenCalledTimes(1);
     unmount();
   });
 
   it("redirects to login when auth enabled and user is missing", async () => {
-    const { container, unmount } = renderWithRouter("/");
+    const { container, unmount } = renderWithRouter("/projects");
     await act(async () => {});
     expect(container.textContent).toContain("LOGIN");
     unmount();
@@ -79,7 +79,7 @@ describe("ProtectedRoute", () => {
   it("redirects to reset-password in recovery mode", async () => {
     authState.user = { id: "u1" };
     authState.isRecovery = true;
-    const { container, unmount } = renderWithRouter("/");
+    const { container, unmount } = renderWithRouter("/projects");
     await act(async () => {});
     expect(container.textContent).toContain("RESET");
     unmount();
