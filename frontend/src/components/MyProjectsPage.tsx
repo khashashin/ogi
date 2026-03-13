@@ -5,6 +5,9 @@ import { api } from "../api/client";
 import type { MyProjectItem } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectStore } from "../stores/projectStore";
+import { ProfileDialog } from "./ProfileDialog";
+import { ApiKeySettings } from "./ApiKeySettings";
+import { PluginManager } from "./PluginManager";
 
 export function MyProjectsPage() {
   const navigate = useNavigate();
@@ -19,6 +22,10 @@ export function MyProjectsPage() {
   const [newDesc, setNewDesc] = useState("");
   const [newPublic, setNewPublic] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const [showProfile, setShowProfile] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
 
   const fetchMyProjects = async () => {
     setLoading(true);
@@ -101,14 +108,15 @@ export function MyProjectsPage() {
         </nav>
         <div className="flex-1" />
         {authEnabled && user ? (
-          <div
-            className="flex items-center justify-center w-7 h-7 rounded-full bg-accent text-white text-[10px] font-semibold"
-            title={user.email ?? "Profile"}
+          <button
+            onClick={() => setShowProfile(true)}
+            className="flex items-center justify-center w-7 h-7 rounded-full bg-accent text-white text-[10px] font-semibold hover:opacity-80"
+            title={user.email ?? "Profile & Settings"}
           >
             {((user.user_metadata?.display_name as string) ?? user.email ?? "")
               .slice(0, 2)
               .toUpperCase() || <User size={12} />}
-          </div>
+          </button>
         ) : (
           <Link to="/login" className="text-sm text-accent hover:underline">
             Sign In
@@ -221,6 +229,21 @@ export function MyProjectsPage() {
           </>
         )}
       </div>
+
+      <ProfileDialog
+        open={showProfile}
+        onClose={() => setShowProfile(false)}
+        onOpenApiKeys={() => setShowApiKeys(true)}
+        onOpenPlugins={() => setShowPlugins(true)}
+      />
+      <ApiKeySettings
+        open={showApiKeys}
+        onClose={() => setShowApiKeys(false)}
+      />
+      <PluginManager
+        open={showPlugins}
+        onClose={() => setShowPlugins(false)}
+      />
     </div>
   );
 }
