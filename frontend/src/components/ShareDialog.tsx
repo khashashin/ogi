@@ -67,6 +67,7 @@ export function ShareDialog({ open, onClose, projectId }: ShareDialogProps) {
   };
 
   const handleRemove = async (userId: string) => {
+    if (!window.confirm("Are you sure you want to remove this member from the project?")) return;
     try {
       await api.members.remove(projectId, userId);
       await loadMembers();

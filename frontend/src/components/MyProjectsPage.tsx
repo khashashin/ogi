@@ -59,6 +59,7 @@ export function MyProjectsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) return;
     try {
       await deleteProject(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
@@ -78,6 +79,7 @@ export function MyProjectsPage() {
 
   const handleLeave = async (id: string) => {
     if (!user) return;
+    if (!window.confirm("Are you sure you want to leave this project?")) return;
     try {
       await api.members.remove(id, user.id);
       setProjects((prev) => prev.filter((p) => !(p.id === id && p.source === "member")));
