@@ -36,11 +36,28 @@ async def toggle_plugin(
     name: str,
     current_user: UserProfile = Depends(get_current_user),
 ) -> PluginInfo:
-    engine = get_plugin_engine()
-    plugin = engine.get_plugin(name)
+    plugin_engine = get_plugin_engine()
+    transform_engine = get_transform_engine()
+    plugin = plugin_engine.get_plugin(name)
     if plugin is None:
         raise HTTPException(status_code=404, detail="Plugin not found")
-    plugin.enabled = not plugin.enabled
+    
+    if plugin.enabled:
+        plugin.enabled = False
+        old_names = plugin_engine._plugin_transforms.get(name, [])
+        for t_name in old_names:
+            transform_engine._transforms.pop(t_name, None)
+    else:
+        plugin.enabled = True
+        transforms = plugin_engine.load_transforms(name)
+        new_names: list[str] = []
+        for t in transforms:
+            transform_engine.register(t)
+            new_names.append(t.name)
+        plugin.transform_count = len(transforms)
+        plugin.transform_names = new_names
+        plugin_engine._plugin_transforms[name] = new_names
+        
     return plugin
 
 
