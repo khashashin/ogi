@@ -53,6 +53,12 @@ export type NodeOverlay =
   | AnalysisScoresOverlay
   | AnalysisCommunitiesOverlay;
 
+export interface AnalysisResults {
+  type: "scores" | "communities";
+  scores?: Record<string, number>;
+  communities?: string[][];
+}
+
 interface GraphState {
   graph: Graph;
   selectedNodeId: string | null;
@@ -62,6 +68,7 @@ interface GraphState {
   loading: boolean;
   error: string | null;
   nodeOverlay: NodeOverlay | null;
+  analysisResults: AnalysisResults | null;
 
   loadGraph: (projectId: string) => Promise<void>;
   addEntity: (projectId: string, entity: Entity) => void;
@@ -71,6 +78,7 @@ interface GraphState {
   selectNode: (nodeId: string | null) => void;
   selectEdge: (edgeId: string | null) => void;
   setNodeOverlay: (overlay: NodeOverlay | null) => void;
+  setAnalysisResults: (results: AnalysisResults | null) => void;
   clearGraph: () => void;
   persistPositions: (projectId: string) => void;
   performUndo: (projectId: string) => Promise<void>;
@@ -90,6 +98,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   loading: false,
   error: null,
   nodeOverlay: null,
+  analysisResults: null,
 
   loadGraph: async (projectId) => {
     set({ loading: true, error: null });
@@ -126,7 +135,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
 
-      set({ graph, entities, edges, loading: false, selectedNodeId: null, selectedEdgeId: null, nodeOverlay: null });
+      set({ graph, entities, edges, loading: false, selectedNodeId: null, selectedEdgeId: null, nodeOverlay: null, analysisResults: null });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
@@ -229,6 +238,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null }),
   selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null }),
   setNodeOverlay: (overlay) => set({ nodeOverlay: overlay }),
+  setAnalysisResults: (results) => set({ analysisResults: results }),
 
   clearGraph: () => {
     useUndoStore.getState().clear();
@@ -239,6 +249,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       entities: new Map(),
       edges: new Map(),
       nodeOverlay: null,
+      analysisResults: null,
     });
   },
 
