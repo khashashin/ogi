@@ -141,6 +141,19 @@ class Settings(BaseSettings):
     rq_queue_name: str = "transforms"
     auto_run_migrations: bool = True
 
+    # AI Investigator / Agent
+    agent_enabled: bool = False
+    agent_default_max_steps: int = 50
+    agent_max_max_steps: int = 200
+    agent_default_max_transforms: int = 20
+    agent_max_max_transforms: int = 100
+    agent_default_max_runtime_sec: int = 600
+    agent_max_max_runtime_sec: int = 3600
+    llm_provider: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_retry_max_attempts: int = 3
+
     # Cloud sandbox
     sandbox_enabled: bool = False  # auto-enabled in cloud mode
     sandbox_timeout: int = 30

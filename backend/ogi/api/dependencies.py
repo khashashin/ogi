@@ -28,6 +28,7 @@ from ogi.store.project_event_store import ProjectEventStore
 from ogi.store.timeline_store import TimelineStore
 from ogi.store.map_store import MapStore
 from ogi.store.location_search_store import LocationSearchStore
+from ogi.agent.store import AgentRunStore, AgentStepStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -152,6 +153,18 @@ async def get_location_search_store(
     session: AsyncSession = Depends(get_session),
 ) -> LocationSearchStore:
     return LocationSearchStore(session)
+
+
+async def get_agent_run_store(
+    session: AsyncSession = Depends(get_session),
+) -> AgentRunStore:
+    return AgentRunStore(session)
+
+
+async def get_agent_step_store(
+    session: AsyncSession = Depends(get_session),
+) -> AgentStepStore:
+    return AgentStepStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:
