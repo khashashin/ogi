@@ -106,4 +106,5 @@ jobs:
             Merge this PR into `main`, then run **Cut Release** with version `${{ github.event.inputs.version }}`.
           labels: |
             release
+            skip-release-notes
           delete-branch: true
