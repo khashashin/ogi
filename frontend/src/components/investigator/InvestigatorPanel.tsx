@@ -37,7 +37,7 @@ export function InvestigatorPanel() {
       return;
     }
     void loadActiveRun(currentProject.id);
-  }, [currentProject?.id, loadActiveRun, reset]);
+  }, [currentProject, loadActiveRun, reset]);
 
   useEffect(() => {
     if (error) {

@@ -26,17 +26,17 @@ jobs:
           fi
 
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Update version files
         env:
@@ -86,7 +86,7 @@ jobs:
           uv lock
 
       - name: Create release PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.RELEASE_PAT }}
           branch: release/v${{ github.event.inputs.version }}
@@ -106,4 +106,5 @@ jobs:
             Merge this PR into `main`, then run **Cut Release** with version `${{ github.event.inputs.version }}`.
           labels: |
             release
+            skip-release-notes
           delete-branch: true
