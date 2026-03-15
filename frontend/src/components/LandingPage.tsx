@@ -1,16 +1,50 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowRight, Blocks, Github, Globe, Network, Search, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
+import { api } from "../api/client";
+import type { TransformInfo } from "../types/transform";
 import { Seo } from "./Seo";
 
 const KEYWORDS =
   "OSINT platform, link analysis, graph intelligence, open source intelligence, visual investigation, entity relationships, cybersecurity analysis";
 
+const FEATURED_TRANSFORM_NAMES = [
+  "username_search",
+  "username_maigret",
+  "domain_to_ip",
+  "url_to_headers",
+  "email_to_domain",
+];
+
 export function LandingPage() {
   const { user, authEnabled } = useAuthStore();
   const primaryHref = "/projects";
   const primaryLabel = authEnabled && user ? "Open Workspace" : "Start Investigating";
+  const [transforms, setTransforms] = useState<TransformInfo[]>([]);
+
+  useEffect(() => {
+    let isActive = true;
+    api.transforms
+      .list()
+      .then((items) => {
+        if (!isActive) return;
+        setTransforms(items);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setTransforms([]);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const featuredTransforms = useMemo(() => {
+    const byName = new Map(transforms.map((transform) => [transform.name, transform]));
+    return FEATURED_TRANSFORM_NAMES.map((name) => byName.get(name)).filter(Boolean) as TransformInfo[];
+  }, [transforms]);
 
   return (
     <>
@@ -45,6 +79,12 @@ export function LandingPage() {
                   className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-text-muted hover:text-text"
                 >
                   Discover
+                </Link>
+                <Link
+                  to="/transforms"
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-text-muted hover:text-text"
+                >
+                  Transformers
                 </Link>
                 <a
                   href="https://github.com/khashashin/ogi"
@@ -97,6 +137,12 @@ export function LandingPage() {
                     className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-5 py-3 text-sm font-medium text-text hover:border-accent/50"
                   >
                     Browse Public Projects
+                  </Link>
+                  <Link
+                    to="/transforms"
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-5 py-3 text-sm font-medium text-text hover:border-accent/50"
+                  >
+                    Browse Transformers
                   </Link>
                   <a
                     href="https://github.com/khashashin/ogi"
@@ -199,6 +245,54 @@ export function LandingPage() {
               />
             </div>
           </section>
+
+          <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-accent">Transformers Collection</p>
+                <h2 className="mt-3 text-3xl font-semibold text-text sm:text-4xl">
+                  Start from proven pivots, then open the full catalog.
+                </h2>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-text-muted sm:text-base">
+                  These featured transformers show the range of OGI workflows, from account discovery and OSINT enrichment to infrastructure and header inspection.
+                </p>
+              </div>
+              <Link
+                to="/transforms"
+                className="inline-flex items-center gap-2 self-start rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-accent/50"
+              >
+                See all transformers
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {featuredTransforms.map((transform) => (
+                <TransformCollectionCard key={transform.name} transform={transform} />
+              ))}
+              {featuredTransforms.length < FEATURED_TRANSFORM_NAMES.length &&
+                FEATURED_TRANSFORM_NAMES.slice(featuredTransforms.length).map((name) => (
+                  <TransformCollectionSkeleton key={name} />
+                ))}
+              <Link
+                to="/transforms"
+                className="group flex min-h-[240px] flex-col justify-between rounded-[28px] border border-dashed border-accent/40 bg-gradient-to-br from-accent/12 via-white/[0.02] to-emerald-400/10 p-6 transition hover:border-accent/70"
+              >
+                <div>
+                  <div className="inline-flex rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent">
+                    <Blocks size={18} />
+                  </div>
+                  <h3 className="mt-5 text-xl font-medium text-text">See all transformers</h3>
+                  <p className="mt-3 text-sm leading-6 text-text-muted">
+                    Search the full catalog, inspect settings, and browse every available transform by category, input type, and output profile.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-text">
+                  Open transformer catalog
+                  <ArrowRight size={16} className="transition group-hover:translate-x-1" />
+                </span>
+              </Link>
+            </div>
+          </section>
         </main>
 
         <footer className="border-t border-white/8">
@@ -210,6 +304,7 @@ export function LandingPage() {
               <Link to="/terms" className="hover:text-text">Terms</Link>
               <Link to="/privacy" className="hover:text-text">Privacy</Link>
               <Link to="/discover" className="hover:text-text">Discover</Link>
+              <Link to="/transforms" className="hover:text-text">Transformers</Link>
               <a href="https://github.com/khashashin/ogi" target="_blank" rel="noreferrer" className="hover:text-text">GitHub</a>
               <a href="https://github.com/opengraphintel/ogi-transforms" target="_blank" rel="noreferrer" className="hover:text-text">Transform Hub</a>
             </div>
@@ -232,6 +327,49 @@ export function LandingPage() {
         }}
       />
     </>
+  );
+}
+
+function TransformCollectionCard({ transform }: { transform: TransformInfo }) {
+  return (
+    <article className="flex min-h-[240px] flex-col justify-between rounded-[28px] border border-white/8 bg-surface/80 p-6">
+      <div>
+        <div className="inline-flex rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent">
+          <Search size={18} />
+        </div>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-text-muted">
+            {transform.category}
+          </span>
+          {transform.plugin_name && (
+            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-text-muted">
+              {transform.plugin_name}
+            </span>
+          )}
+        </div>
+        <h3 className="mt-4 text-xl font-medium text-text">{transform.display_name}</h3>
+        <p className="mt-3 text-sm leading-6 text-text-muted">{transform.description}</p>
+      </div>
+      <div className="mt-6 space-y-2 text-xs uppercase tracking-[0.14em] text-text-muted">
+        <p>Input: {transform.input_types.join(", ") || "Unspecified"}</p>
+        <p>Output: {transform.output_types.join(", ") || "Unspecified"}</p>
+      </div>
+    </article>
+  );
+}
+
+function TransformCollectionSkeleton() {
+  return (
+    <div className="min-h-[240px] rounded-[28px] border border-white/8 bg-surface/40 p-6">
+      <div className="h-10 w-10 rounded-2xl border border-white/10 bg-white/[0.03]" />
+      <div className="mt-6 h-4 w-20 rounded-full bg-white/[0.05]" />
+      <div className="mt-5 h-6 w-40 rounded-full bg-white/[0.05]" />
+      <div className="mt-4 space-y-2">
+        <div className="h-3 w-full rounded-full bg-white/[0.05]" />
+        <div className="h-3 w-[85%] rounded-full bg-white/[0.05]" />
+        <div className="h-3 w-[72%] rounded-full bg-white/[0.05]" />
+      </div>
+    </div>
   );
 }
 
