@@ -166,7 +166,8 @@ export function Toolbar() {
   };
 
   return (
-    <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
+    <div className="h-10 overflow-x-auto border-b border-border bg-surface">
+      <div className="flex min-w-max items-center gap-2 px-3">
       {/* Dashboard link + breadcrumb */}
       <Link
         to="/"
@@ -615,6 +616,7 @@ export function Toolbar() {
         open={showPlugins}
         onClose={() => setShowPlugins(false)}
       />
+      </div>
     </div>
   );
 }

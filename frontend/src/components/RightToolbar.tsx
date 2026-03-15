@@ -8,7 +8,11 @@ import { useProjectStore } from "../stores/projectStore";
 import { useAuthStore } from "../stores/authStore";
 import { useIsViewer } from "../hooks/useIsViewer";
 
-export function RightToolbar() {
+type RightToolbarProps = {
+  orientation?: "vertical" | "horizontal";
+};
+
+export function RightToolbar({ orientation = "vertical" }: RightToolbarProps) {
   const { currentProject, updateProject } = useProjectStore();
   const { user } = useAuthStore();
   const isViewer = useIsViewer();
@@ -32,7 +36,13 @@ export function RightToolbar() {
 
   return (
     <>
-      <div className="flex h-full w-10 flex-col items-center gap-1 bg-surface px-1 py-2">
+      <div
+        className={
+          orientation === "horizontal"
+            ? "flex w-full items-center justify-start gap-1 bg-surface px-2 py-2"
+            : "flex h-full w-10 flex-col items-center gap-1 bg-surface px-1 py-2"
+        }
+      >
         <button
           onClick={() => setShowExportImport(true)}
           className="p-2 text-text-muted hover:text-text hover:bg-surface-hover rounded"
