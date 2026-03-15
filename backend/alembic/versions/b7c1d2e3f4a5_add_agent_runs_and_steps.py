@@ -57,6 +57,7 @@ def upgrade() -> None:
         sa.Column("tool_output", json_type, nullable=True),
         sa.Column("llm_output", sa.Text(), nullable=True),
         sa.Column("token_usage", json_type, nullable=True),
+        sa.Column("approval_payload", json_type, nullable=True),
         sa.Column("status", sa.Text(), nullable=False),
         sa.Column("worker_id", sa.Text(), nullable=True),
         sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
@@ -67,6 +68,7 @@ def upgrade() -> None:
     op.create_index("ix_agent_steps_step_number", "agent_steps", ["step_number"], unique=False)
     op.create_index("ix_agent_steps_type", "agent_steps", ["type"], unique=False)
     op.create_index("ix_agent_steps_status", "agent_steps", ["status"], unique=False)
+    op.create_index("ix_agent_steps_status_created_at", "agent_steps", ["status", "created_at"], unique=False)
     op.create_index(
         "uq_agent_steps_run_id_step_number",
         "agent_steps",
@@ -95,6 +97,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS uq_agent_runs_active_per_project")
     op.drop_index("uq_agent_steps_run_id_step_number", table_name="agent_steps")
+    op.drop_index("ix_agent_steps_status_created_at", table_name="agent_steps")
     op.drop_index("ix_agent_steps_status", table_name="agent_steps")
     op.drop_index("ix_agent_steps_type", table_name="agent_steps")
     op.drop_index("ix_agent_steps_step_number", table_name="agent_steps")
