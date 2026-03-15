@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -19,7 +20,7 @@ class DomainToNS(BaseTransform):
         messages: list[str] = []
 
         try:
-            answers = dns.resolver.resolve(domain, "NS")
+            answers = await asyncio.to_thread(dns.resolver.resolve, domain, "NS")
             for rdata in answers:
                 ns_host = str(rdata.target).rstrip(".")
                 ns_entity = Entity(
