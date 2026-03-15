@@ -5,10 +5,13 @@ import { api } from "../api/client";
 interface ApiKeySettingsProps {
   open: boolean;
   onClose: () => void;
+  initialService?: string | null;
 }
 
 const KNOWN_SERVICES = [
   "openai",
+  "gemini",
+  "anthropic",
   "peeringdb",
   "openweather",
   "virustotal",
@@ -19,7 +22,7 @@ const KNOWN_SERVICES = [
   "abuseipdb",
 ] as const;
 
-export function ApiKeySettings({ open, onClose }: ApiKeySettingsProps) {
+export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeySettingsProps) {
   const [services, setServices] = useState<string[]>([]);
   const [newService, setNewService] = useState("");
   const [newKey, setNewKey] = useState("");
@@ -29,6 +32,11 @@ export function ApiKeySettings({ open, onClose }: ApiKeySettingsProps) {
   useEffect(() => {
     if (open) loadKeys();
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !initialService) return;
+    setNewService(initialService);
+  }, [initialService, open]);
 
   const loadKeys = async () => {
     setLoading(true);

@@ -28,6 +28,28 @@ from .eventing import (
     TimelineResponse,
     TemporalGeoConventions,
 )
+from ogi.agent.models import (
+    AgentEventMessage,
+    AgentRun,
+    AgentRunStatus,
+    AgentStep,
+    AgentStepStatus,
+    AgentStepType,
+    BudgetConfig,
+    ScopeConfig,
+    StartAgentRunRequest,
+    StepApprovalRequest,
+    UsageInfo,
+)
+from ogi.agent.settings_models import (
+    AgentModelCatalog,
+    AgentModelOption,
+    AgentSettingsRead,
+    AgentSettingsTestRequest,
+    AgentSettingsTestResult,
+    AgentSettingsUpdate,
+    AgentUserSettings,
+)
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -59,4 +81,22 @@ __all__ = [
     "TimelineBucket",
     "TimelineResponse",
     "TemporalGeoConventions",
+    "AgentEventMessage",
+    "AgentRun",
+    "AgentRunStatus",
+    "AgentStep",
+    "AgentStepStatus",
+    "AgentStepType",
+    "BudgetConfig",
+    "ScopeConfig",
+    "StartAgentRunRequest",
+    "StepApprovalRequest",
+    "UsageInfo",
+    "AgentModelCatalog",
+    "AgentModelOption",
+    "AgentSettingsRead",
+    "AgentSettingsTestRequest",
+    "AgentSettingsTestResult",
+    "AgentSettingsUpdate",
+    "AgentUserSettings",
 ]

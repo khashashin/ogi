@@ -1,3 +1,4 @@
+import asyncio
 import whois
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -19,7 +20,7 @@ class WhoisLookup(BaseTransform):
         messages: list[str] = []
 
         try:
-            w = whois.whois(domain)
+            w = await asyncio.to_thread(whois.whois, domain)
 
             # Registrar info
             if w.registrar:

@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -20,7 +21,7 @@ class DomainToIP(BaseTransform):
 
         for rdtype in ["A", "AAAA"]:
             try:
-                answers = dns.resolver.resolve(domain, rdtype)
+                answers = await asyncio.to_thread(dns.resolver.resolve, domain, rdtype)
                 for rdata in answers:
                     ip_str = str(rdata)
                     ip_entity = Entity(
