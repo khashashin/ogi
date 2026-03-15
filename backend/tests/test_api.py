@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
@@ -2183,7 +2184,6 @@ async def test_map_points_endpoint_returns_points_and_clusters(client: AsyncClie
 async def test_agent_run_start_list_and_get(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     from ogi.config import settings
 
-    monkeypatch.setattr(settings, "agent_enabled", True)
     monkeypatch.setattr(settings, "llm_provider", "test-provider")
     monkeypatch.setattr(settings, "llm_model", "test-model")
 
@@ -2197,14 +2197,16 @@ async def test_agent_run_start_list_and_get(client: AsyncClient, monkeypatch: py
             "prompt": "Investigate this project",
             "scope": {"mode": "all", "entity_ids": []},
             "budget": {"max_steps": 12, "max_transforms": 4, "max_runtime_sec": 180},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
         },
     )
     assert resp.status_code == 201
     run = resp.json()
     assert run["project_id"] == project_id
     assert run["status"] == "pending"
-    assert run["provider"] == "test-provider"
-    assert run["model"] == "test-model"
+    assert run["provider"] == "openai"
+    assert run["model"] == "gpt-4.1-mini"
     run_id = run["id"]
 
     resp = await client.get(f"/api/v1/projects/{project_id}/agent/runs")
@@ -2221,8 +2223,6 @@ async def test_agent_run_start_list_and_get(client: AsyncClient, monkeypatch: py
 async def test_agent_start_rejects_duplicate_active_run(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     from ogi.config import settings
 
-    monkeypatch.setattr(settings, "agent_enabled", True)
-
     resp = await client.post("/api/v1/projects", json={"name": "AgentDuplicate"})
     assert resp.status_code == 201
     project_id = resp.json()["id"]
@@ -2230,6 +2230,8 @@ async def test_agent_start_rejects_duplicate_active_run(client: AsyncClient, mon
     payload = {
         "prompt": "First run",
         "scope": {"mode": "all", "entity_ids": []},
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
     }
     first = await client.post(f"/api/v1/projects/{project_id}/agent/start", json=payload)
     assert first.status_code == 201
@@ -2245,15 +2247,18 @@ async def test_agent_start_rejects_duplicate_active_run(client: AsyncClient, mon
 async def test_agent_cancel_run(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     from ogi.config import settings
 
-    monkeypatch.setattr(settings, "agent_enabled", True)
-
     resp = await client.post("/api/v1/projects", json={"name": "AgentCancel"})
     assert resp.status_code == 201
     project_id = resp.json()["id"]
 
     start = await client.post(
         f"/api/v1/projects/{project_id}/agent/start",
-        json={"prompt": "Cancel me", "scope": {"mode": "all", "entity_ids": []}},
+        json={
+            "prompt": "Cancel me",
+            "scope": {"mode": "all", "entity_ids": []},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+        },
     )
     assert start.status_code == 201
     run_id = start.json()["id"]
@@ -2269,15 +2274,18 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
     from ogi.config import settings
     from ogi.db.database import async_session_maker
 
-    monkeypatch.setattr(settings, "agent_enabled", True)
-
     resp = await client.post("/api/v1/projects", json={"name": "AgentApproval"})
     assert resp.status_code == 201
     project_id = resp.json()["id"]
 
     start = await client.post(
         f"/api/v1/projects/{project_id}/agent/start",
-        json={"prompt": "Approval flow", "scope": {"mode": "all", "entity_ids": []}},
+        json={
+            "prompt": "Approval flow",
+            "scope": {"mode": "all", "entity_ids": []},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+        },
     )
     assert start.status_code == 201
     run_id = UUID(start.json()["id"])
@@ -2334,6 +2342,124 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
     )
     assert reject.status_code == 200
     assert reject.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_agent_settings_roundtrip_and_has_api_key(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+
+    save_key = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert save_key.status_code == 201
+
+    project = await client.post("/api/v1/projects", json={"name": "AgentSettingsProject"})
+    assert project.status_code == 201
+    project_id = project.json()["id"]
+
+    get_initial = await client.get(f"/api/v1/projects/{project_id}/agent/settings")
+    assert get_initial.status_code == 200
+    assert get_initial.json()["has_api_key"] is True
+
+    save_settings = await client.put(
+        f"/api/v1/projects/{project_id}/agent/settings",
+        json={"provider": "openai", "model": "gpt-4.1-mini"},
+    )
+    assert save_settings.status_code == 200
+    assert save_settings.json()["provider"] == "openai"
+    assert save_settings.json()["model"] == "gpt-4.1-mini"
+    assert save_settings.json()["has_api_key"] is True
+
+    get_saved = await client.get(f"/api/v1/projects/{project_id}/agent/settings")
+    assert get_saved.status_code == 200
+    assert get_saved.json()["provider"] == "openai"
+    assert get_saved.json()["model"] == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_agent_settings_models_endpoint_returns_provider_models(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    save_key = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert save_key.status_code == 201
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None):
+            assert url == "https://api.openai.com/v1/models"
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "gpt-4.1-mini"}, {"id": "gpt-4.1"}]},
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setattr("ogi.agent.llm_provider.httpx.AsyncClient", lambda *a, **k: _Client())
+
+    project = await client.post("/api/v1/projects", json={"name": "AgentModelCatalogProject"})
+    assert project.status_code == 201
+    project_id = project.json()["id"]
+
+    response = await client.get(f"/api/v1/projects/{project_id}/agent/settings/models?provider=openai")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"] == "openai"
+    assert payload["has_api_key"] is True
+    assert any(item["id"] == "gpt-4.1-mini" for item in payload["available_models"])
+
+
+@pytest.mark.asyncio
+async def test_agent_settings_test_endpoint_validates_model(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    save_key = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert save_key.status_code == 201
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None):
+            if url == "https://api.openai.com/v1/models":
+                return httpx.Response(
+                    200,
+                    json={"data": [{"id": "gpt-4.1-mini"}]},
+                    request=httpx.Request("GET", url),
+                )
+            if url == "https://api.openai.com/v1/models/gpt-4.1-mini":
+                return httpx.Response(200, json={"id": "gpt-4.1-mini"}, request=httpx.Request("GET", url))
+            return httpx.Response(404, json={"error": "not found"}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("ogi.agent.llm_provider.httpx.AsyncClient", lambda *a, **k: _Client())
+
+    project = await client.post("/api/v1/projects", json={"name": "AgentModelTestProject"})
+    assert project.status_code == 201
+    project_id = project.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/projects/{project_id}/agent/settings/test",
+        json={"provider": "openai", "model": "gpt-4.1-mini"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["model_found"] is True
 
 
 @pytest.mark.asyncio
