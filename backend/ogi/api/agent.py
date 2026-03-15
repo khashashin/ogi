@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ogi.agent.models import (
-    AgentEventMessage,
     AgentRun,
     AgentRunStatus,
     AgentStep,
@@ -17,6 +16,7 @@ from ogi.agent.models import (
     StepApprovalRequest,
     UsageInfo,
 )
+from ogi.agent.orchestrator import build_agent_event, publish_agent_event
 from ogi.agent.store import AgentRunStore, AgentStepStore
 from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
 from ogi.api.dependencies import get_agent_run_store, get_agent_step_store, get_audit_log_store, get_redis
@@ -37,17 +37,6 @@ def _default_budget(payload: BudgetConfig | None) -> dict[str, int]:
         "max_transforms": min(max_transforms, settings.agent_max_max_transforms),
         "max_runtime_sec": min(max_runtime_sec, settings.agent_max_max_runtime_sec),
     }
-
-
-def _publish_event(message: AgentEventMessage) -> None:
-    redis_conn = get_redis()
-    if redis_conn is None:
-        return
-    redis_conn.publish(
-        f"ogi:transform_events:{message.project_id}",
-        message.model_dump_json(),
-    )
-
 
 async def _load_run_or_404(project_id: UUID, run_id: UUID, store: AgentRunStore) -> AgentRun:
     run = await store.get(run_id)
@@ -110,14 +99,12 @@ async def start_agent_run(
             },
         ),
     )
-    _publish_event(
-        AgentEventMessage(
-            type="agent_run_started",
-            project_id=project_id,
-            run_id=created.id,
-            status=created.status.value,
-            timestamp=datetime.now(timezone.utc),
-        )
+    publish_agent_event(
+        get_redis(),
+        build_agent_event(
+            event_type="agent_run_started",
+            run=created,
+        ),
     )
     return created
 
@@ -192,14 +179,12 @@ async def cancel_agent_run(
             details={"run_id": str(updated.id)},
         ),
     )
-    _publish_event(
-        AgentEventMessage(
-            type="agent_run_cancelled",
-            project_id=project_id,
-            run_id=updated.id,
-            status=updated.status.value,
-            timestamp=datetime.now(timezone.utc),
-        )
+    publish_agent_event(
+        get_redis(),
+        build_agent_event(
+            event_type="agent_run_cancelled",
+            run=updated,
+        ),
     )
     return updated
 
@@ -221,6 +206,11 @@ async def approve_agent_step(
     if step.status != AgentStepStatus.WAITING_APPROVAL:
         raise HTTPException(status_code=400, detail=f"Step is not waiting for approval: {step.status.value}")
 
+    approval_payload = dict(step.approval_payload or {})
+    approval_payload["decision"] = "approved"
+    if _data.note:
+        approval_payload["note"] = _data.note
+    step.approval_payload = approval_payload
     step.status = AgentStepStatus.APPROVED
     step.completed_at = datetime.now(timezone.utc)
     updated = await step_store.save(step)
@@ -237,15 +227,13 @@ async def approve_agent_step(
             details={"run_id": str(run.id), "step_id": str(updated.id)},
         ),
     )
-    _publish_event(
-        AgentEventMessage(
-            type="agent_approval_resolved",
-            project_id=project_id,
-            run_id=run.id,
-            step_id=updated.id,
-            status=updated.status.value,
-            timestamp=datetime.now(timezone.utc),
-        )
+    publish_agent_event(
+        get_redis(),
+        build_agent_event(
+            event_type="agent_approval_resolved",
+            run=run,
+            step=updated,
+        ),
     )
     return updated
 
@@ -267,6 +255,11 @@ async def reject_agent_step(
     if step.status != AgentStepStatus.WAITING_APPROVAL:
         raise HTTPException(status_code=400, detail=f"Step is not waiting for approval: {step.status.value}")
 
+    approval_payload = dict(step.approval_payload or {})
+    approval_payload["decision"] = "rejected"
+    if _data.note:
+        approval_payload["note"] = _data.note
+    step.approval_payload = approval_payload
     step.status = AgentStepStatus.REJECTED
     step.completed_at = datetime.now(timezone.utc)
     updated = await step_store.save(step)
@@ -283,14 +276,12 @@ async def reject_agent_step(
             details={"run_id": str(run.id), "step_id": str(updated.id)},
         ),
     )
-    _publish_event(
-        AgentEventMessage(
-            type="agent_approval_resolved",
-            project_id=project_id,
-            run_id=run.id,
-            step_id=updated.id,
-            status=updated.status.value,
-            timestamp=datetime.now(timezone.utc),
-        )
+    publish_agent_event(
+        get_redis(),
+        build_agent_event(
+            event_type="agent_approval_resolved",
+            run=run,
+            step=updated,
+        ),
     )
     return updated

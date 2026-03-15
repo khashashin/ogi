@@ -149,6 +149,8 @@ class Settings(BaseSettings):
     agent_max_max_transforms: int = 100
     agent_default_max_runtime_sec: int = 600
     agent_max_max_runtime_sec: int = 3600
+    agent_claim_timeout_sec: int = 300
+    agent_worker_poll_interval_sec: float = 1.0
     llm_provider: str = ""
     llm_api_key: str = ""
     llm_model: str = ""

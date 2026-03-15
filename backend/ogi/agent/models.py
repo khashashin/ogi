@@ -119,6 +119,7 @@ class AgentStep(SQLModel, table=True):
     tool_output: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     llm_output: str | None = None
     token_usage: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    approval_payload: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: AgentStepStatus = Field(default=AgentStepStatus.PENDING, index=True)
     worker_id: str | None = None
     claimed_at: datetime | None = Field(
