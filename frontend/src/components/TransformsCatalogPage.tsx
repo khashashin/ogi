@@ -48,8 +48,6 @@ export function TransformsCatalogPage() {
 
   useEffect(() => {
     let isActive = true;
-    setLoading(true);
-    setError(null);
     api.transforms
       .list()
       .then((items) => {

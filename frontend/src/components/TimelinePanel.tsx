@@ -26,7 +26,7 @@ export function TimelinePanel() {
   const timerRef = useRef<number | null>(null);
 
   const projectId = currentProject?.id ?? null;
-  const buckets = timeline?.buckets ?? [];
+  const buckets = useMemo(() => timeline?.buckets ?? [], [timeline]);
   const maxCount = Math.max(1, ...buckets.map((b) => b.count));
 
   const selectedBucket: TimelineBucket | null = useMemo(() => {
