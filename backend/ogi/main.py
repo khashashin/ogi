@@ -7,11 +7,21 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from pathlib import Path
+
 from ogi.config import settings
 from ogi.db.database import init_db, close_db
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.transform_engine import TransformEngine
-from ogi.api.dependencies import init_transform_engine, init_entity_registry, init_plugin_engine
+from ogi.cli.registry import RegistryClient
+from ogi.cli.installer import TransformInstaller
+from ogi.api.dependencies import (
+    init_transform_engine,
+    init_entity_registry,
+    init_plugin_engine,
+    init_registry_client,
+    init_transform_installer,
+)
 from ogi.api.router import api_router
 
 # Configure logging so all errors are visible in the terminal
@@ -32,6 +42,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     plugin_engine = transform_engine.load_plugins(settings.plugin_dirs)
     init_transform_engine(transform_engine)
     init_plugin_engine(plugin_engine)
+
+    # Initialize registry client and installer
+    from datetime import timedelta
+    registry_client = RegistryClient(
+        repo=settings.registry_repo,
+        cache_ttl=timedelta(seconds=settings.registry_cache_ttl),
+    )
+    init_registry_client(registry_client)
+
+    plugins_dir = Path(settings.plugin_dirs[0]).resolve()
+    installer = TransformInstaller(
+        registry=registry_client,
+        plugins_dir=plugins_dir,
+        ogi_version=app.version,
+    )
+    init_transform_installer(installer)
 
     yield
 

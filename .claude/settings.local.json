@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(don't use python use uv always)"
+    ]
+  }
+}

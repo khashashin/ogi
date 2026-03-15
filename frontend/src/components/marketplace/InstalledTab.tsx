@@ -1,0 +1,111 @@
+import { RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
+import { VerificationBadge } from "./VerificationBadge";
+import type { PluginInfoV2, VerificationTier } from "../../types/registry";
+import { api } from "../../api/client";
+import { useState } from "react";
+
+interface InstalledTabProps {
+  plugins: PluginInfoV2[];
+  onRefresh: () => void;
+}
+
+export function InstalledTab({ plugins, onRefresh }: InstalledTabProps) {
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [reloading, setReloading] = useState<string | null>(null);
+
+  const handleToggle = async (name: string) => {
+    setToggling(name);
+    try {
+      await api.plugins.toggle(name);
+      onRefresh();
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const handleReload = async (name: string) => {
+    setReloading(name);
+    try {
+      await api.plugins.reload(name);
+      onRefresh();
+    } finally {
+      setReloading(null);
+    }
+  };
+
+  if (plugins.length === 0) {
+    return (
+      <p className="text-xs text-text-muted p-4">
+        No plugins installed. Browse the registry to discover and install transforms.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 p-1">
+      {plugins.map((plugin) => (
+        <div
+          key={plugin.name}
+          className="p-3 rounded bg-bg border border-border"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-text">
+                  {plugin.display_name || plugin.name}
+                </span>
+                {plugin.version && (
+                  <span className="text-[10px] text-text-muted bg-surface px-1.5 py-0.5 rounded">
+                    v{plugin.version}
+                  </span>
+                )}
+                <VerificationBadge tier={(plugin.verification_tier || "community") as VerificationTier} />
+                {plugin.source && plugin.source !== "local" && (
+                  <span className="text-[10px] text-text-muted bg-surface px-1.5 py-0.5 rounded">
+                    {plugin.source}
+                  </span>
+                )}
+              </div>
+              {plugin.description && (
+                <p className="text-xs text-text-muted mt-0.5">{plugin.description}</p>
+              )}
+              <div className="flex items-center gap-3 mt-1 text-[10px] text-text-muted">
+                {plugin.author && <span>by {plugin.author}</span>}
+                {plugin.category && <span className="capitalize">{plugin.category}</span>}
+                <span>
+                  {plugin.transform_count} transform{plugin.transform_count !== 1 ? "s" : ""}
+                  {plugin.transform_names.length > 0 && (
+                    <span>: {plugin.transform_names.join(", ")}</span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={() => handleReload(plugin.name)}
+                disabled={reloading === plugin.name}
+                className="p-1 text-text-muted hover:text-text disabled:opacity-50"
+                title="Reload plugin"
+              >
+                <RefreshCw size={14} className={reloading === plugin.name ? "animate-spin" : ""} />
+              </button>
+              <button
+                onClick={() => handleToggle(plugin.name)}
+                disabled={toggling === plugin.name}
+                className="p-1 text-text-muted hover:text-text disabled:opacity-50"
+                title={plugin.enabled ? "Disable" : "Enable"}
+              >
+                {plugin.enabled ? (
+                  <ToggleRight size={18} className="text-green-400" />
+                ) : (
+                  <ToggleLeft size={18} className="text-text-muted" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

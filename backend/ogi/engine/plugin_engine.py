@@ -52,19 +52,69 @@ class PluginEngine:
                 try:
                     with open(manifest) as f:
                         data = yaml.safe_load(f) or {}
-                    info = PluginInfo(
-                        name=data.get("name", child.name),
-                        version=data.get("version", ""),
-                        display_name=data.get("display_name", data.get("name", child.name)),
-                        description=data.get("description", ""),
-                        author=data.get("author", ""),
-                        enabled=data.get("enabled", True),
-                    )
+                    info = self._parse_manifest(data, child.name)
                     discovered.append(info)
                 except Exception as exc:
                     logger.warning("Failed to read plugin manifest %s: %s", manifest, exc)
 
         return discovered
+
+    @staticmethod
+    def _parse_manifest(data: dict[str, object], fallback_name: str) -> PluginInfo:
+        """Parse a plugin.yaml manifest, supporting both v1 and v2 schemas."""
+        schema_version = int(data.get("schema_version", 1))
+
+        # v1 fields (always parsed)
+        info = PluginInfo(
+            name=str(data.get("name", fallback_name)),
+            version=str(data.get("version", "")),
+            display_name=str(data.get("display_name", data.get("name", fallback_name))),
+            description=str(data.get("description", "")),
+            author=str(data.get("author", "")),
+            enabled=bool(data.get("enabled", True)),
+            schema_version=schema_version,
+        )
+
+        # v2 additions
+        if schema_version >= 2:
+            info.category = str(data.get("category", ""))
+            info.license = str(data.get("license", ""))
+            info.author_github = str(data.get("author_github", ""))
+            info.homepage = str(data.get("homepage", ""))
+            info.repository = str(data.get("repository", ""))
+            info.min_ogi_version = str(data.get("min_ogi_version", ""))
+            info.icon = str(data.get("icon", ""))
+            info.color = str(data.get("color", ""))
+
+            raw_tags = data.get("tags")
+            if isinstance(raw_tags, list):
+                info.tags = [str(t) for t in raw_tags]
+
+            raw_input = data.get("input_types")
+            if isinstance(raw_input, list):
+                info.input_types = [str(t) for t in raw_input]
+
+            raw_output = data.get("output_types")
+            if isinstance(raw_output, list):
+                info.output_types = [str(t) for t in raw_output]
+
+            raw_deps = data.get("python_dependencies")
+            if isinstance(raw_deps, list):
+                info.python_dependencies = [str(d) for d in raw_deps]
+
+            raw_api_keys = data.get("api_keys_required")
+            if isinstance(raw_api_keys, list):
+                info.api_keys_required = [
+                    {str(k): str(v) for k, v in entry.items()}
+                    for entry in raw_api_keys
+                    if isinstance(entry, dict)
+                ]
+
+            raw_perms = data.get("permissions")
+            if isinstance(raw_perms, dict):
+                info.permissions = {str(k): bool(v) for k, v in raw_perms.items()}
+
+        return info
 
     # ------------------------------------------------------------------
     # Transform loading

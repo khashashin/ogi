@@ -29,6 +29,21 @@ class Settings(BaseSettings):
     host: str = os.environ.get("OGI_HOST", "0.0.0.0")
     port: int = os.environ.get("OGI_PORT", 8000)
 
+    # Deployment mode
+    deployment_mode: str = "self-hosted"  # "cloud" | "self-hosted"
+
+    # Transform Hub / Registry
+    registry_repo: str = "opengraphintel/ogi-transforms"
+    registry_cache_ttl: int = 3600  # seconds
+    # TODO: Remove after official launch and the repository is public
+    github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
+
+    # Cloud sandbox
+    sandbox_enabled: bool = False  # auto-enabled in cloud mode
+    sandbox_timeout: int = 30
+    sandbox_memory_mb: int = 256
+    sandbox_allowed_tiers: list[str] = ["official", "verified"]
+
     @property
     def abs_database_path(self) -> Path:
         return Path(self.database_path).resolve()
