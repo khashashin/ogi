@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from pathlib import Path
 
 from alembic import command
@@ -32,6 +33,17 @@ def _alembic_config() -> Config:
     return cfg
 
 
+def _create_probe_engine():
+    return create_async_engine(
+        _normalized_async_db_url(),
+        connect_args={
+            "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
+            "prepared_statement_cache_size": 0,
+            "statement_cache_size": 0,
+        },
+    )
+
+
 async def _table_exists(conn, table_name: str) -> bool:
     query = text(
         """
@@ -46,7 +58,7 @@ async def _table_exists(conn, table_name: str) -> bool:
 
 
 async def _has_existing_app_schema() -> bool:
-    engine = create_async_engine(_normalized_async_db_url())
+    engine = _create_probe_engine()
     try:
         async with engine.connect() as conn:
             for table_name in CORE_TABLES:
@@ -58,7 +70,7 @@ async def _has_existing_app_schema() -> bool:
 
 
 async def _has_alembic_version_table() -> bool:
-    engine = create_async_engine(_normalized_async_db_url())
+    engine = _create_probe_engine()
     try:
         async with engine.connect() as conn:
             return await _table_exists(conn, "alembic_version")
