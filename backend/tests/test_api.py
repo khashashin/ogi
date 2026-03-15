@@ -2267,7 +2267,7 @@ async def test_agent_cancel_run(client: AsyncClient, monkeypatch: pytest.MonkeyP
 async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType
     from ogi.config import settings
-    from ogi.db.database import get_session
+    from ogi.db.database import async_session_maker
 
     monkeypatch.setattr(settings, "agent_enabled", True)
 
@@ -2282,7 +2282,8 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
     assert start.status_code == 201
     run_id = UUID(start.json()["id"])
 
-    async for session in get_session():
+    assert async_session_maker is not None
+    async with async_session_maker() as session:
         run = await session.get(AgentRun, run_id)
         assert run is not None
         run.status = AgentRunStatus.PAUSED
@@ -2300,7 +2301,6 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
         await session.commit()
         await session.refresh(step)
         step_id = step.id
-        break
 
     approve = await client.post(
         f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{step_id}/approve",
@@ -2309,7 +2309,7 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
     assert approve.status_code == 200
     assert approve.json()["status"] == "approved"
 
-    async for session in get_session():
+    async with async_session_maker() as session:
         run = await session.get(AgentRun, run_id)
         assert run is not None
         assert run.status == AgentRunStatus.PENDING
@@ -2327,7 +2327,6 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
         await session.commit()
         await session.refresh(step)
         step_id = step.id
-        break
 
     reject = await client.post(
         f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{step_id}/reject",
@@ -2335,6 +2334,35 @@ async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkey
     )
     assert reject.status_code == 200
     assert reject.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_entity_store_list_filters_and_search(client: AsyncClient):
+    from uuid import UUID
+
+    from ogi.db.database import async_session_maker
+    from ogi.models import EntityCreate, EntityType
+    from ogi.store.entity_store import EntityStore
+
+    resp = await client.post("/api/v1/projects", json={"name": "EntitySearchProject"})
+    assert resp.status_code == 201
+    project_id = UUID(resp.json()["id"])
+
+    assert async_session_maker is not None
+    async with async_session_maker() as session:
+        store = EntityStore(session)
+        await store.create(project_id, EntityCreate(type=EntityType.DOMAIN, value="alpha.example"))
+        await store.create(project_id, EntityCreate(type=EntityType.DOMAIN, value="beta.example"))
+        await store.create(project_id, EntityCreate(type=EntityType.IP_ADDRESS, value="1.2.3.4"))
+
+        domains = await store.list_by_project(project_id, type_filter=EntityType.DOMAIN, limit=10)
+        assert {entity.value for entity in domains} == {"alpha.example", "beta.example"}
+
+        search_hits = await store.search(project_id, "alpha", limit=10)
+        assert [entity.value for entity in search_hits] == ["alpha.example"]
+
+        type_filtered_hits = await store.search(project_id, "example", type_filter=EntityType.DOMAIN, limit=10)
+        assert {entity.value for entity in type_filtered_hits} == {"alpha.example", "beta.example"}
 
 
 @pytest.mark.asyncio
