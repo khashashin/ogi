@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Play, Loader2, Square, Settings } from "lucide-react";
 import { toast } from "sonner";
-import type { TransformInfo, TransformRun, TransformJobMessage } from "../types/transform";
+import type { TransformInfo } from "../types/transform";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useTransformJobStore } from "../stores/transformJobStore";
 import type { TransformJob } from "../stores/transformJobStore";
-import { useTransformWebSocket } from "../hooks/useTransformWebSocket";
 import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 import { TransformSettingsDialog } from "./TransformSettingsDialog";
@@ -20,61 +19,12 @@ function hasVisibleSettings(transform: TransformInfo): boolean {
 
 export function TransformPanel() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
-  const [lastRun, setLastRun] = useState<TransformRun | null>(null);
   const [settingsTransform, setSettingsTransform] = useState<TransformInfo | null>(null);
   const { selectedNodeId, entities } = useGraphStore();
   const { currentProject } = useProjectStore();
-  const { activeJobs, submitJob, handleMessage, recentCompleted } = useTransformJobStore();
+  const { activeJobs, submitJob, recentCompleted } = useTransformJobStore();
 
   const entity = selectedNodeId ? entities.get(selectedNodeId) : null;
-
-  // WebSocket message handler
-  const onWsMessage = useCallback((msg: TransformJobMessage) => {
-    handleMessage(msg);
-
-    if (msg.type === "job_completed" && msg.result) {
-      const { addEntity, addEdge } = useGraphStore.getState();
-      const projectId = msg.project_id;
-
-      for (const newEntity of msg.result.entities) {
-        addEntity(projectId, newEntity);
-      }
-      for (const newEdge of msg.result.edges) {
-        addEdge(projectId, newEdge);
-      }
-
-      const entityCount = msg.result.entities.length;
-      const edgeCount = msg.result.edges.length;
-      toast.success(`${msg.transform_name}: found ${entityCount} entities, ${edgeCount} connections`);
-
-      // Update lastRun for the results panel
-      const completedRun: TransformRun = {
-        id: msg.job_id,
-        project_id: msg.project_id,
-        transform_name: msg.transform_name,
-        input_entity_id: msg.input_entity_id,
-        status: "completed",
-        result: msg.result,
-        error: null,
-        started_at: msg.timestamp,
-        completed_at: msg.timestamp,
-      };
-      setLastRun(completedRun);
-    }
-
-    if (msg.type === "job_failed") {
-      toast.error(`${msg.transform_name}: ${msg.error ?? "Unknown error"}`);
-    }
-
-    if (msg.type === "job_cancelled") {
-      toast.info(`${msg.transform_name}: cancelled`);
-    }
-  }, [handleMessage]);
-
-  useTransformWebSocket({
-    projectId: currentProject?.id ?? null,
-    onMessage: onWsMessage,
-  });
 
   useEffect(() => {
     if (!entity) return;
@@ -124,7 +74,7 @@ export function TransformPanel() {
   );
 
   // Use the most recent completed run if we haven't set one via WS yet
-  const displayRun = lastRun ?? (recentCompleted.length > 0 ? recentCompleted[0] : null);
+  const displayRun = recentCompleted.length > 0 ? recentCompleted[0] : null;
 
   if (!entity) {
     return (
