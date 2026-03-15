@@ -48,6 +48,7 @@ export function Toolbar() {
     setHideIsolates,
     setHideLowDegree,
     clearDeclutterState,
+    removeEntities,
   } = useGraphStore();
   const submitJob = useTransformJobStore((s) => s.submitJob);
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
@@ -120,9 +121,7 @@ export function Toolbar() {
   const handleBulkDelete = async () => {
     if (!currentProject || selectedEntities.length === 0) return;
     if (!window.confirm(`Delete ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}?`)) return;
-    for (const entity of selectedEntities) {
-      await useGraphStore.getState().removeEntity(currentProject.id, entity.id);
-    }
+    await removeEntities(currentProject.id, selectedEntities.map((entity) => entity.id));
     toast.success(`Deleted ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`);
     setShowBulkActions(false);
   };

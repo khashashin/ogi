@@ -397,6 +397,7 @@ interface GraphState {
   loadGraphWindow: (projectId: string, fromTs?: string, toTs?: string) => Promise<void>;
   addEntity: (projectId: string, entity: Entity) => void;
   removeEntity: (projectId: string, entityId: string) => Promise<void>;
+  removeEntities: (projectId: string, entityIds: string[]) => Promise<void>;
   addEdge: (projectId: string, edge: Edge) => void;
   removeEdge: (projectId: string, edgeId: string) => Promise<void>;
   updateEdge: (projectId: string, edgeId: string, data: EdgeUpdate) => Promise<Edge | null>;
@@ -721,6 +722,96 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         ),
         new Set([...manualHiddenEdgeIds].filter((id) => edges.has(id))),
       ),
+      selectedNodeId: nextSelectedNodeId,
+      selectedNodeIds: nextSelectedNodeIds,
+    });
+  },
+
+  removeEntities: async (projectId, entityIds) => {
+    const uniqueIds = [...new Set(entityIds)].filter((entityId) => get().entities.has(entityId));
+    if (uniqueIds.length === 0) return;
+
+    const { graph, entities, edges, manualHiddenNodeIds, manualHiddenEdgeIds } = get();
+    const undoActions: Extract<UndoAction, { type: "remove_entity" }>[] = [];
+
+    for (const entityId of uniqueIds) {
+      const entity = entities.get(entityId);
+      if (!entity) continue;
+
+      const nodeAttrs = graph.hasNode(entityId) ? graph.getNodeAttributes(entityId) : {};
+      const connectedEdges: Edge[] = [];
+      const connectedEdgeAttrs: Record<string, Record<string, unknown>> = {};
+      if (graph.hasNode(entityId)) {
+        graph.forEachEdge(entityId, (edgeKey, attrs) => {
+          const edgeData = edges.get(edgeKey);
+          if (edgeData) {
+            connectedEdges.push(edgeData);
+            connectedEdgeAttrs[edgeKey] = { ...attrs };
+          }
+        });
+      }
+
+      undoActions.push({
+        type: "remove_entity",
+        entity,
+        nodeAttrs,
+        edges: connectedEdges,
+        edgeAttrs: connectedEdgeAttrs,
+      });
+    }
+
+    const response = await api.entities.bulkDelete(projectId, uniqueIds);
+    const deletedIds = new Set(response.deleted_entity_ids);
+    if (deletedIds.size === 0) return;
+
+    for (const entityId of deletedIds) {
+      if (graph.hasNode(entityId)) {
+        graph.dropNode(entityId);
+      }
+      entities.delete(entityId);
+    }
+
+    for (const [edgeId, edge] of edges.entries()) {
+      if (deletedIds.has(edge.source_id) || deletedIds.has(edge.target_id)) {
+        edges.delete(edgeId);
+      }
+    }
+
+    useUndoStore.getState().push({
+      type: "batch",
+      actions: undoActions.filter((action) => deletedIds.has(action.entity.id)),
+    });
+
+    const nextPinnedNodeIds = new Set([...get().pinnedNodeIds].filter((id) => !deletedIds.has(id)));
+    savePinnedGraphState(projectId, { entityIds: [...nextPinnedNodeIds] });
+    const nextManualHiddenNodeIds = new Set([...manualHiddenNodeIds].filter((id) => !deletedIds.has(id)));
+    const nextManualHiddenEdgeIds = new Set([...manualHiddenEdgeIds].filter((id) => edges.has(id)));
+    const nextSelectedNodeIds = new Set([...get().selectedNodeIds].filter((id) => !deletedIds.has(id)));
+    const currentSelectedNodeId = get().selectedNodeId;
+    const nextSelectedNodeId =
+      currentSelectedNodeId !== null && deletedIds.has(currentSelectedNodeId)
+        ? (nextSelectedNodeIds.values().next().value ?? null)
+        : currentSelectedNodeId;
+
+    const hiddenNodeIds = computeHiddenNodeIds(
+      graph,
+      entities,
+      get().filterState,
+      nextManualHiddenNodeIds,
+      nextSelectedNodeIds,
+      get().searchQuery,
+      get().declutterState,
+    );
+
+    set({
+      graph,
+      entities: new Map(entities),
+      edges: new Map(edges),
+      pinnedNodeIds: nextPinnedNodeIds,
+      manualHiddenNodeIds: nextManualHiddenNodeIds,
+      manualHiddenEdgeIds: nextManualHiddenEdgeIds,
+      hiddenNodeIds,
+      hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, nextManualHiddenEdgeIds),
       selectedNodeId: nextSelectedNodeId,
       selectedNodeIds: nextSelectedNodeIds,
     });
