@@ -27,8 +27,8 @@ services:
         ]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 12
+      start_period: 90s
 
   worker:
     image: ${OGI_WORKER_IMAGE:-ghcr.io/khashashin/ogi-backend}:${OGI_IMAGE_TAG:-latest}
@@ -94,8 +94,8 @@ services:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 12
+      start_period: 45s
 
 volumes:
   ogi_plugins:
