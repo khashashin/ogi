@@ -29,6 +29,7 @@
 - **Visual graph investigation** — drag-and-drop entities, explore connections interactively
 - **20+ built-in transforms** — DNS, WHOIS, SSL certs, geolocation, web/email/hash/social enrichment, and more
 - **Transform Hub** — browse and install community transforms from the [registry](https://github.com/opengraphintel/ogi-transforms)
+- **AI Investigator** — prompt-driven agentic investigations that plan transform runs, stream progress live, and summarize findings with auditability
 - **Import / Export** — JSON, CSV, GraphML, and MTGX format import
 - **Graph analysis** — centrality, community detection, shortest paths
 - **Real-time collaboration** — projects, sharing, and live sync via Supabase Realtime
@@ -91,6 +92,17 @@ pnpm dev
 ```
 
 Open http://localhost:5173. That's it.
+
+### AI Investigator
+
+AI Investigator is an optional provider-backed workflow that can plan transform sequences, request approvals, and summarize investigation progress inside the workspace.
+
+- Open the `AI Investigator` tab inside a project
+- Configure a provider and model in the investigator settings dialog
+- Store provider API keys in `API Keys`
+- Run the separate `agent-worker` process alongside the backend
+
+The current implementation supports per-user provider configuration and a dedicated worker that executes investigation steps independently from the main API server.
 
 ### CLI
 
@@ -259,6 +271,7 @@ permissions:
 | Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                        |
 | Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                  |
 | Job Queue        | Redis 7 + RQ (async transforms)                                          |
+| AI Runtime       | Provider-backed AI Investigator worker with audited transform orchestration |
 | Package Managers | uv (backend), pnpm (frontend)                                            |
 | Deployment       | Docker, nginx, GHCR                                                      |
 
@@ -325,6 +338,8 @@ List-style settings accept either:
 | `OGI_REDIS_URL`                                 | Redis connection string for RQ/jobs                                                                              | `redis://localhost:6379/0`                          |
 | `OGI_RQ_QUEUE_NAME`                             | Queue name for transform jobs                                                                                    | `transforms`                                        |
 | `OGI_TRANSFORM_TIMEOUT`                         | Per-transform job timeout in seconds                                                                             | `300`                                               |
+| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`           | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
+| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                  | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
 | `OGI_AUTO_RUN_MIGRATIONS`                       | Auto-run Alembic on local non-SQLite app startup                                                                 | `true`                                              |
 | `OGI_RUN_DB_MIGRATIONS`                         | Run DB migrations in container entrypoint                                                                        | `false`                                             |
 | `OGI_DB_MIGRATION_RETRIES`                      | Entry-point migration retry count                                                                                | `30`                                                |
@@ -347,6 +362,8 @@ List-style settings accept either:
 | `OGI_API_KEY_INJECTION_ALLOWED_TIERS`           | Tiers allowed when trusted-only mode is enabled                                                                  | `official,verified`                                 |
 | `OGI_API_KEY_SERVICE_ALLOWLIST`                 | Optional allowed services for stored key injection                                                               | empty                                               |
 | `OGI_API_KEY_SERVICE_BLOCKLIST`                 | Optional blocked services for stored key injection                                                               | empty                                               |
+| `OGI_LLM_PROVIDER`                              | Default AI Investigator provider fallback                                                                        | `openai`                                            |
+| `OGI_LLM_MODEL`                                 | Default AI Investigator model fallback                                                                           | `gpt-4.1-mini`                                      |
 | `OGI_EXPOSE_ERROR_DETAILS`                      | Include internal details in 500 responses                                                                        | `false`                                             |
 | `OGI_SANDBOX_ENABLED`                           | Enable sandbox execution mode                                                                                    | `false`                                             |
 | `OGI_SANDBOX_TIMEOUT`                           | Sandbox timeout in seconds                                                                                       | `30`                                                |
