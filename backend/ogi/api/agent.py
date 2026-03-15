@@ -10,6 +10,7 @@ from ogi.agent.models import (
     AgentRunStatus,
     AgentStep,
     AgentStepStatus,
+    AgentStepType,
     BudgetConfig,
     ScopeConfig,
     StartAgentRunRequest,
@@ -59,6 +60,7 @@ async def start_agent_run(
     current_user: UserProfile = Depends(get_current_user),
     _role: str = Depends(require_project_editor),
     run_store: AgentRunStore = Depends(get_agent_run_store),
+    step_store: AgentStepStore = Depends(get_agent_step_store),
     audit_store: AuditLogStore = Depends(get_audit_log_store),
 ) -> AgentRun:
     if not settings.agent_enabled:
@@ -85,6 +87,14 @@ async def start_agent_run(
         usage=UsageInfo().model_dump(mode="json"),
     )
     created = await run_store.create(run)
+    await step_store.create(
+        AgentStep(
+            run_id=created.id,
+            step_number=1,
+            type=AgentStepType.THINK,
+            status=AgentStepStatus.PENDING,
+        )
+    )
     await audit_store.create(
         project_id,
         current_user.id,

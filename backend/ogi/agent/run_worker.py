@@ -14,9 +14,13 @@ import uuid
 
 from redis import Redis
 
+from ogi.agent.context import AgentContextBuilder
+from ogi.agent.llm_provider import build_llm_provider
 from ogi.agent.orchestrator import AgentOrchestrator, poll_orchestrator
+from ogi.agent.tool_implementations import build_default_tool_registry
 from ogi.config import settings
 from ogi.db.database import async_session_maker, close_db, init_db
+from ogi.engine.transform_execution_service import TransformExecutionService
 from ogi.engine.transform_engine import TransformEngine
 
 logging.basicConfig(level=logging.INFO)
@@ -34,8 +38,20 @@ async def _run() -> None:
 
     transform_engine = TransformEngine()
     transform_engine.auto_discover()
-    transform_engine.load_plugins(settings.plugin_dirs)
+    plugin_engine = transform_engine.load_plugins(settings.plugin_dirs)
     logger.info("AI Investigator worker loaded %d transforms", len(transform_engine.list_transforms()))
+
+    execution_service = TransformExecutionService(
+        transform_engine_getter=lambda: transform_engine,
+        plugin_engine_getter=lambda: plugin_engine,
+    )
+    tool_registry = build_default_tool_registry(
+        transform_engine=transform_engine,
+        plugin_engine=plugin_engine,
+        transform_execution_service=execution_service,
+    )
+    llm_provider = build_llm_provider()
+    context_builder = AgentContextBuilder()
 
     redis_conn: Redis | None = None  # type: ignore[type-arg]
     try:
@@ -53,6 +69,9 @@ async def _run() -> None:
             orchestrator_factory=lambda: AgentOrchestrator(
                 session_factory=async_session_maker,
                 worker_id=worker_id,
+                llm_provider=llm_provider,
+                tool_registry=tool_registry,
+                context_builder=context_builder,
                 redis_conn=redis_conn,
             )
         )

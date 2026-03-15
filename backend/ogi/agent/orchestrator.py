@@ -10,6 +10,8 @@ from uuid import UUID
 from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ogi.agent.context import AgentContextBuilder
+from ogi.agent.llm_provider import LLMProvider
 from ogi.agent.models import (
     AgentEventMessage,
     AgentRun,
@@ -17,8 +19,10 @@ from ogi.agent.models import (
     AgentStep,
     AgentStepStatus,
     AgentStepType,
+    ScopeConfig,
 )
 from ogi.agent.store import AgentRunStore, AgentStepStore
+from ogi.agent.tools import ToolContext, ToolRegistry
 from ogi.config import settings
 
 logger = logging.getLogger("ogi.agent")
@@ -73,11 +77,17 @@ class AgentOrchestrator:
         *,
         session_factory: async_sessionmaker[AsyncSession],
         worker_id: str,
+        llm_provider: LLMProvider,
+        tool_registry: ToolRegistry,
+        context_builder: AgentContextBuilder,
         redis_conn: Redis | None = None,  # type: ignore[type-arg]
         claim_timeout_seconds: int | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._worker_id = worker_id
+        self._llm_provider = llm_provider
+        self._tool_registry = tool_registry
+        self._context_builder = context_builder
         self._redis_conn = redis_conn
         self._claim_timeout_seconds = claim_timeout_seconds or settings.agent_claim_timeout_sec
 
@@ -162,6 +172,13 @@ class AgentOrchestrator:
         run: AgentRun,
         step: AgentStep,
     ) -> None:
+        if step.type == AgentStepType.THINK:
+            await self._execute_think_step(session, run, step)
+            return
+        if step.type == AgentStepType.TOOL_CALL:
+            await self._execute_tool_call_step(session, run, step)
+            return
+
         now = datetime.now(timezone.utc)
         run_store = AgentRunStore(session)
 
@@ -304,7 +321,7 @@ class AgentOrchestrator:
     @staticmethod
     def _event_type_for_step(run: AgentRun, step: AgentStep) -> str | None:
         if step.type == AgentStepType.THINK:
-            return None
+            return "agent_thinking"
         if step.type == AgentStepType.TOOL_CALL:
             return "agent_tool_called"
         if step.type == AgentStepType.TOOL_RESULT:
@@ -314,6 +331,176 @@ class AgentOrchestrator:
         if run.status == AgentRunStatus.CANCELLED:
             return "agent_run_cancelled"
         return None
+
+    async def _execute_think_step(
+        self,
+        session: AsyncSession,
+        run: AgentRun,
+        step: AgentStep,
+    ) -> None:
+        step_store = AgentStepStore(session)
+        steps = await step_store.list_for_run(run.id)
+        prior_steps = [item for item in steps if item.id != step.id]
+        messages = await self._context_builder.build_messages(
+            run=run,
+            recent_steps=prior_steps,
+            tools=self._tool_registry.list_tools(),
+            session=session,
+        )
+        decision = await self._llm_provider.decide(messages=messages, tools=self._tool_registry.list_tools())
+
+        now = datetime.now(timezone.utc)
+        step.llm_output = decision.reasoning
+        step.token_usage = decision.token_usage.model_dump(mode="json")
+        step.status = AgentStepStatus.COMPLETED
+        step.completed_at = now
+        self._increment_usage(run, step)
+        self._increment_llm_usage(run, decision.token_usage.prompt_tokens, decision.token_usage.completion_tokens)
+        session.add(step)
+        session.add(run)
+        await session.commit()
+        await session.refresh(step)
+        await session.refresh(run)
+        publish_agent_event(
+            self._redis_conn,
+            build_agent_event(event_type="agent_thinking", run=run, step=step, summary=decision.reasoning),
+        )
+
+        next_step_number = await step_store.next_step_number(run.id)
+        if decision.action_type == "finish":
+            summary_step = AgentStep(
+                run_id=run.id,
+                step_number=next_step_number,
+                type=AgentStepType.SUMMARY,
+                llm_output=decision.final_summary or decision.reasoning,
+                status=AgentStepStatus.PENDING,
+            )
+            await step_store.create(summary_step)
+            return
+
+        if decision.action_type != "tool_call" or not decision.tool_name:
+            raise RuntimeError("LLM decision did not produce a valid tool call or finish action")
+
+        tool = self._tool_registry.get_tool(decision.tool_name)
+        if tool is None:
+            raise RuntimeError(f"LLM selected unknown tool '{decision.tool_name}'")
+
+        tool_step = AgentStep(
+            run_id=run.id,
+            step_number=next_step_number,
+            type=AgentStepType.TOOL_CALL,
+            tool_name=decision.tool_name,
+            tool_input=decision.tool_params,
+            status=AgentStepStatus.PENDING,
+            approval_payload={"requires_approval": tool.definition.requires_approval},
+        )
+        await step_store.create(tool_step)
+
+    async def _execute_tool_call_step(
+        self,
+        session: AsyncSession,
+        run: AgentRun,
+        step: AgentStep,
+    ) -> None:
+        tool = self._tool_registry.get_tool(step.tool_name or "")
+        if tool is None:
+            raise RuntimeError(f"Unknown tool '{step.tool_name}'")
+
+        now = datetime.now(timezone.utc)
+        if tool.definition.requires_approval and step.status == AgentStepStatus.RUNNING:
+            if (step.approval_payload or {}).get("decision") == "approved":
+                pass
+            elif (step.approval_payload or {}).get("decision") == "rejected":
+                run.status = AgentRunStatus.PAUSED
+                run.updated_at = now
+                session.add(run)
+                await session.commit()
+                await session.refresh(run)
+                publish_agent_event(
+                    self._redis_conn,
+                    build_agent_event(event_type="agent_approval_resolved", run=run, step=step),
+                )
+                return
+            elif step.status == AgentStepStatus.RUNNING:
+                step.status = AgentStepStatus.WAITING_APPROVAL
+                step.worker_id = None
+                step.claimed_at = None
+                payload = dict(step.approval_payload or {})
+                payload.update(
+                    {
+                        "tool_name": step.tool_name,
+                        "tool_input": step.tool_input or {},
+                        "requires_approval": True,
+                    }
+                )
+                step.approval_payload = payload
+                run.status = AgentRunStatus.PAUSED
+                run.updated_at = now
+                session.add(run)
+                session.add(step)
+                await session.commit()
+                await session.refresh(run)
+                await session.refresh(step)
+                publish_agent_event(
+                    self._redis_conn,
+                    build_agent_event(event_type="agent_approval_requested", run=run, step=step),
+                )
+                return
+
+        ctx = ToolContext(
+            project_id=run.project_id,
+            user_id=run.user_id,
+            run_id=run.id,
+            scope=ScopeConfig.model_validate(run.scope),
+            session=session,
+        )
+        result = await self._tool_registry.execute(step.tool_name or "", step.tool_input or {}, ctx)
+
+        step.status = AgentStepStatus.COMPLETED
+        step.completed_at = now
+        self._increment_usage(run, step)
+        session.add(step)
+        session.add(run)
+        await session.commit()
+        await session.refresh(step)
+        await session.refresh(run)
+        publish_agent_event(
+            self._redis_conn,
+            build_agent_event(event_type="agent_tool_called", run=run, step=step),
+        )
+
+        step_store = AgentStepStore(session)
+        result_step = AgentStep(
+            run_id=run.id,
+            step_number=await step_store.next_step_number(run.id),
+            type=AgentStepType.TOOL_RESULT,
+            tool_name=step.tool_name,
+            tool_input=step.tool_input,
+            tool_output=result.model_dump(mode="json"),
+            status=AgentStepStatus.COMPLETED,
+            completed_at=datetime.now(timezone.utc),
+        )
+        await step_store.create(result_step)
+        publish_agent_event(
+            self._redis_conn,
+            build_agent_event(event_type="agent_tool_result", run=run, step=result_step, summary=result.summary),
+        )
+
+        next_think = AgentStep(
+            run_id=run.id,
+            step_number=await step_store.next_step_number(run.id),
+            type=AgentStepType.THINK,
+            status=AgentStepStatus.PENDING,
+        )
+        await step_store.create(next_think)
+
+    def _increment_llm_usage(self, run: AgentRun, prompt_tokens: int, completion_tokens: int) -> None:
+        usage = dict(run.usage or {})
+        usage["llm_calls"] = int(usage.get("llm_calls", 0)) + 1
+        usage["prompt_tokens"] = int(usage.get("prompt_tokens", 0)) + int(prompt_tokens)
+        usage["completion_tokens"] = int(usage.get("completion_tokens", 0)) + int(completion_tokens)
+        run.usage = usage
+        run.updated_at = datetime.now(timezone.utc)
 
 
 async def poll_orchestrator(

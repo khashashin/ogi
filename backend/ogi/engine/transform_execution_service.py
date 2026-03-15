@@ -199,9 +199,13 @@ class TransformExecutionService:
         *,
         queue_getter=None,
         redis_getter=None,
+        transform_engine_getter=None,
+        plugin_engine_getter=None,
     ) -> None:
         self._queue_getter = queue_getter or get_rq_queue
         self._redis_getter = redis_getter or get_redis
+        self._transform_engine_getter = transform_engine_getter or get_transform_engine
+        self._plugin_engine_getter = plugin_engine_getter or get_plugin_engine
 
     async def validate_and_prepare(
         self,
@@ -229,12 +233,13 @@ class TransformExecutionService:
         if entity.project_id != project_id:
             raise HTTPException(status_code=400, detail="Entity does not belong to the project")
 
-        transform_engine = get_transform_engine()
+        transform_engine = self._transform_engine_getter()
         transform = transform_engine.get_transform(transform_name)
         if transform is None:
             raise HTTPException(status_code=400, detail=f"Transform '{transform_name}' not found")
 
-        plugin_name = get_plugin_engine().get_plugin_for_transform(transform_name)
+        plugin_engine = self._plugin_engine_getter()
+        plugin_name = plugin_engine.get_plugin_for_transform(transform_name)
         if plugin_name and not await preferences.is_enabled(user_id, plugin_name, default=True):
             raise HTTPException(status_code=403, detail=f"Plugin '{plugin_name}' is disabled for this user")
 
@@ -255,7 +260,7 @@ class TransformExecutionService:
             **sanitize_transform_settings(transform, config_overrides),
         }
 
-        plugin = get_plugin_engine().get_plugin(plugin_name) if plugin_name else None
+        plugin = plugin_engine.get_plugin(plugin_name) if plugin_name else None
         plugin_tier = plugin.verification_tier if plugin is not None else None
         injected_services: list[str] = []
 
