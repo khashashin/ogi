@@ -2174,6 +2174,169 @@ async def test_map_points_endpoint_returns_points_and_clusters(client: AsyncClie
         assert data["clusters"][0]["count"] >= 2
 
 
+# ---------------------------------------------------------------------------
+# AI Investigator foundations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_agent_run_start_list_and_get(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "agent_enabled", True)
+    monkeypatch.setattr(settings, "llm_provider", "test-provider")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+
+    resp = await client.post("/api/v1/projects", json={"name": "AgentProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={
+            "prompt": "Investigate this project",
+            "scope": {"mode": "all", "entity_ids": []},
+            "budget": {"max_steps": 12, "max_transforms": 4, "max_runtime_sec": 180},
+        },
+    )
+    assert resp.status_code == 201
+    run = resp.json()
+    assert run["project_id"] == project_id
+    assert run["status"] == "pending"
+    assert run["provider"] == "test-provider"
+    assert run["model"] == "test-model"
+    run_id = run["id"]
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/agent/runs")
+    assert resp.status_code == 200
+    runs = resp.json()
+    assert any(row["id"] == run_id for row in runs)
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/agent/runs/{run_id}")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == run_id
+
+
+@pytest.mark.asyncio
+async def test_agent_start_rejects_duplicate_active_run(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "agent_enabled", True)
+
+    resp = await client.post("/api/v1/projects", json={"name": "AgentDuplicate"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    payload = {
+        "prompt": "First run",
+        "scope": {"mode": "all", "entity_ids": []},
+    }
+    first = await client.post(f"/api/v1/projects/{project_id}/agent/start", json=payload)
+    assert first.status_code == 201
+
+    second = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={"prompt": "Second run", "scope": {"mode": "all", "entity_ids": []}},
+    )
+    assert second.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_agent_cancel_run(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "agent_enabled", True)
+
+    resp = await client.post("/api/v1/projects", json={"name": "AgentCancel"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    start = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={"prompt": "Cancel me", "scope": {"mode": "all", "entity_ids": []}},
+    )
+    assert start.status_code == 201
+    run_id = start.json()["id"]
+
+    resp = await client.post(f"/api/v1/projects/{project_id}/agent/runs/{run_id}/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_agent_approve_and_reject_waiting_step(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType
+    from ogi.config import settings
+    from ogi.db.database import get_session
+
+    monkeypatch.setattr(settings, "agent_enabled", True)
+
+    resp = await client.post("/api/v1/projects", json={"name": "AgentApproval"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    start = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={"prompt": "Approval flow", "scope": {"mode": "all", "entity_ids": []}},
+    )
+    assert start.status_code == 201
+    run_id = UUID(start.json()["id"])
+
+    async for session in get_session():
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        run.status = AgentRunStatus.PAUSED
+        session.add(run)
+        await session.commit()
+
+        step = AgentStep(
+            run_id=run_id,
+            step_number=1,
+            type=AgentStepType.APPROVAL_REQUEST,
+            tool_name="run_transform",
+            status=AgentStepStatus.WAITING_APPROVAL,
+        )
+        session.add(step)
+        await session.commit()
+        await session.refresh(step)
+        step_id = step.id
+        break
+
+    approve = await client.post(
+        f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{step_id}/approve",
+        json={},
+    )
+    assert approve.status_code == 200
+    assert approve.json()["status"] == "approved"
+
+    async for session in get_session():
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        assert run.status == AgentRunStatus.PENDING
+
+        step = AgentStep(
+            run_id=run_id,
+            step_number=2,
+            type=AgentStepType.APPROVAL_REQUEST,
+            tool_name="run_transform",
+            status=AgentStepStatus.WAITING_APPROVAL,
+        )
+        session.add(step)
+        run.status = AgentRunStatus.PAUSED
+        session.add(run)
+        await session.commit()
+        await session.refresh(step)
+        step_id = step.id
+        break
+
+    reject = await client.post(
+        f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{step_id}/reject",
+        json={},
+    )
+    assert reject.status_code == 200
+    assert reject.json()["status"] == "rejected"
+
+
 @pytest.mark.asyncio
 async def test_map_routes_endpoint_returns_routes_for_geo_edges(client: AsyncClient):
     resp = await client.post("/api/v1/projects", json={"name": "MapRoutesProject"})
