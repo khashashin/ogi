@@ -162,6 +162,20 @@ async def test_list_entity_types(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_save_transform_settings_returns_allowed_maximum_in_error(client: AsyncClient):
+    resp = await client.put(
+        "/api/v1/transforms/username_search/settings/user",
+        json={"settings": {"max_sites": "999"}},
+    )
+    assert_error_envelope(
+        resp,
+        400,
+        code="HTTP_400",
+        message_contains="Setting 'max_sites' is above maximum 200",
+    )
+
+
+@pytest.mark.asyncio
 async def test_discover_empty(client: AsyncClient):
     """Discover returns empty list when no public projects exist."""
     resp = await client.get("/api/v1/discover")

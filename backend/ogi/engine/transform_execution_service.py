@@ -120,9 +120,15 @@ def sanitize_transform_settings(
             except Exception:
                 raise HTTPException(status_code=400, detail=f"Invalid integer for setting '{key}'")
             if setting.min_value is not None and parsed < int(setting.min_value):
-                raise HTTPException(status_code=400, detail=f"Setting '{key}' is below minimum")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Setting '{key}' is below minimum {int(setting.min_value)}",
+                )
             if setting.max_value is not None and parsed > int(setting.max_value):
-                raise HTTPException(status_code=400, detail=f"Setting '{key}' is above maximum")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Setting '{key}' is above maximum {int(setting.max_value)}",
+                )
             sanitized[key] = str(parsed)
         elif setting.field_type == "number":
             try:
@@ -130,9 +136,15 @@ def sanitize_transform_settings(
             except Exception:
                 raise HTTPException(status_code=400, detail=f"Invalid number for setting '{key}'")
             if setting.min_value is not None and parsed_num < setting.min_value:
-                raise HTTPException(status_code=400, detail=f"Setting '{key}' is below minimum")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Setting '{key}' is below minimum {setting.min_value}",
+                )
             if setting.max_value is not None and parsed_num > setting.max_value:
-                raise HTTPException(status_code=400, detail=f"Setting '{key}' is above maximum")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Setting '{key}' is above maximum {setting.max_value}",
+                )
             sanitized[key] = str(parsed_num)
         elif setting.field_type == "select":
             if setting.options and value not in setting.options:
