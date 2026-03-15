@@ -160,6 +160,14 @@ export const api = {
       request<void>(`/projects/${projectId}/entities/${entityId}`, {
         method: "DELETE",
       }),
+    bulkDelete: (projectId: string, entityIds: string[]) =>
+      request<{ deleted_entity_ids: string[]; deleted_count: number }>(
+        `/projects/${projectId}/entities/bulk-delete`,
+        {
+          method: "POST",
+          body: JSON.stringify({ entity_ids: entityIds }),
+        }
+      ),
   },
 
   edges: {
