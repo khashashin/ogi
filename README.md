@@ -75,6 +75,13 @@ The API will be available at `http://localhost:8000`.
 
 If you run the backend against PostgreSQL (`OGI_USE_SQLITE=false`), startup will automatically apply Alembic migrations before serving requests. Docker deployments do the same in the backend container entrypoint.
 
+AI Investigator runs are processed by a separate worker:
+
+```bash
+cd backend
+uv run python -m ogi.agent.run_worker
+```
+
 ### Frontend
 
 ```bash
@@ -153,6 +160,7 @@ The override is keyed by transform setting name and applies to built-in transfor
 | ---------- | -------------------------- | ---- |
 | `backend`  | FastAPI application server | 8000 |
 | `worker`   | RQ async job worker        | -    |
+| `agent-worker` | AI Investigator worker | -    |
 | `frontend` | React app served via nginx | 80   |
 | `db`       | PostgreSQL 16              | 5432 |
 | `redis`    | Redis 7 (job queue)        | 6379 |
