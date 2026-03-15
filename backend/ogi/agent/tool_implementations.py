@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
+from uuid import UUID as UUIDType
 
 from fastapi import HTTPException
 
 from ogi.agent.tools import ToolContext, ToolDefinition, ToolRegistry, ToolResult
-from ogi.api.transforms import _enrich_transform_info
 from ogi.engine.plugin_engine import PluginEngine
 from ogi.engine.transform_engine import TransformEngine
 from ogi.engine.transform_execution_service import TransformExecutionService
+from ogi.models import TransformInfo
 from ogi.models import EntityType
 from ogi.store.entity_store import EntityStore
 from ogi.store.transform_run_store import TransformRunStore
@@ -21,9 +22,70 @@ def _parse_entity_type(value: str | None) -> EntityType | None:
     return EntityType(value)
 
 
+def _enrich_transform_info_local(transform: TransformInfo, plugin_engine: PluginEngine) -> TransformInfo:
+    plugin_name = plugin_engine.get_plugin_for_transform(transform.name)
+    if plugin_name is None:
+        return transform
+
+    plugin = plugin_engine.get_plugin(plugin_name)
+    if plugin is None:
+        return transform.model_copy(update={"plugin_name": plugin_name})
+
+    return transform.model_copy(
+        update={
+            "plugin_name": plugin_name,
+            "plugin_verification_tier": plugin.verification_tier or "community",
+            "plugin_permissions": plugin.permissions or {},
+            "plugin_source": plugin.source or "local",
+        }
+    )
+
+
 def _ensure_scope(ctx: ToolContext, entity_id: UUID) -> None:
     if ctx.scope.mode == "selected" and entity_id not in set(ctx.scope.entity_ids):
         raise HTTPException(status_code=400, detail="Entity is outside the allowed investigation scope")
+
+
+def _try_parse_uuid(value: object) -> UUID | None:
+    try:
+        return UUIDType(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+async def _resolve_entity(ctx: ToolContext, params: dict[str, Any]) -> tuple[UUID, Any]:
+    store = EntityStore(ctx.session)
+
+    entity_id = _try_parse_uuid(params.get("entity_id"))
+    if entity_id is not None:
+        _ensure_scope(ctx, entity_id)
+        entity = await store.get(entity_id)
+        if entity is None or entity.project_id != ctx.project_id:
+            raise HTTPException(status_code=404, detail="Entity not found")
+        return entity_id, entity
+
+    entity_value = str(params.get("entity_value") or params.get("entity_id") or "").strip()
+    if not entity_value:
+        raise HTTPException(status_code=400, detail="entity_id or entity_value is required")
+
+    matches = await store.search(ctx.project_id, entity_value, limit=25)
+    exact_matches = [entity for entity in matches if entity.value == entity_value]
+    if ctx.scope.mode == "selected":
+        allowed = set(ctx.scope.entity_ids)
+        exact_matches = [entity for entity in exact_matches if entity.id in allowed]
+
+    if not exact_matches:
+        raise HTTPException(status_code=404, detail=f"Entity '{entity_value}' not found in the investigation scope")
+    if len(exact_matches) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Entity value '{entity_value}' matched multiple entities. "
+                "Use entity_id from list_entities or get_entity."
+            ),
+        )
+    entity = exact_matches[0]
+    return entity.id, entity
 
 
 def build_default_tool_registry(
@@ -57,12 +119,7 @@ def build_default_tool_registry(
         )
 
     async def get_entity(params: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        entity_id = UUID(str(params["entity_id"]))
-        _ensure_scope(ctx, entity_id)
-        store = EntityStore(ctx.session)
-        entity = await store.get(entity_id)
-        if entity is None or entity.project_id != ctx.project_id:
-            raise HTTPException(status_code=404, detail="Entity not found")
+        _entity_id, entity = await _resolve_entity(ctx, params)
         return ToolResult(
             data={
                 "entity": {
@@ -103,13 +160,11 @@ def build_default_tool_registry(
         )
 
     async def list_transforms(params: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        entity_id = UUID(str(params["entity_id"]))
-        _ensure_scope(ctx, entity_id)
-        store = EntityStore(ctx.session)
-        entity = await store.get(entity_id)
-        if entity is None or entity.project_id != ctx.project_id:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        transforms = [_enrich_transform_info(item) for item in transform_engine.list_for_entity(entity)]
+        _entity_id, entity = await _resolve_entity(ctx, params)
+        transforms = [
+            _enrich_transform_info_local(item, plugin_engine)
+            for item in transform_engine.list_for_entity(entity)
+        ]
         return ToolResult(
             data={
                 "transforms": [
@@ -129,8 +184,7 @@ def build_default_tool_registry(
         )
 
     async def run_transform(params: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        entity_id = UUID(str(params["entity_id"]))
-        _ensure_scope(ctx, entity_id)
+        entity_id, _entity = await _resolve_entity(ctx, params)
         transform_name = str(params["transform_name"])
         overrides = params.get("config", {})
         if not isinstance(overrides, dict):
@@ -207,11 +261,13 @@ def build_default_tool_registry(
     registry.register(
         ToolDefinition(
             name="get_entity",
-            description="Load one entity with its notes, tags, and properties.",
+            description="Load one entity with its notes, tags, and properties. Prefer entity_id from list_entities, but exact entity_value is also accepted.",
             parameters={
                 "type": "object",
-                "properties": {"entity_id": {"type": "string"}},
-                "required": ["entity_id"],
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "entity_value": {"type": "string"},
+                },
                 "additionalProperties": False,
             },
             risk_level="low",
@@ -241,11 +297,13 @@ def build_default_tool_registry(
     registry.register(
         ToolDefinition(
             name="list_transforms",
-            description="List transforms that can run on a specific entity.",
+            description="List transforms that can run on a specific entity. Prefer entity_id from list_entities, but exact entity_value is also accepted.",
             parameters={
                 "type": "object",
-                "properties": {"entity_id": {"type": "string"}},
-                "required": ["entity_id"],
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "entity_value": {"type": "string"},
+                },
                 "additionalProperties": False,
             },
             risk_level="low",
@@ -256,15 +314,16 @@ def build_default_tool_registry(
     registry.register(
         ToolDefinition(
             name="run_transform",
-            description="Execute one OGI transform directly and persist its resulting entities and edges.",
+            description="Execute one OGI transform directly and persist its resulting entities and edges. Prefer entity_id from list_entities, but exact entity_value is also accepted.",
             parameters={
                 "type": "object",
                 "properties": {
                     "entity_id": {"type": "string"},
+                    "entity_value": {"type": "string"},
                     "transform_name": {"type": "string"},
                     "config": {"type": "object"},
                 },
-                "required": ["entity_id", "transform_name"],
+                "required": ["transform_name"],
                 "additionalProperties": False,
             },
             risk_level="high",

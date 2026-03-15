@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Awaitable, Callable
 from uuid import UUID
 
 from redis import Redis
@@ -34,6 +35,10 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _enum_value(value: object) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
 def publish_agent_event(redis_conn: Redis | None, message: AgentEventMessage) -> None:  # type: ignore[type-arg]
     if redis_conn is None:
         return
@@ -55,7 +60,7 @@ def build_agent_event(
         project_id=run.project_id,
         run_id=run.id,
         step_id=None if step is None else step.id,
-        status=run.status.value if step is None else step.status.value,
+        status=_enum_value(run.status if step is None else step.status),
         summary=summary,
         timestamp=datetime.now(timezone.utc),
     )
@@ -65,6 +70,16 @@ class BudgetExceededError(RuntimeError):
     pass
 
 
+class AgentLoopDetectedError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ActionPolicyDecision:
+    mode: str
+    message: str | None = None
+
+
 @dataclass
 class OrchestratorIterationResult:
     claimed_step_id: UUID | None = None
@@ -72,12 +87,19 @@ class OrchestratorIterationResult:
 
 
 class AgentOrchestrator:
+    READ_ONLY_TOOLS = {"list_entities", "get_entity", "list_transforms", "search_graph"}
+    DUPLICATE_READ_REPLAN_LIMIT = 3
+    KNOWN_GRAPH_ITEM_LIMIT = 500
+    TRANSFORM_MEMORY_LIMIT = 24
+    EXHAUSTED_FAMILY_RECENT_LOW_YIELD_THRESHOLD = 2
+    EXHAUSTED_FAMILY_MIN_RUNS = 3
+
     def __init__(
         self,
         *,
         session_factory: async_sessionmaker[AsyncSession],
         worker_id: str,
-        llm_provider: LLMProvider,
+        llm_provider_factory: Callable[[AsyncSession, AgentRun], Awaitable[LLMProvider]],
         tool_registry: ToolRegistry,
         context_builder: AgentContextBuilder,
         redis_conn: Redis | None = None,  # type: ignore[type-arg]
@@ -85,11 +107,279 @@ class AgentOrchestrator:
     ) -> None:
         self._session_factory = session_factory
         self._worker_id = worker_id
-        self._llm_provider = llm_provider
+        self._llm_provider_factory = llm_provider_factory
         self._tool_registry = tool_registry
         self._context_builder = context_builder
         self._redis_conn = redis_conn
         self._claim_timeout_seconds = claim_timeout_seconds or settings.agent_claim_timeout_sec
+
+    @staticmethod
+    def _normalize_tool_input(params: dict | None) -> str:
+        normalized = params or {}
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
+
+    @classmethod
+    def _tool_signature(cls, tool_name: str | None, params: dict | None) -> str:
+        return f"{tool_name or ''}:{cls._normalize_tool_input(params)}"
+
+    @classmethod
+    def _transform_signature(cls, params: dict | None) -> str:
+        params = params or {}
+        normalized = {
+            "entity_id": str(params.get("entity_id") or ""),
+            "entity_value": str(params.get("entity_value") or ""),
+            "transform_name": str(params.get("transform_name") or ""),
+            "config": params.get("config") or {},
+        }
+        return cls._normalize_tool_input(normalized)
+
+    def _check_action_policy(
+        self,
+        *,
+        run: AgentRun,
+        prior_steps: list[AgentStep],
+        tool_name: str,
+        tool_params: dict | None,
+    ) -> ActionPolicyDecision:
+        if tool_name == "finish_investigation":
+            return ActionPolicyDecision(mode="allow")
+
+        tool_signature = self._tool_signature(tool_name, tool_params)
+        completed_matching = [
+            step
+            for step in prior_steps
+            if step.type == AgentStepType.TOOL_CALL
+            and step.status == AgentStepStatus.COMPLETED
+            and self._tool_signature(step.tool_name, step.tool_input) == tool_signature
+        ]
+        if completed_matching and tool_name == "run_transform":
+            params = tool_params or {}
+            transform_name = params.get("transform_name") or "unknown"
+            target = params.get("entity_id") or params.get("entity_value") or "unknown"
+            return ActionPolicyDecision(
+                mode="fail",
+                message=(
+                    f"AI Investigator loop detected: transform '{transform_name}' already ran on '{target}' in this run"
+                ),
+            )
+
+        if tool_name == "run_transform":
+            params = tool_params or {}
+            transform_name = str(params.get("transform_name") or "").strip()
+            exhausted_families = {
+                str(item).strip()
+                for item in (run.config or {}).get("exhausted_transform_families", [])
+                if str(item).strip()
+            }
+            if transform_name and transform_name in exhausted_families:
+                return ActionPolicyDecision(
+                    mode="replan",
+                    message=(
+                        f"Policy feedback: transform family '{transform_name}' has been low-yield in recent runs. "
+                        "Choose a different transform family, deepen an existing pivot, or finish the investigation."
+                    ),
+                )
+
+        if completed_matching and tool_name in self.READ_ONLY_TOOLS:
+            return ActionPolicyDecision(
+                mode="replan",
+                message=(
+                    f"Policy feedback: tool '{tool_name}' with these inputs was already executed earlier in this run. "
+                    "Use the existing results, choose a different pivot, or finish the investigation."
+                ),
+            )
+
+        if len(completed_matching) >= 2:
+            if tool_name in self.READ_ONLY_TOOLS:
+                return ActionPolicyDecision(
+                    mode="replan",
+                    message=(
+                        f"Policy feedback: tool '{tool_name}' with these inputs was already executed multiple times. "
+                        "Choose a different entity, a different transform, or finish the investigation."
+                    ),
+                )
+            return ActionPolicyDecision(
+                mode="fail",
+                message=(
+                    f"AI Investigator loop detected: tool '{tool_name}' with the same inputs has already been executed multiple times"
+                ),
+            )
+
+        recent_tool_calls = [
+            step for step in prior_steps if step.type == AgentStepType.TOOL_CALL and step.status == AgentStepStatus.COMPLETED
+        ][-6:]
+        recent_signatures = [self._tool_signature(step.tool_name, step.tool_input) for step in recent_tool_calls]
+        if recent_signatures.count(tool_signature) >= 2:
+            if tool_name in self.READ_ONLY_TOOLS:
+                return ActionPolicyDecision(
+                    mode="replan",
+                    message=(
+                        f"Policy feedback: repeated recent action '{tool_name}' with the same inputs was already attempted. "
+                        "Use the existing results, pick a new pivot, or finish."
+                    ),
+                )
+            return ActionPolicyDecision(
+                mode="fail",
+                message=f"AI Investigator loop detected: repeated recent action '{tool_name}' with the same inputs",
+            )
+
+        return ActionPolicyDecision(mode="allow")
+
+    @staticmethod
+    def _append_policy_feedback(run: AgentRun, message: str) -> None:
+        config = dict(run.config or {})
+        feedback = list(config.get("policy_feedback") or [])
+        feedback.append(message)
+        config["policy_feedback"] = feedback[-3:]
+        run.config = config
+
+    @staticmethod
+    def _clear_policy_feedback(run: AgentRun) -> None:
+        config = dict(run.config or {})
+        if "policy_feedback" in config:
+            config.pop("policy_feedback", None)
+            run.config = config
+
+    def _register_duplicate_read_replan(self, run: AgentRun, message: str) -> None:
+        usage = dict(run.usage or {})
+        count = int(usage.get("duplicate_read_replans", 0)) + 1
+        usage["duplicate_read_replans"] = count
+        run.usage = usage
+        self._append_policy_feedback(run, message)
+        if count >= self.DUPLICATE_READ_REPLAN_LIMIT:
+            raise AgentLoopDetectedError(
+                "AI Investigator loop detected: repeated duplicate read-only actions after policy feedback"
+            )
+
+    @staticmethod
+    def _edge_signature(edge: dict[str, object]) -> str:
+        return "|".join(
+            [
+                str(edge.get("source_id") or ""),
+                str(edge.get("target_id") or ""),
+                str(edge.get("label") or ""),
+                str(edge.get("source_transform") or ""),
+            ]
+        )
+
+    def _record_transform_outcome(self, run: AgentRun, step: AgentStep, result: object) -> None:
+        if step.tool_name != "run_transform":
+            return
+        if not isinstance(result, dict):
+            return
+
+        result_payload = result.get("result")
+        if not isinstance(result_payload, dict):
+            return
+
+        config = dict(run.config or {})
+        known_entity_ids = {
+            str(item)
+            for item in config.get("known_entity_ids", [])
+            if str(item).strip()
+        }
+        known_edge_signatures = {
+            str(item)
+            for item in config.get("known_edge_signatures", [])
+            if str(item).strip()
+        }
+
+        entities = result_payload.get("entities")
+        edges = result_payload.get("edges")
+        entity_items = entities if isinstance(entities, list) else []
+        edge_items = edges if isinstance(edges, list) else []
+
+        new_entity_ids: set[str] = set()
+        new_entity_types: set[str] = set()
+        for item in entity_items:
+            if not isinstance(item, dict):
+                continue
+            entity_id = str(item.get("id") or "").strip()
+            if not entity_id:
+                continue
+            if entity_id not in known_entity_ids:
+                new_entity_ids.add(entity_id)
+                entity_type = str(item.get("type") or "").strip()
+                if entity_type:
+                    new_entity_types.add(entity_type)
+            known_entity_ids.add(entity_id)
+
+        new_edge_signatures: set[str] = set()
+        for item in edge_items:
+            if not isinstance(item, dict):
+                continue
+            signature = self._edge_signature(item)
+            if not signature.strip():
+                continue
+            if signature not in known_edge_signatures:
+                new_edge_signatures.add(signature)
+            known_edge_signatures.add(signature)
+
+        params = step.tool_input or {}
+        transform_name = str(params.get("transform_name") or "").strip() or "unknown"
+        target = str(params.get("entity_id") or params.get("entity_value") or "").strip() or "unknown"
+        low_yield = (
+            len(new_entity_ids) == 0 and len(new_edge_signatures) == 0
+        ) or (
+            len(new_entity_ids) <= 1 and len(new_edge_signatures) <= 1 and len(new_entity_types) <= 1
+        )
+
+        memory = list(config.get("transform_memory") or [])
+        memory.append(
+            {
+                "transform_name": transform_name,
+                "target": target,
+                "new_entity_count": len(new_entity_ids),
+                "new_edge_count": len(new_edge_signatures),
+                "new_entity_types": sorted(new_entity_types),
+                "low_yield": low_yield,
+            }
+        )
+        memory = memory[-self.TRANSFORM_MEMORY_LIMIT :]
+
+        family_history = [
+            item for item in memory
+            if isinstance(item, dict) and str(item.get("transform_name") or "").strip() == transform_name
+        ]
+        recent_family_history = family_history[-3:]
+        family_stats = dict(config.get("transform_family_stats") or {})
+        family_stats[transform_name] = {
+            "runs": len(family_history),
+            "recent_low_yield_runs": sum(1 for item in recent_family_history if bool(item.get("low_yield"))),
+            "recent_targets": [
+                str(item.get("target") or "")
+                for item in family_history[-5:]
+                if str(item.get("target") or "").strip()
+            ],
+        }
+
+        exhausted_families = [
+            str(item).strip()
+            for item in config.get("exhausted_transform_families", [])
+            if str(item).strip()
+        ]
+        stats = family_stats[transform_name]
+        if (
+            stats["runs"] >= self.EXHAUSTED_FAMILY_MIN_RUNS
+            and stats["recent_low_yield_runs"] >= self.EXHAUSTED_FAMILY_RECENT_LOW_YIELD_THRESHOLD
+            and transform_name not in exhausted_families
+        ):
+            exhausted_families.append(transform_name)
+
+        config["known_entity_ids"] = list(sorted(known_entity_ids))[-self.KNOWN_GRAPH_ITEM_LIMIT :]
+        config["known_edge_signatures"] = list(sorted(known_edge_signatures))[-self.KNOWN_GRAPH_ITEM_LIMIT :]
+        config["transform_memory"] = memory
+        config["transform_family_stats"] = family_stats
+        config["exhausted_transform_families"] = exhausted_families[-10:]
+        run.config = config
+        run.updated_at = datetime.now(timezone.utc)
+
+    @staticmethod
+    def _reset_duplicate_read_replans(run: AgentRun) -> None:
+        usage = dict(run.usage or {})
+        if usage.get("duplicate_read_replans"):
+            usage["duplicate_read_replans"] = 0
+            run.usage = usage
 
     async def recover_stale_state(self) -> tuple[int, int]:
         async with self._session_factory() as session:
@@ -138,7 +428,7 @@ class AgentOrchestrator:
                     await session.refresh(run)
 
                 await self._execute_claimed_step(session, run, step)
-            except BudgetExceededError as exc:
+            except (BudgetExceededError, AgentLoopDetectedError) as exc:
                 await self._fail_run(session, run, step, str(exc))
             except Exception as exc:
                 logger.exception("Agent step %s failed", step.id)
@@ -347,7 +637,8 @@ class AgentOrchestrator:
             tools=self._tool_registry.list_tools(),
             session=session,
         )
-        decision = await self._llm_provider.decide(messages=messages, tools=self._tool_registry.list_tools())
+        llm_provider = await self._llm_provider_factory(session, run)
+        decision = await llm_provider.decide(messages=messages, tools=self._tool_registry.list_tools())
 
         now = datetime.now(timezone.utc)
         step.llm_output = decision.reasoning
@@ -367,7 +658,13 @@ class AgentOrchestrator:
         )
 
         next_step_number = await step_store.next_step_number(run.id)
+
         if decision.action_type == "finish":
+            self._clear_policy_feedback(run)
+            self._reset_duplicate_read_replans(run)
+            session.add(run)
+            await session.commit()
+            await session.refresh(run)
             summary_step = AgentStep(
                 run_id=run.id,
                 step_number=next_step_number,
@@ -384,6 +681,46 @@ class AgentOrchestrator:
         tool = self._tool_registry.get_tool(decision.tool_name)
         if tool is None:
             raise RuntimeError(f"LLM selected unknown tool '{decision.tool_name}'")
+
+        policy = self._check_action_policy(
+            run=run,
+            prior_steps=prior_steps,
+            tool_name=decision.tool_name,
+            tool_params=decision.tool_params,
+        )
+        if policy.message:
+            step.llm_output = f"{decision.reasoning}\n\n{policy.message}"
+            session.add(step)
+            await session.commit()
+            await session.refresh(step)
+
+        if policy.mode == "replan":
+            assert policy.message is not None
+            self._register_duplicate_read_replan(run, policy.message)
+            run.updated_at = datetime.now(timezone.utc)
+            session.add(run)
+            await session.commit()
+            await session.refresh(run)
+            await step_store.create(
+                AgentStep(
+                    run_id=run.id,
+                    step_number=next_step_number,
+                    type=AgentStepType.THINK,
+                    status=AgentStepStatus.PENDING,
+                )
+            )
+            return
+
+        if policy.mode == "fail":
+            assert policy.message is not None
+            raise AgentLoopDetectedError(policy.message)
+
+        self._clear_policy_feedback(run)
+        self._reset_duplicate_read_replans(run)
+        run.updated_at = datetime.now(timezone.utc)
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
 
         tool_step = AgentStep(
             run_id=run.id,
@@ -405,6 +742,17 @@ class AgentOrchestrator:
         tool = self._tool_registry.get_tool(step.tool_name or "")
         if tool is None:
             raise RuntimeError(f"Unknown tool '{step.tool_name}'")
+
+        step_store = AgentStepStore(session)
+        prior_steps = [item for item in await step_store.list_for_run(run.id) if item.id != step.id]
+        policy = self._check_action_policy(
+            run=run,
+            prior_steps=prior_steps,
+            tool_name=step.tool_name or "",
+            tool_params=step.tool_input,
+        )
+        if policy.mode != "allow":
+            raise AgentLoopDetectedError(policy.message or "AI Investigator loop detected")
 
         now = datetime.now(timezone.utc)
         if tool.definition.requires_approval and step.status == AgentStepStatus.RUNNING:
@@ -455,6 +803,7 @@ class AgentOrchestrator:
             session=session,
         )
         result = await self._tool_registry.execute(step.tool_name or "", step.tool_input or {}, ctx)
+        self._record_transform_outcome(run, step, result.data)
 
         step.status = AgentStepStatus.COMPLETED
         step.completed_at = now
@@ -469,7 +818,6 @@ class AgentOrchestrator:
             build_agent_event(event_type="agent_tool_called", run=run, step=step),
         )
 
-        step_store = AgentStepStore(session)
         result_step = AgentStep(
             run_id=run.id,
             step_number=await step_store.next_step_number(run.id),

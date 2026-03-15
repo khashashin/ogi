@@ -41,6 +41,15 @@ from ogi.agent.models import (
     StepApprovalRequest,
     UsageInfo,
 )
+from ogi.agent.settings_models import (
+    AgentModelCatalog,
+    AgentModelOption,
+    AgentSettingsRead,
+    AgentSettingsTestRequest,
+    AgentSettingsTestResult,
+    AgentSettingsUpdate,
+    AgentUserSettings,
+)
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -83,4 +92,11 @@ __all__ = [
     "StartAgentRunRequest",
     "StepApprovalRequest",
     "UsageInfo",
+    "AgentModelCatalog",
+    "AgentModelOption",
+    "AgentSettingsRead",
+    "AgentSettingsTestRequest",
+    "AgentSettingsTestResult",
+    "AgentSettingsUpdate",
+    "AgentUserSettings",
 ]

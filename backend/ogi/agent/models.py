@@ -6,6 +6,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field as PydanticField
+from sqlalchemy import Enum as SAEnum, Text
 from sqlmodel import Column, DateTime, Field, JSON, SQLModel
 
 
@@ -61,6 +62,8 @@ class StartAgentRunRequest(BaseModel):
     prompt: str
     scope: ScopeConfig
     budget: BudgetConfig | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class StepApprovalRequest(BaseModel):
@@ -83,7 +86,18 @@ class AgentRun(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     project_id: UUID = Field(foreign_key="projects.id", ondelete="CASCADE", index=True)
     user_id: UUID = Field(foreign_key="profiles.id", ondelete="CASCADE", index=True)
-    status: AgentRunStatus = Field(default=AgentRunStatus.PENDING, index=True)
+    status: AgentRunStatus = Field(
+        default=AgentRunStatus.PENDING,
+        sa_column=Column(
+            SAEnum(
+                AgentRunStatus,
+                native_enum=False,
+                values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            ),
+            nullable=False,
+            index=True,
+        ),
+    )
     scope: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     prompt: str
     provider: str = ""
@@ -113,14 +127,35 @@ class AgentStep(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     run_id: UUID = Field(foreign_key="agent_runs.id", ondelete="CASCADE", index=True)
     step_number: int = Field(index=True)
-    type: AgentStepType = Field(index=True)
+    type: AgentStepType = Field(
+        sa_column=Column(
+            SAEnum(
+                AgentStepType,
+                native_enum=False,
+                values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            ),
+            nullable=False,
+            index=True,
+        )
+    )
     tool_name: str | None = None
     tool_input: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     tool_output: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     llm_output: str | None = None
     token_usage: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     approval_payload: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
-    status: AgentStepStatus = Field(default=AgentStepStatus.PENDING, index=True)
+    status: AgentStepStatus = Field(
+        default=AgentStepStatus.PENDING,
+        sa_column=Column(
+            SAEnum(
+                AgentStepStatus,
+                native_enum=False,
+                values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            ),
+            nullable=False,
+            index=True,
+        ),
+    )
     worker_id: str | None = None
     claimed_at: datetime | None = Field(
         default=None,

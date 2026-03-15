@@ -11,6 +11,16 @@ from .models import (
     StepApprovalRequest,
     UsageInfo,
 )
+from .settings_models import (
+    AgentModelCatalog,
+    AgentModelOption,
+    AgentSettingsRead,
+    AgentSettingsTestRequest,
+    AgentSettingsTestResult,
+    AgentSettingsUpdate,
+    AgentUserSettings,
+)
+from .settings_store import AgentSettingsStore
 from .store import AgentRunStore, AgentStepStore
 
 __all__ = [
@@ -27,4 +37,12 @@ __all__ = [
     "StartAgentRunRequest",
     "StepApprovalRequest",
     "UsageInfo",
+    "AgentModelCatalog",
+    "AgentModelOption",
+    "AgentSettingsRead",
+    "AgentSettingsTestRequest",
+    "AgentSettingsTestResult",
+    "AgentSettingsUpdate",
+    "AgentUserSettings",
+    "AgentSettingsStore",
 ]

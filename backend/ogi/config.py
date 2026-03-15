@@ -142,7 +142,6 @@ class Settings(BaseSettings):
     auto_run_migrations: bool = True
 
     # AI Investigator / Agent
-    agent_enabled: bool = False
     agent_default_max_steps: int = 50
     agent_max_max_steps: int = 200
     agent_default_max_transforms: int = 20

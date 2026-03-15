@@ -57,6 +57,47 @@ class AgentContextBuilder:
                 }
             )
 
+        attempted_actions = self._summarize_attempted_actions(recent_steps)
+        if attempted_actions:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Previously attempted actions and outcomes:\n"
+                        f"{attempted_actions}\n\n"
+                        "Do not repeat the same tool call or rerun the same transform on the same entity "
+                        "unless there is new evidence."
+                    ),
+                }
+            )
+
+        policy_feedback = self._summarize_policy_feedback(run)
+        if policy_feedback:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Policy feedback from recent validation:\n"
+                        f"{policy_feedback}\n\n"
+                        "Use the already collected results. Do not repeat blocked read-only actions."
+                    ),
+                }
+            )
+
+        transform_progress = self._summarize_transform_progress(run)
+        if transform_progress:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Recent transform novelty and exhausted paths:\n"
+                        f"{transform_progress}\n\n"
+                        "Avoid low-yield lateral expansion across the same transform family. "
+                        "Prefer deeper enrichment on strong pivots or finish when only exhausted paths remain."
+                    ),
+                }
+            )
+
         if detailed_steps:
             messages.append(
                 {
@@ -112,3 +153,64 @@ class AgentContextBuilder:
                 line += f" output={str(step.tool_output)[:500]}"
             rendered.append(line)
         return "\n".join(rendered)
+
+    @staticmethod
+    def _summarize_attempted_actions(steps: list[AgentStep]) -> str:
+        summaries: list[str] = []
+        seen: set[str] = set()
+        tool_calls = [step for step in steps if step.type.value == "tool_call" and step.tool_name]
+        for step in tool_calls[-12:]:
+            params = step.tool_input or {}
+            tool_name = step.tool_name or ""
+            if tool_name == "run_transform":
+                signature = (
+                    f"{tool_name}:{params.get('transform_name')}:{params.get('entity_id') or params.get('entity_value')}"
+                )
+            else:
+                signature = f"{tool_name}:{str(params)}"
+            if signature in seen:
+                continue
+            seen.add(signature)
+            summaries.append(f"- {tool_name} {str(params)[:200]}")
+        return "\n".join(summaries)
+
+    @staticmethod
+    def _summarize_policy_feedback(run: AgentRun) -> str:
+        feedback = run.config.get("policy_feedback") if isinstance(run.config, dict) else None
+        if not feedback:
+            return ""
+        items = feedback if isinstance(feedback, list) else [str(feedback)]
+        return "\n".join(f"- {str(item)[:300]}" for item in items[-3:])
+
+    @staticmethod
+    def _summarize_transform_progress(run: AgentRun) -> str:
+        if not isinstance(run.config, dict):
+            return ""
+
+        memory_items = run.config.get("transform_memory") or []
+        recent_memory = [
+            item for item in memory_items[-6:]
+            if isinstance(item, dict)
+        ]
+        exhausted = [
+            str(item).strip()
+            for item in (run.config.get("exhausted_transform_families") or [])
+            if str(item).strip()
+        ]
+
+        lines: list[str] = []
+        if recent_memory:
+            for item in recent_memory:
+                transform_name = str(item.get("transform_name") or "unknown")
+                target = str(item.get("target") or "unknown")
+                new_entities = int(item.get("new_entity_count") or 0)
+                new_edges = int(item.get("new_edge_count") or 0)
+                types = item.get("new_entity_types") or []
+                type_text = ", ".join(str(entry) for entry in types[:4]) if isinstance(types, list) and types else "no new types"
+                yield_tag = "low-yield" if item.get("low_yield") else "productive"
+                lines.append(
+                    f"- {transform_name} on {target}: {new_entities} new entities, {new_edges} new edges, {type_text} [{yield_tag}]"
+                )
+        if exhausted:
+            lines.append(f"- exhausted transform families: {', '.join(exhausted)}")
+        return "\n".join(lines)
