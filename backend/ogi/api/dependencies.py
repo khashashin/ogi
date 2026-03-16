@@ -30,6 +30,7 @@ from ogi.store.map_store import MapStore
 from ogi.store.location_search_store import LocationSearchStore
 from ogi.agent.settings_store import AgentSettingsStore
 from ogi.agent.store import AgentRunStore, AgentStepStore
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -172,6 +173,12 @@ async def get_agent_settings_store(
     session: AsyncSession = Depends(get_session),
 ) -> AgentSettingsStore:
     return AgentSettingsStore(session)
+
+
+async def get_agent_project_memory_store(
+    session: AsyncSession = Depends(get_session),
+) -> AgentProjectMemoryStore:
+    return AgentProjectMemoryStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

@@ -80,6 +80,24 @@ class AgentEventMessage(BaseModel):
     timestamp: datetime
 
 
+class AgentProjectMemoryRunRecord(BaseModel):
+    run_id: UUID
+    prompt: str
+    status: str
+    summary: str
+    updated_at: datetime
+
+
+class AgentProjectMemoryRead(BaseModel):
+    project_id: UUID
+    summary: str
+    known_facts: list[str]
+    recent_findings: list[str]
+    exhausted_paths: list[str]
+    recent_runs: list[AgentProjectMemoryRunRecord]
+    updated_at: datetime
+
+
 class AgentRun(SQLModel, table=True):
     __tablename__ = "agent_runs"
 
@@ -118,6 +136,26 @@ class AgentRun(SQLModel, table=True):
     completed_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+
+
+class AgentProjectMemory(SQLModel, table=True):
+    __tablename__ = "agent_project_memory"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", ondelete="CASCADE", index=True, unique=True)
+    summary: str = ""
+    known_facts: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    recent_findings: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    exhausted_paths: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    recent_runs: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
     )
 
 

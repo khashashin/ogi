@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ogi.agent.models import (
     AgentRun,
+    AgentProjectMemoryRead,
     AgentRunStatus,
     AgentStep,
     AgentStepStatus,
@@ -35,6 +36,7 @@ from ogi.agent.orchestrator import build_agent_event, publish_agent_event
 from ogi.agent.store import AgentRunStore, AgentStepStore
 from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
 from ogi.api.dependencies import (
+    get_agent_project_memory_store,
     get_agent_run_store,
     get_agent_settings_store,
     get_agent_step_store,
@@ -42,6 +44,7 @@ from ogi.api.dependencies import (
     get_api_key_store,
     get_redis,
 )
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.config import settings
 from ogi.models import AuditLogCreate, UserProfile
 from ogi.store.api_key_store import ApiKeyStore
@@ -244,6 +247,36 @@ async def test_agent_settings(
         raise HTTPException(status_code=400, detail="Unsupported AI Investigator provider")
     api_key = await api_key_store.get_key(current_user.id, provider_service_name(provider))
     return await test_provider_settings(provider, data.model, api_key)
+
+
+@router.get("/memory", response_model=AgentProjectMemoryRead)
+async def get_agent_project_memory(
+    project_id: UUID,
+    _role: str = Depends(require_project_viewer),
+    memory_store: AgentProjectMemoryStore = Depends(get_agent_project_memory_store),
+) -> AgentProjectMemoryRead:
+    return await memory_store.build_read_model(project_id)
+
+
+@router.delete("/memory", status_code=204)
+async def reset_agent_project_memory(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
+    memory_store: AgentProjectMemoryStore = Depends(get_agent_project_memory_store),
+    audit_store: AuditLogStore = Depends(get_audit_log_store),
+) -> None:
+    await memory_store.reset_for_project(project_id)
+    await audit_store.create(
+        project_id,
+        current_user.id,
+        AuditLogCreate(
+            action="agent.project_memory_reset",
+            resource_type="agent_project_memory",
+            resource_id=str(project_id),
+            details={"project_id": str(project_id)},
+        ),
+    )
 
 
 @router.get("/runs", response_model=list[AgentRun])

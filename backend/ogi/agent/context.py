@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ogi.agent.models import AgentRun, AgentStep
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.tools import ToolDefinition
 from ogi.store.entity_store import EntityStore
 
@@ -24,7 +25,9 @@ class AgentContextBuilder:
         session: AsyncSession,
     ) -> list[dict[str, str]]:
         entity_store = EntityStore(session)
+        project_memory_store = AgentProjectMemoryStore(session)
         scope_summary = await self._build_scope_summary(run, entity_store)
+        project_memory = await project_memory_store.build_read_model(run.project_id)
         older_steps = recent_steps[:-self.max_recent_steps]
         detailed_steps = recent_steps[-self.max_recent_steps :]
 
@@ -48,6 +51,14 @@ class AgentContextBuilder:
                 ),
             },
         ]
+
+        if project_memory.summary or project_memory.known_facts or project_memory.recent_runs:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": self._render_project_memory(project_memory),
+                }
+            )
 
         if older_steps:
             messages.append(
@@ -121,6 +132,33 @@ class AgentContextBuilder:
             )
 
         return messages
+
+    @staticmethod
+    def _render_project_memory(project_memory: object) -> str:
+        summary = getattr(project_memory, "summary", "") or ""
+        known_facts = getattr(project_memory, "known_facts", []) or []
+        recent_findings = getattr(project_memory, "recent_findings", []) or []
+        exhausted_paths = getattr(project_memory, "exhausted_paths", []) or []
+        recent_runs = getattr(project_memory, "recent_runs", []) or []
+
+        sections: list[str] = ["Project memory from prior AI Investigator activity:"]
+        if summary:
+            sections.append(f"Summary:\n{summary}")
+        if known_facts:
+            sections.append("Known facts:\n" + "\n".join(f"- {item}" for item in known_facts[-6:]))
+        if recent_findings:
+            sections.append("Recent findings:\n" + "\n".join(f"- {item}" for item in recent_findings[-6:]))
+        if exhausted_paths:
+            sections.append("Exhausted paths:\n" + "\n".join(f"- {item}" for item in exhausted_paths[-4:]))
+        if recent_runs:
+            rendered_runs = []
+            for item in recent_runs[-4:]:
+                prompt = getattr(item, "prompt", "")
+                status = getattr(item, "status", "")
+                run_summary = getattr(item, "summary", "")
+                rendered_runs.append(f"- [{status}] {prompt}: {run_summary}")
+            sections.append("Recent runs:\n" + "\n".join(rendered_runs))
+        return "\n\n".join(sections)
 
     async def _build_scope_summary(self, run: AgentRun, entity_store: EntityStore) -> str:
         if run.scope.get("mode") == "selected":

@@ -23,6 +23,7 @@ from ogi.agent.models import (
     AgentStepType,
     ScopeConfig,
 )
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.store import AgentRunStore, AgentStepStore
 from ogi.agent.tools import ToolContext, ToolRegistry
 from ogi.config import settings
@@ -433,6 +434,7 @@ class AgentOrchestrator:
             completed_at=datetime.now(timezone.utc),
         )
         await step_store.create(result_step)
+        await self._sync_project_memory(session, run)
         publish_agent_event(
             self._redis_conn,
             build_agent_event(event_type="agent_tool_result", run=run, step=result_step, summary=message),
@@ -445,6 +447,10 @@ class AgentOrchestrator:
             status=AgentStepStatus.PENDING,
         )
         await step_store.create(next_think)
+
+    async def _sync_project_memory(self, session: AsyncSession, run: AgentRun) -> None:
+        steps = await AgentStepStore(session).list_for_run(run.id)
+        await AgentProjectMemoryStore(session).update_from_run(run, steps)
 
     async def recover_stale_state(self) -> tuple[int, int]:
         async with self._session_factory() as session:
@@ -599,6 +605,7 @@ class AgentOrchestrator:
             await session.commit()
             await session.refresh(run)
             await session.refresh(step)
+            await self._sync_project_memory(session, run)
             publish_agent_event(
                 self._redis_conn,
                 build_agent_event(
@@ -627,6 +634,7 @@ class AgentOrchestrator:
         await session.commit()
         await session.refresh(run)
         await session.refresh(step)
+        await self._sync_project_memory(session, run)
 
         event_type = self._event_type_for_step(run, step)
         if event_type is not None:
@@ -655,6 +663,7 @@ class AgentOrchestrator:
         await session.commit()
         await session.refresh(run)
         await session.refresh(step)
+        await self._sync_project_memory(session, run)
         publish_agent_event(
             self._redis_conn,
             build_agent_event(
@@ -907,6 +916,7 @@ class AgentOrchestrator:
             completed_at=datetime.now(timezone.utc),
         )
         await step_store.create(result_step)
+        await self._sync_project_memory(session, run)
         publish_agent_event(
             self._redis_conn,
             build_agent_event(event_type="agent_tool_result", run=run, step=result_step, summary=result.summary),
