@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    volumes:
+      - ./plugins:/app/plugins
+    environment:
+      - OGI_DATABASE_URL=${OGI_DATABASE_URL}
+      - OGI_USE_SQLITE=false
+      - OGI_GITHUB_TOKEN=${OGI_GITHUB_TOKEN:-}
+      - OGI_SUPABASE_URL=${OGI_SUPABASE_URL}
+      - OGI_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY}
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${OGI_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${OGI_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    ports:
+      - "80" # Coolify Traefik proxy will route the configured domain to this port
+    depends_on:
+      - backend
