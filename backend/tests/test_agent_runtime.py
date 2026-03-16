@@ -17,6 +17,7 @@ os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7
 from ogi.agent.context import AgentContextBuilder
 from ogi.agent.llm_provider import LLMProvider, LlmDecision, ScriptedLLMProvider, TokenUsage
 from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType, ScopeConfig
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.orchestrator import AgentOrchestrator
 from ogi.agent.store import AgentStepStore
 from ogi.agent.tools import ToolContext
@@ -659,6 +660,72 @@ async def test_agent_create_entity_tool_creates_linked_entity_and_expands_select
         log.project_id == project_id and log.resource_id == str(created_url_id)
         for log in audit_logs
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_project_memory_updates_and_is_injected_into_future_runs(client: AsyncClient):
+    project_id = await _create_project(client, "AgentProjectMemoryProject")
+    created_entity = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "memory.example"},
+    )
+    assert created_entity.status_code == 201
+
+    first_run_id = await _start_agent_run(client, project_id, prompt="Inspect project memory seed run.")
+    orchestrator = _build_orchestrator(
+        worker_id="worker-project-memory",
+        decisions=[
+            LlmDecision(
+                reasoning="List current entities.",
+                action_type="tool_call",
+                tool_name="list_entities",
+                tool_params={"limit": 10},
+                token_usage=TokenUsage(prompt_tokens=7, completion_tokens=4),
+            ),
+            LlmDecision(
+                reasoning="Finish with a compact summary.",
+                action_type="finish",
+                final_summary="Identified the seed domain memory.example for future investigation context.",
+                token_usage=TokenUsage(prompt_tokens=8, completion_tokens=4),
+            ),
+        ],
+    )
+
+    for _ in range(6):
+        await orchestrator.run_once()
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        memory = await AgentProjectMemoryStore(session).build_read_model(project_id)
+        first_run = await session.get(AgentRun, first_run_id)
+        assert first_run is not None
+        second_run = AgentRun(
+            project_id=project_id,
+            user_id=first_run.user_id,
+            status=AgentRunStatus.PENDING,
+            scope={"mode": "all", "entity_ids": []},
+            prompt="Use prior project memory.",
+            provider="openai",
+            model="gpt-4.1-mini",
+            config={},
+            budget={"max_steps": 10, "max_transforms": 10, "max_runtime_sec": 600},
+            usage={},
+        )
+        session.add(second_run)
+        await session.commit()
+        await session.refresh(second_run)
+        messages = await AgentContextBuilder().build_messages(
+            run=second_run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Identified the seed domain memory.example" in memory.summary
+    assert any(run.prompt == "Inspect project memory seed run." for run in memory.recent_runs)
+    assert "Project memory from prior AI Investigator activity" in combined
+    assert "memory.example" in combined
 
 
 @pytest.mark.asyncio
