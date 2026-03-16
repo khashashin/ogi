@@ -34,7 +34,9 @@ class AgentContextBuilder:
                 "content": (
                     "You are OGI AI Investigator. Decide the next best investigative action. "
                     "Use only the available tools. Keep reasoning concise, factual, and auditable. "
-                    "Do not invent entities or transform results."
+                    "Do not invent entities or transform results. "
+                    "Entity properties are metadata, not standalone graph entities, unless they are separately "
+                    "returned by search/list tools or explicitly created with create_entity."
                 ),
             },
             {
@@ -97,6 +99,16 @@ class AgentContextBuilder:
                     ),
                 }
             )
+
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "When you run a transform, the transform_name must exactly match a name returned by "
+                    "list_transforms for that specific entity. Do not invent or paraphrase transform names."
+                ),
+            }
+        )
 
         if detailed_steps:
             messages.append(
