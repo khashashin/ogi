@@ -12,6 +12,7 @@ interface InvestigatorState {
   loadActiveRun: (projectId: string) => Promise<void>;
   refreshRun: (projectId: string, runId: string) => Promise<void>;
   cancelRun: (projectId: string, runId?: string) => Promise<void>;
+  retryRun: (projectId: string, runId?: string) => Promise<void>;
   approveStep: (projectId: string, runId: string, stepId: string, note?: string) => Promise<void>;
   rejectStep: (projectId: string, runId: string, stepId: string, note?: string) => Promise<void>;
   handleMessage: (projectId: string, msg: AgentEventMessage) => Promise<void>;
@@ -74,6 +75,19 @@ export const useInvestigatorStore = create<InvestigatorState>((set, get) => ({
     try {
       const run = await api.agent.cancel(projectId, targetRunId);
       const steps = await api.agent.listSteps(projectId, targetRunId);
+      set({ activeRun: run, steps, isLoading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error), isLoading: false });
+    }
+  },
+
+  retryRun: async (projectId, runId) => {
+    const targetRunId = runId ?? get().activeRun?.id;
+    if (!targetRunId) return;
+    set({ isLoading: true, error: null });
+    try {
+      const run = await api.agent.retry(projectId, targetRunId);
+      const steps = await api.agent.listSteps(projectId, run.id);
       set({ activeRun: run, steps, isLoading: false });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error), isLoading: false });

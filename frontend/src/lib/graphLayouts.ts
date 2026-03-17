@@ -5,6 +5,10 @@ import type { Entity } from "../types/entity";
 
 export type GraphLayoutPreset =
   | "force"
+  | "cose"
+  | "fcose"
+  | "kamada-kawai"
+  | "sugiyama"
   | "circular"
   | "grid"
   | "spiral"
@@ -24,9 +28,14 @@ export interface GraphLayoutOption {
 export type GraphLayoutTarget = "all" | "selected" | "unpinned";
 
 const TAU = Math.PI * 2;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 export const GRAPH_LAYOUT_OPTIONS: GraphLayoutOption[] = [
   { id: "force", label: "Force-directed", description: "Balanced default for mixed investigation graphs." },
+  { id: "cose", label: "CoSE", description: "Compound spring style layout with clearer component separation." },
+  { id: "fcose", label: "fCoSE", description: "Faster, more compact spring layout for investigation graphs." },
+  { id: "kamada-kawai", label: "Kamada-Kawai", description: "Classic spring-embedder that emphasizes graph distances." },
+  { id: "sugiyama", label: "Sugiyama", description: "Layered hierarchical layout for directional relationship flows." },
   { id: "circular", label: "Circular", description: "Single ring, useful for quick overview." },
   { id: "grid", label: "Grid", description: "Even spacing for dense messy graphs." },
   { id: "spiral", label: "Spiral", description: "Unwinds nodes outward in a readable sweep." },
@@ -70,20 +79,30 @@ function applyDegreeSizing(graph: Graph, entities: Map<string, Entity>): void {
   });
 }
 
+function seedForcePositions(graph: Graph, entities: Map<string, Entity>): void {
+  const nodes = sortedNodes(graph, entities);
+  nodes.forEach((node, index) => {
+    const radius = 28 * Math.sqrt(index + 1);
+    const angle = index * GOLDEN_ANGLE;
+    setNodePosition(graph, node, Math.cos(angle) * radius, Math.sin(angle) * radius);
+  });
+}
+
 export function applyForceDirectedLayout(graph: Graph, entities: Map<string, Entity>): void {
+  seedForcePositions(graph, entities);
   applyDegreeSizing(graph, entities);
 
   forceAtlas2.assign(graph, {
-    iterations: 320,
+    iterations: graph.order > 200 ? 220 : 520,
     settings: {
       adjustSizes: true,
-      gravity: 0.25,
-      slowDown: graph.order > 200 ? 12 : 8,
-      scalingRatio: graph.order > 200 ? 18 : 14,
+      gravity: 1,
+      slowDown: graph.order > 200 ? 10 : 4,
+      scalingRatio: graph.order > 200 ? 12 : 8,
       strongGravityMode: false,
       barnesHutOptimize: graph.order > 50,
-      outboundAttractionDistribution: true,
-      linLogMode: true,
+      outboundAttractionDistribution: false,
+      linLogMode: false,
     },
   });
 }
@@ -283,6 +302,186 @@ function applyTimeline({ graph, entities }: LayoutContext): void {
   });
 }
 
+function shortestPathMap(graph: Graph, start: string): Map<string, number> {
+  const distances = new Map<string, number>([[start, 0]]);
+  const queue = [start];
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node) continue;
+    const currentDistance = distances.get(node) ?? 0;
+    for (const neighbor of graph.neighbors(node)) {
+      if (distances.has(neighbor)) continue;
+      distances.set(neighbor, currentDistance + 1);
+      queue.push(neighbor);
+    }
+  }
+  return distances;
+}
+
+function getCurrentPosition(graph: Graph, node: string) {
+  const attrs = graph.getNodeAttributes(node) as { x?: number; y?: number };
+  return {
+    x: Number(attrs.x) || 0,
+    y: Number(attrs.y) || 0,
+  };
+}
+
+function applyKamadaKawai(graph: Graph, entities: Map<string, Entity>): void {
+  const nodes = sortedNodes(graph, entities);
+  if (nodes.length < 2) return;
+
+  applyConcentric({ graph, entities });
+
+  if (nodes.length > 140) {
+    applyForceDirectedLayout(graph, entities);
+    return;
+  }
+
+  const distances = new Map<string, Map<string, number>>();
+  let maxDistance = 1;
+  for (const node of nodes) {
+    const dist = shortestPathMap(graph, node);
+    distances.set(node, dist);
+    for (const value of dist.values()) {
+      if (value > maxDistance) maxDistance = value;
+    }
+  }
+
+  const area = Math.max(400, nodes.length * 35);
+  const idealLength = area / maxDistance;
+  const iterations = Math.min(120, 20 + nodes.length * 2);
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const positions = new Map(nodes.map((node) => [node, getCurrentPosition(graph, node)]));
+    const displacements = new Map<string, { x: number; y: number }>(
+      nodes.map((node) => [node, { x: 0, y: 0 }]),
+    );
+
+    for (let i = 0; i < nodes.length; i += 1) {
+      const a = nodes[i];
+      const posA = positions.get(a)!;
+      const distA = distances.get(a)!;
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const b = nodes[j];
+        const posB = positions.get(b)!;
+        const graphDistance = distA.get(b) ?? maxDistance + 1;
+        const preferred = idealLength * graphDistance;
+        const dx = posB.x - posA.x;
+        const dy = posB.y - posA.y;
+        const euclidean = Math.max(0.01, Math.hypot(dx, dy));
+        const delta = euclidean - preferred;
+        const stiffness = 1 / (graphDistance * graphDistance);
+        const force = stiffness * delta * 0.015;
+        const fx = (dx / euclidean) * force;
+        const fy = (dy / euclidean) * force;
+
+        const dispA = displacements.get(a)!;
+        const dispB = displacements.get(b)!;
+        dispA.x += fx;
+        dispA.y += fy;
+        dispB.x -= fx;
+        dispB.y -= fy;
+      }
+    }
+
+    for (const node of nodes) {
+      const pos = positions.get(node)!;
+      const disp = displacements.get(node)!;
+      setNodePosition(graph, node, pos.x + disp.x, pos.y + disp.y);
+    }
+  }
+}
+
+function applyCoseLike(graph: Graph, entities: Map<string, Entity>, compact: boolean): void {
+  seedForcePositions(graph, entities);
+  applyComponents({ graph, entities });
+  applyDegreeSizing(graph, entities);
+
+  forceAtlas2.assign(graph, {
+    iterations: compact ? 260 : 420,
+    settings: {
+      adjustSizes: true,
+      gravity: compact ? 1.4 : 0.9,
+      strongGravityMode: compact,
+      slowDown: compact ? 5 : 7,
+      scalingRatio: compact ? 7 : 10,
+      barnesHutOptimize: graph.order > 50,
+      outboundAttractionDistribution: false,
+      linLogMode: compact,
+    },
+  });
+}
+
+function topologicalLayers(graph: Graph, orderedNodes: string[]): Map<string, number> {
+  const layerByNode = new Map<string, number>();
+  const indegree = new Map<string, number>();
+  const queue: string[] = [];
+
+  for (const node of orderedNodes) {
+    const degree = typeof graph.inDegree === "function" ? graph.inDegree(node) : graph.degree(node);
+    indegree.set(node, degree);
+    if (degree === 0) {
+      queue.push(node);
+      layerByNode.set(node, 0);
+    }
+  }
+
+  const remaining = new Set(orderedNodes);
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    remaining.delete(node);
+    const currentLayer = layerByNode.get(node) ?? 0;
+    const neighbors = typeof graph.outNeighbors === "function" ? graph.outNeighbors(node) : graph.neighbors(node);
+    for (const neighbor of neighbors) {
+      const nextLayer = Math.max(layerByNode.get(neighbor) ?? 0, currentLayer + 1);
+      layerByNode.set(neighbor, nextLayer);
+      const nextIndegree = (indegree.get(neighbor) ?? 0) - 1;
+      indegree.set(neighbor, nextIndegree);
+      if (nextIndegree <= 0) {
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  if (remaining.size > 0) {
+    const components = connectedComponents(graph);
+    for (const component of components) {
+      const anchor = component[0];
+      if (!anchor || !remaining.has(anchor)) continue;
+      const distances = shortestPathMap(graph, anchor);
+      for (const node of component) {
+        if (!layerByNode.has(node)) layerByNode.set(node, distances.get(node) ?? 0);
+      }
+    }
+  }
+
+  return layerByNode;
+}
+
+function applySugiyama({ graph, entities }: LayoutContext): void {
+  const nodes = sortedNodes(graph, entities);
+  const layerByNode = topologicalLayers(graph, nodes);
+  const groups = groupNodesByKey(nodes, (node) => String(layerByNode.get(node) ?? 0))
+    .sort((a, b) => Number(a[0]) - Number(b[0]));
+
+  const layerGapY = 180;
+  const nodeGapX = 180;
+  groups.forEach(([layer, layerNodes]) => {
+    const numericLayer = Number(layer) || 0;
+    const sortedLayerNodes = layerNodes.slice().sort((a, b) => {
+      const degreeDiff = graph.degree(b) - graph.degree(a);
+      if (degreeDiff !== 0) return degreeDiff;
+      return (entities.get(a)?.value ?? a).localeCompare(entities.get(b)?.value ?? b);
+    });
+    const totalWidth = Math.max(0, (sortedLayerNodes.length - 1) * nodeGapX);
+    sortedLayerNodes.forEach((node, index) => {
+      const x = index * nodeGapX - totalWidth / 2;
+      const y = numericLayer * layerGapY;
+      setNodePosition(graph, node, x, y);
+    });
+  });
+}
+
 export function applyGraphLayout(
   preset: GraphLayoutPreset,
   graph: Graph,
@@ -323,6 +522,18 @@ export function applyGraphLayout(
   switch (preset) {
     case "force":
       applyForceDirectedLayout(graph, entities);
+      break;
+    case "cose":
+      applyCoseLike(graph, entities, false);
+      break;
+    case "fcose":
+      applyCoseLike(graph, entities, true);
+      break;
+    case "kamada-kawai":
+      applyKamadaKawai(graph, entities);
+      break;
+    case "sugiyama":
+      applySugiyama(ctx);
       break;
     case "circular":
       circular.assign(graph);

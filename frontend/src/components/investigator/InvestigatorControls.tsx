@@ -4,6 +4,7 @@ interface InvestigatorControlsProps {
   run: AgentRun | null;
   disabled?: boolean;
   onCancel: () => void;
+  onRetry: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
 }
@@ -28,9 +29,11 @@ export function InvestigatorControls({
   run,
   disabled = false,
   onCancel,
+  onRetry,
   onRefresh,
   onOpenSettings,
 }: InvestigatorControlsProps) {
+  const canRetry = Boolean(run && ["completed", "failed", "cancelled"].includes(run.status));
   return (
     <div className="flex items-center justify-between border-b border-border px-3 py-2">
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
@@ -58,6 +61,13 @@ export function InvestigatorControls({
           className="rounded border border-border px-2 py-1 text-[11px] text-text-muted hover:bg-surface-hover hover:text-text"
         >
           Refresh
+        </button>
+        <button
+          onClick={onRetry}
+          disabled={disabled || !canRetry}
+          className="rounded border border-border px-2 py-1 text-[11px] text-text-muted hover:bg-surface-hover hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Retry
         </button>
         <button
           onClick={onCancel}

@@ -66,6 +66,8 @@ const DEFAULT_DECLUTTER_STATE: GraphDeclutterState = {
   lowDegreeThreshold: 1,
 };
 
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
 function loadPositions(projectId: string): NodePositions {
   try {
     const raw = localStorage.getItem(`ogi-positions-${projectId}`);
@@ -460,12 +462,22 @@ function createGraph(): Graph {
   return new Graph({ multi: true, type: "directed" });
 }
 
-function buildNodeAttrs(entity: Entity) {
+function computeInitialPosition(index: number) {
+  const radius = 24 * Math.sqrt(index + 1);
+  const angle = index * GOLDEN_ANGLE;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
+
+function buildNodeAttrs(entity: Entity, index = 0) {
   const meta = ENTITY_TYPE_META[entity.type];
+  const position = computeInitialPosition(index);
   return {
     label: entity.value,
-    x: Math.random() * 800,
-    y: Math.random() * 600,
+    x: position.x,
+    y: position.y,
     size: 8 + entity.weight * 2,
     color: meta?.color ?? "#6366f1",
     type: "circle" as const,
@@ -564,20 +576,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const pinnedState = loadPinnedGraphState(projectId);
       const declutterState = loadDeclutterState(projectId);
 
-      for (const entity of data.entities) {
+      data.entities.forEach((entity, index) => {
         const meta = ENTITY_TYPE_META[entity.type];
         const pos = savedPositions[entity.id];
+        const initial = computeInitialPosition(index);
         graph.addNode(entity.id, {
           label: entity.value,
-          x: pos?.x ?? Math.random() * 800,
-          y: pos?.y ?? Math.random() * 600,
+          x: pos?.x ?? initial.x,
+          y: pos?.y ?? initial.y,
           size: 8 + entity.weight * 2,
           color: meta?.color ?? "#6366f1",
           type: "circle",
           entityType: entity.type,
         });
         entities.set(entity.id, entity);
-      }
+      });
 
       for (const edge of data.edges) {
         if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
@@ -643,20 +656,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const pinnedState = loadPinnedGraphState(projectId);
       const declutterState = loadDeclutterState(projectId);
 
-      for (const entity of data.entities) {
+      data.entities.forEach((entity, index) => {
         const meta = ENTITY_TYPE_META[entity.type];
         const pos = savedPositions[entity.id];
+        const initial = computeInitialPosition(index);
         graph.addNode(entity.id, {
           label: entity.value,
-          x: pos?.x ?? Math.random() * 800,
-          y: pos?.y ?? Math.random() * 600,
+          x: pos?.x ?? initial.x,
+          y: pos?.y ?? initial.y,
           size: 8 + entity.weight * 2,
           color: meta?.color ?? "#6366f1",
           type: "circle",
           entityType: entity.type,
         });
         entities.set(entity.id, entity);
-      }
+      });
 
       for (const edge of data.edges) {
         if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
@@ -708,7 +722,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   addEntity: (projectId, entity) => {
-    const nodeAttrs = buildNodeAttrs(entity);
+    const nodeAttrs = buildNodeAttrs(entity, get().entities.size);
     get().upsertEntities(projectId, [entity]);
     useUndoStore.getState().push({ type: "add_entity", entity, nodeAttrs });
   },
@@ -720,7 +734,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const pendingEdges = new Map(state.pendingEdges);
 
     for (const entity of incomingEntities) {
-      const nodeAttrs = buildNodeAttrs(entity);
+      const nodeAttrs = buildNodeAttrs(entity, entities.size);
       if (!graph.hasNode(entity.id)) {
         graph.addNode(entity.id, nodeAttrs);
       } else {
