@@ -15,6 +15,20 @@ from ogi.store.entity_store import EntityStore
 class AgentContextBuilder:
     max_recent_steps: int = 8
     max_scope_entities: int = 25
+    PLATFORM_KEYWORDS = (
+        "youtube",
+        "github",
+        "reddit",
+        "twitter",
+        "x.com",
+        "instagram",
+        "tiktok",
+        "linkedin",
+        "facebook",
+        "telegram",
+        "discord",
+        "twitch",
+    )
 
     async def build_messages(
         self,
@@ -52,6 +66,10 @@ class AgentContextBuilder:
             },
         ]
 
+        goal_focus = self._render_goal_focus(run.prompt)
+        if goal_focus:
+            messages.append({"role": "system", "content": goal_focus})
+
         if project_memory.summary or project_memory.known_facts or project_memory.recent_runs:
             messages.append(
                 {
@@ -59,6 +77,10 @@ class AgentContextBuilder:
                     "content": self._render_project_memory(project_memory),
                 }
             )
+
+        resume_context = self._render_resume_context(run)
+        if resume_context:
+            messages.append({"role": "system", "content": resume_context})
 
         if older_steps:
             messages.append(
@@ -159,6 +181,63 @@ class AgentContextBuilder:
                 rendered_runs.append(f"- [{status}] {prompt}: {run_summary}")
             sections.append("Recent runs:\n" + "\n".join(rendered_runs))
         return "\n\n".join(sections)
+
+    def _render_goal_focus(self, prompt: str) -> str:
+        normalized = prompt.lower()
+        targets = [keyword for keyword in self.PLATFORM_KEYWORDS if keyword in normalized]
+        if not targets:
+            return (
+                "Stay tightly aligned to the user goal. Prefer direct enrichment of the requested target over "
+                "broad lateral pivots. Finish once the goal is sufficiently answered and no clearly better direct "
+                "transform remains."
+            )
+
+        rendered_targets = ", ".join(sorted(set(targets)))
+        return (
+            f"Goal focus: the user explicitly asked about {rendered_targets}. "
+            "Prioritize entities and transforms directly related to that target. "
+            "Do not pivot into unrelated sibling accounts unless they are clearly needed to answer the target question. "
+            "Once you identify the target entity and complete one or two direct enrichments on it, prefer summarizing "
+            "the findings instead of continuing broad exploration."
+        )
+
+    @staticmethod
+    def _render_resume_context(run: AgentRun) -> str:
+        if not isinstance(run.config, dict):
+            return ""
+        resume = run.config.get("resume_context")
+        if not isinstance(resume, dict):
+            return ""
+
+        source_run_id = str(resume.get("source_run_id") or "").strip()
+        source_status = str(resume.get("source_status") or "").strip()
+        source_summary = str(resume.get("source_summary") or "").strip()
+        source_error = str(resume.get("source_error") or "").strip()
+        last_step_number = resume.get("last_completed_step_number")
+        recent_steps = resume.get("recent_steps") if isinstance(resume.get("recent_steps"), list) else []
+        attempted_actions = resume.get("attempted_actions") if isinstance(resume.get("attempted_actions"), list) else []
+
+        lines = [
+            "Resume context from a previous investigator run:",
+            f"- source run id: {source_run_id or 'unknown'}",
+            f"- source status: {source_status or 'unknown'}",
+        ]
+        if last_step_number is not None:
+            lines.append(f"- last completed step number: {last_step_number}")
+        if source_summary:
+            lines.append(f"- prior summary: {source_summary}")
+        if source_error:
+            lines.append(f"- prior error: {source_error}")
+        if recent_steps:
+            lines.append("Recent steps before the prior run stopped:")
+            lines.extend(f"- {str(item)}" for item in recent_steps[-6:])
+        if attempted_actions:
+            lines.append("Previously attempted actions to avoid repeating:")
+            lines.extend(f"- {str(item)}" for item in attempted_actions[-10:])
+        lines.append(
+            "Continue from these collected results. Do not restart the investigation from scratch or repeat the same actions unless new evidence justifies it."
+        )
+        return "\n".join(lines)
 
     async def _build_scope_summary(self, run: AgentRun, entity_store: EntityStore) -> str:
         if run.scope.get("mode") == "selected":
