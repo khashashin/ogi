@@ -729,6 +729,64 @@ async def test_agent_project_memory_updates_and_is_injected_into_future_runs(cli
 
 
 @pytest.mark.asyncio
+async def test_agent_context_builder_adds_goal_focus_for_platform_specific_prompt(client: AsyncClient):
+    project_id = await _create_project(client, "AgentGoalFocusProject")
+    run_id = await _start_agent_run(client, project_id, prompt="find additional information about youtube account")
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        messages = await AgentContextBuilder().build_messages(
+            run=run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Goal focus:" in combined
+    assert "youtube" in combined.lower()
+    assert "complete one or two direct enrichments" in combined
+
+
+@pytest.mark.asyncio
+async def test_agent_context_builder_includes_resume_context(client: AsyncClient):
+    project_id = await _create_project(client, "AgentResumeContextProject")
+    run_id = await _start_agent_run(client, project_id, prompt="Resume prior work.")
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        run.config = {
+            **dict(run.config or {}),
+            "resume_context": {
+                "source_run_id": "11111111-1111-1111-1111-111111111111",
+                "source_status": "failed",
+                "source_summary": "Previously found the YouTube profile URL.",
+                "source_error": "AI Investigator max_steps budget exceeded",
+                "last_completed_step_number": 52,
+                "recent_steps": ["step 52: tool_result [completed] tool=run_transform output=Ran url_to_headers"],
+                "attempted_actions": ["run_transform {'entity_id': 'abc', 'transform_name': 'url_to_headers'}"],
+            },
+        }
+        session.add(run)
+        await session.commit()
+        messages = await AgentContextBuilder().build_messages(
+            run=run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Resume context from a previous investigator run" in combined
+    assert "Previously found the YouTube profile URL" in combined
+    assert "Do not restart the investigation from scratch" in combined
+
+
+@pytest.mark.asyncio
 async def test_agent_duplicate_transform_is_rejected_as_loop(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     project_id = await _create_project(client, "AgentLoopProject")
     created_entity = await client.post(
