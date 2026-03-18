@@ -8,6 +8,8 @@ import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MyProjectsPage } from "./components/MyProjectsPage";
 import { DiscoverPage } from "./components/DiscoverPage";
+import { TermsPage } from "./components/TermsPage";
+import { PrivacyPage } from "./components/PrivacyPage";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
@@ -72,6 +74,8 @@ function App() {
         <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
 
         {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
