@@ -18,4 +18,12 @@ describe("getEnv", () => {
     const { getEnv } = await import("./env");
     expect(getEnv("VITE_SUPABASE_REDIRECT_URL")).toBeUndefined();
   });
+
+  it("supports GA measurement ID from runtime config", async () => {
+    (window as Window & { __OGI_RUNTIME_CONFIG__?: Record<string, string> }).__OGI_RUNTIME_CONFIG__ = {
+      VITE_GA_MEASUREMENT_ID: "G-TEST123456",
+    };
+    const { getEnv } = await import("./env");
+    expect(getEnv("VITE_GA_MEASUREMENT_ID")).toBe("G-TEST123456");
+  });
 });
