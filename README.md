@@ -311,16 +311,16 @@ permissions:
 
 ### Tech Stack
 
-| Layer            | Technology                                                               |
-| ---------------- | ------------------------------------------------------------------------ |
-| Backend          | Python 3.14+, FastAPI, SQLModel, asyncpg / aiosqlite                     |
-| Frontend         | React 19, TypeScript 5.9, Sigma.js (graphology), Zustand, Tailwind CSS 4 |
-| Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                        |
-| Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                  |
-| Job Queue        | Redis 7 + RQ (async transforms)                                          |
+| Layer            | Technology                                                                  |
+| ---------------- | --------------------------------------------------------------------------- |
+| Backend          | Python 3.14+, FastAPI, SQLModel, asyncpg / aiosqlite                        |
+| Frontend         | React 19, TypeScript 5.9, Sigma.js (graphology), Zustand, Tailwind CSS 4    |
+| Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                           |
+| Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                     |
+| Job Queue        | Redis 7 + RQ (async transforms)                                             |
 | AI Runtime       | Provider-backed AI Investigator worker with audited transform orchestration |
-| Package Managers | uv (backend), pnpm (frontend)                                            |
-| Deployment       | Docker, nginx, GHCR                                                      |
+| Package Managers | uv (backend), pnpm (frontend)                                               |
+| Deployment       | Docker, nginx, GHCR                                                         |
 
 ### Project Structure
 
@@ -385,8 +385,8 @@ List-style settings accept either:
 | `OGI_REDIS_URL`                                 | Redis connection string for RQ/jobs                                                                              | `redis://localhost:6379/0`                          |
 | `OGI_RQ_QUEUE_NAME`                             | Queue name for transform jobs                                                                                    | `transforms`                                        |
 | `OGI_TRANSFORM_TIMEOUT`                         | Per-transform job timeout in seconds                                                                             | `300`                                               |
-| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`           | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
-| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                  | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
+| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`            | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
+| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                   | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
 | `OGI_AUTO_RUN_MIGRATIONS`                       | Auto-run Alembic on local non-SQLite app startup                                                                 | `true`                                              |
 | `OGI_RUN_DB_MIGRATIONS`                         | Run DB migrations in container entrypoint                                                                        | `false`                                             |
 | `OGI_DB_MIGRATION_RETRIES`                      | Entry-point migration retry count                                                                                | `30`                                                |
