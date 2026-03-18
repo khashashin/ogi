@@ -160,7 +160,17 @@ docker compose up
 
 ### Production
 
-Use the prebuilt GHCR images:
+Use the prebuilt GHCR images.
+
+Important: [docker-compose.prod.yml](https://github.com/khashashin/ogi/blob/main/docker-compose.prod.yml) requires an external PostgreSQL database. It does not include a `db` service.
+
+If you want the all-in-one local Docker stack with built-in Postgres and Redis, use:
+
+```bash
+docker compose up -d
+```
+
+Use the production compose file only when you already have a reachable PostgreSQL instance and have set `OGI_DATABASE_URL` accordingly:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
@@ -188,16 +198,31 @@ OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=none,max_urls=none,max_links=non
 The override is keyed by transform setting name and applies to built-in transforms and community plugins that use OGI's shared transform base/runtime.
 
 <details>
-<summary><strong>Services overview</strong></summary>
+<summary><strong>Development Compose Services</strong></summary>
 
-| Service    | Description                | Port |
-| ---------- | -------------------------- | ---- |
-| `backend`  | FastAPI application server | 8000 |
-| `worker`   | RQ async job worker        | -    |
-| `agent-worker` | AI Investigator worker | -    |
-| `frontend` | React app served via nginx | 80   |
-| `db`       | PostgreSQL 16              | 5432 |
-| `redis`    | Redis 7 (job queue)        | 6379 |
+| Service        | Description                | Port |
+| -------------- | -------------------------- | ---- |
+| `backend`      | FastAPI application server | 8000 |
+| `worker`       | RQ async job worker        | -    |
+| `agent-worker` | AI Investigator worker     | -    |
+| `frontend`     | React app served via nginx | 80   |
+| `db`           | PostgreSQL 16              | 5432 |
+| `redis`        | Redis 7 (job queue)        | 6379 |
+
+</details>
+
+<details>
+<summary><strong>Production Compose Services</strong></summary>
+
+| Service        | Description                | Port |
+| -------------- | -------------------------- | ---- |
+| `backend`      | FastAPI application server | 8000 |
+| `worker`       | RQ async job worker        | -    |
+| `agent-worker` | AI Investigator worker     | -    |
+| `frontend`     | React app served via nginx | 80   |
+| `redis`        | Redis 7 (job queue)        | 6379 |
+
+`docker-compose.prod.yml` expects an external PostgreSQL database via `OGI_DATABASE_URL`.
 
 </details>
 
