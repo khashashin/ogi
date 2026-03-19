@@ -175,35 +175,39 @@ class AgentStepStore:
     ) -> AgentStep | None:
         now = datetime.now(timezone.utc)
         stale_cutoff = now - timedelta(seconds=stale_after_seconds)
+        claimable = await self._claim_one_step(
+            worker_id=worker_id,
+            now=now,
+            where_clause=AgentStep.status.in_(CLAIMABLE_STEP_STATUSES),
+        )
+        if claimable is not None:
+            return claimable
 
-        claimable_step_id = (
-            select(AgentStep.id)
-            .join(AgentRun, AgentRun.id == AgentStep.run_id)
-            .where(AgentRun.status.in_(RUNNABLE_RUN_STATUSES))
-            .where(
-                or_(
-                    AgentStep.status.in_(CLAIMABLE_STEP_STATUSES),
-                    and_(
-                        AgentStep.status == AgentStepStatus.RUNNING,
-                        AgentStep.claimed_at.is_not(None),
-                        AgentStep.claimed_at < stale_cutoff,
-                    ),
-                )
-            )
-            .order_by(AgentStep.created_at.asc(), AgentStep.step_number.asc())
-            .limit(1)
-            .scalar_subquery()
+        return await self._claim_one_step(
+            worker_id=worker_id,
+            now=now,
+            where_clause=and_(
+                AgentStep.status == AgentStepStatus.RUNNING,
+                AgentStep.claimed_at.is_not(None),
+                AgentStep.claimed_at < stale_cutoff,
+            ),
         )
 
+    async def _claim_one_step(
+        self,
+        *,
+        worker_id: str,
+        now: datetime,
+        where_clause: object,
+    ) -> AgentStep | None:
         stmt = (
-            update(AgentStep)
-            .where(AgentStep.id == claimable_step_id)
-            .values(
-                status=AgentStepStatus.RUNNING,
-                worker_id=worker_id,
-                claimed_at=now,
-            )
-            .returning(AgentStep)
+            select(AgentStep)
+            .join(AgentRun, AgentRun.id == AgentStep.run_id)
+            .where(AgentRun.status.in_(RUNNABLE_RUN_STATUSES))
+            .where(where_clause)
+            .order_by(AgentStep.created_at.asc(), AgentStep.step_number.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
         )
         result = await self.session.execute(stmt)
         claimed = result.scalar_one_or_none()
@@ -211,7 +215,12 @@ class AgentStepStore:
             await self.session.rollback()
             return None
 
+        claimed.status = AgentStepStatus.RUNNING
+        claimed.worker_id = worker_id
+        claimed.claimed_at = now
+        self.session.add(claimed)
         await self.session.commit()
+        await self.session.refresh(claimed)
         return claimed
 
     async def recover_stale_claims(self, timeout_seconds: int) -> int:
