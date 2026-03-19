@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Undo2, Redo2, User, Lock, Unlock, ChevronRight, House, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
-import { TransformHub } from "./marketplace/TransformHub";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useUndoStore } from "../stores/undoStore";
@@ -55,7 +54,6 @@ export function Toolbar() {
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showProfile, setShowProfile] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
-  const [showPlugins, setShowPlugins] = useState(false);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [showDeclutter, setShowDeclutter] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
@@ -605,15 +603,10 @@ export function Toolbar() {
         open={showProfile}
         onClose={() => setShowProfile(false)}
         onOpenApiKeys={() => setShowApiKeys(true)}
-        onOpenPlugins={() => setShowPlugins(true)}
       />
       <ApiKeySettings
         open={showApiKeys}
         onClose={() => setShowApiKeys(false)}
-      />
-      <TransformHub
-        open={showPlugins}
-        onClose={() => setShowPlugins(false)}
       />
     </div>
   );

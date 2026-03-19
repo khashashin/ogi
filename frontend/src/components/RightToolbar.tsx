@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Download, Globe, GlobeLock, Keyboard, Users } from "lucide-react";
+import { Download, Globe, GlobeLock, Keyboard, Puzzle, Users } from "lucide-react";
 
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ShareDialog } from "./ShareDialog";
+import { TransformHub } from "./marketplace/TransformHub";
 import { useProjectStore } from "../stores/projectStore";
 import { useAuthStore } from "../stores/authStore";
 import { useIsViewer } from "../hooks/useIsViewer";
@@ -15,6 +16,7 @@ export function RightToolbar() {
   const [showExportImport, setShowExportImport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
 
   const canManagePrivacy =
     Boolean(currentProject) &&
@@ -47,6 +49,14 @@ export function RightToolbar() {
           title="Keyboard shortcuts"
         >
           <Keyboard size={14} />
+        </button>
+
+        <button
+          onClick={() => setShowPlugins(true)}
+          className="p-2 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+          title="Plugins"
+        >
+          <Puzzle size={14} />
         </button>
 
         {canManagePrivacy && (
@@ -83,6 +93,10 @@ export function RightToolbar() {
       <KeyboardShortcutsDialog
         open={showShortcuts}
         onClose={() => setShowShortcuts(false)}
+      />
+      <TransformHub
+        open={showPlugins}
+        onClose={() => setShowPlugins(false)}
       />
       {currentProject && (
         <ShareDialog

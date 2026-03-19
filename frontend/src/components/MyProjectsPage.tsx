@@ -241,7 +241,6 @@ export function MyProjectsPage() {
         open={showProfile}
         onClose={() => setShowProfile(false)}
         onOpenApiKeys={() => setShowApiKeys(true)}
-        onOpenPlugins={() => setShowPlugins(true)}
       />
       <ApiKeySettings
         open={showApiKeys}
