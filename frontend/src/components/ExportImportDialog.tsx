@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useProjectStore } from "../stores/projectStore";
@@ -16,10 +16,25 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
   const [importing, setImporting] = useState(false);
   const [cloudImportUrl, setCloudImportUrl] = useState("");
   const [cloudExportBusy, setCloudExportBusy] = useState<null | "json" | "csv" | "graphml">(null);
+  const [cloudExportEnabled, setCloudExportEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentProject } = useProjectStore();
   const { loadGraph } = useGraphStore();
   const isViewer = useIsViewer();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.settings.capabilities()
+      .then((caps) => {
+        if (!cancelled) setCloudExportEnabled(caps.cloud_export_enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setCloudExportEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!open || !currentProject) return null;
 
@@ -187,19 +202,21 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   <p className="text-[10px] text-text-muted">Full project data, re-importable</p>
                 </div>
               </button>
-              <button
-                onClick={() => handleCloudExport("json")}
-                className={cloudBtnClass}
-                disabled={cloudExportBusy !== null}
-              >
-                <Upload size={14} className="text-accent" />
-                <div className="text-left">
-                  <p className="font-medium">Save JSON to Cloud</p>
-                  <p className="text-[10px] text-text-muted">
-                    {cloudExportBusy === "json" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
-                  </p>
-                </div>
-              </button>
+              {cloudExportEnabled && (
+                <button
+                  onClick={() => handleCloudExport("json")}
+                  className={cloudBtnClass}
+                  disabled={cloudExportBusy !== null}
+                >
+                  <Upload size={14} className="text-accent" />
+                  <div className="text-left">
+                    <p className="font-medium">Save JSON to Cloud</p>
+                    <p className="text-[10px] text-text-muted">
+                      {cloudExportBusy === "json" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                    </p>
+                  </div>
+                </button>
+              )}
               <button onClick={() => handleExport("csv")} className={btnClass}>
                 <Download size={14} className="text-accent" />
                 <div className="text-left">
@@ -207,19 +224,21 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   <p className="text-[10px] text-text-muted">Entities + edges as CSV files</p>
                 </div>
               </button>
-              <button
-                onClick={() => handleCloudExport("csv")}
-                className={cloudBtnClass}
-                disabled={cloudExportBusy !== null}
-              >
-                <Upload size={14} className="text-accent" />
-                <div className="text-left">
-                  <p className="font-medium">Save CSV to Cloud</p>
-                  <p className="text-[10px] text-text-muted">
-                    {cloudExportBusy === "csv" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
-                  </p>
-                </div>
-              </button>
+              {cloudExportEnabled && (
+                <button
+                  onClick={() => handleCloudExport("csv")}
+                  className={cloudBtnClass}
+                  disabled={cloudExportBusy !== null}
+                >
+                  <Upload size={14} className="text-accent" />
+                  <div className="text-left">
+                    <p className="font-medium">Save CSV to Cloud</p>
+                    <p className="text-[10px] text-text-muted">
+                      {cloudExportBusy === "csv" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                    </p>
+                  </div>
+                </button>
+              )}
               <button onClick={() => handleExport("graphml")} className={btnClass}>
                 <Download size={14} className="text-accent" />
                 <div className="text-left">
@@ -227,19 +246,21 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   <p className="text-[10px] text-text-muted">Compatible with Gephi, yEd</p>
                 </div>
               </button>
-              <button
-                onClick={() => handleCloudExport("graphml")}
-                className={cloudBtnClass}
-                disabled={cloudExportBusy !== null}
-              >
-                <Upload size={14} className="text-accent" />
-                <div className="text-left">
-                  <p className="font-medium">Save GraphML to Cloud</p>
-                  <p className="text-[10px] text-text-muted">
-                    {cloudExportBusy === "graphml" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
-                  </p>
-                </div>
-              </button>
+              {cloudExportEnabled && (
+                <button
+                  onClick={() => handleCloudExport("graphml")}
+                  className={cloudBtnClass}
+                  disabled={cloudExportBusy !== null}
+                >
+                  <Upload size={14} className="text-accent" />
+                  <div className="text-left">
+                    <p className="font-medium">Save GraphML to Cloud</p>
+                    <p className="text-[10px] text-text-muted">
+                      {cloudExportBusy === "graphml" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -267,25 +288,27 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   e.target.value = "";
                 }}
               />
-              <div className="pt-2 border-t border-border/70">
-                <p className="text-[10px] text-text-muted mb-2">Import from Cloud Signed URL</p>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://...signed-download-url"
-                    value={cloudImportUrl}
-                    onChange={(e) => setCloudImportUrl(e.target.value)}
-                    className="flex-1 px-2 py-1.5 text-xs bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
-                  />
-                  <button
-                    onClick={handleImportFromCloudUrl}
-                    disabled={importing}
-                    className="px-3 py-1.5 text-xs bg-surface border border-border rounded text-text hover:bg-surface-hover disabled:opacity-50"
-                  >
-                    Load URL
-                  </button>
+              {cloudExportEnabled && (
+                <div className="pt-2 border-t border-border/70">
+                  <p className="text-[10px] text-text-muted mb-2">Import from Cloud Signed URL</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://...signed-download-url"
+                      value={cloudImportUrl}
+                      onChange={(e) => setCloudImportUrl(e.target.value)}
+                      className="flex-1 px-2 py-1.5 text-xs bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={handleImportFromCloudUrl}
+                      disabled={importing}
+                      className="px-3 py-1.5 text-xs bg-surface border border-border rounded text-text hover:bg-surface-hover disabled:opacity-50"
+                    >
+                      Load URL
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
