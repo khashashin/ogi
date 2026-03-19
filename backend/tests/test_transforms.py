@@ -19,6 +19,7 @@ from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
 from ogi.transforms.email.domain_to_emails import DomainToEmails
 from ogi.transforms.email.email_to_domain import EmailToDomain
+from ogi.transforms.dns.whois_lookup import WhoisLookup
 from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
@@ -257,6 +258,79 @@ async def test_domain_to_emails_with_mocked_mx(monkeypatch: pytest.MonkeyPatch):
     result = await transform.run(entity, TransformConfig())
     assert any(e.type == EntityType.EMAIL_ADDRESS for e in result.entities)
     assert any(e.value.startswith("admin@") for e in result.entities)
+
+
+@pytest.mark.asyncio
+async def test_whois_lookup_falls_back_to_rdap(monkeypatch: pytest.MonkeyPatch):
+    transform = WhoisLookup()
+    entity = Entity(type=EntityType.DOMAIN, value="example.app")
+
+    def fake_whois(domain: str):
+        assert domain == "example.app"
+        raise RuntimeError("Error trying to connect to socket: closing socket - [Errno -2] Name or service not known")
+
+    responses = [
+        _FakeResponse(
+            json_data={
+                "services": [
+                    [["app"], ["https://pubapi.registry.google/rdap/"]],
+                ]
+            }
+        ),
+        _FakeResponse(
+            json_data={
+                "status": ["client transfer prohibited"],
+                "events": [
+                    {"eventAction": "registration", "eventDate": "2024-01-01T00:00:00Z"},
+                    {"eventAction": "expiration", "eventDate": "2027-01-01T00:00:00Z"},
+                ],
+                "secureDNS": {"delegationSigned": True},
+                "entities": [
+                    {
+                        "roles": ["registrar"],
+                        "vcardArray": ["vcard", [["fn", {}, "text", "MarkMonitor Inc."]]],
+                    },
+                    {
+                        "roles": ["registrant"],
+                        "vcardArray": ["vcard", [["fn", {}, "text", "Khas"]]],
+                    },
+                    {
+                        "roles": ["administrative"],
+                        "vcardArray": ["vcard", [["email", {}, "text", "admin@example.app"]]],
+                    },
+                ],
+            }
+        ),
+    ]
+
+    class _Client:
+        def __init__(self, *args, **kwargs):
+            self.calls: list[str] = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str, **kwargs):
+            self.calls.append(url)
+            return responses.pop(0)
+
+    monkeypatch.setattr("ogi.transforms.dns.whois_lookup.whois.whois", fake_whois)
+    monkeypatch.setattr("ogi.transforms.dns.whois_lookup.httpx.AsyncClient", _Client)
+
+    result = await transform.run(entity, TransformConfig())
+
+    org_values = {row.value for row in result.entities if row.type == EntityType.ORGANIZATION}
+    email_values = {row.value for row in result.entities if row.type == EntityType.EMAIL_ADDRESS}
+
+    assert "MarkMonitor Inc." in org_values
+    assert "Khas" in org_values
+    assert "admin@example.app" in email_values
+    assert any(msg == "RDAP fallback succeeded." for msg in result.messages)
+    assert any(msg == "whois_creation_date: 2024-01-01T00:00:00Z" for msg in result.messages)
+    assert any(msg == "dnssec: true" for msg in result.messages)
 
 
 def test_website_to_people_rejects_non_website_input():
