@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { X, LogOut, Loader2, Key, Puzzle } from "lucide-react";
+import { X, LogOut, Loader2, Key, Puzzle, Cookie } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
+import { useCookieConsentStore } from "../stores/cookieConsentStore";
 
 interface ProfileDialogProps {
   open: boolean;
@@ -11,6 +12,7 @@ interface ProfileDialogProps {
 
 export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: ProfileDialogProps) {
   const { user, signOut, updateProfile, authEnabled } = useAuthStore();
+  const resetConsent = useCookieConsentStore((s) => s.resetConsent);
   const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -159,6 +161,16 @@ export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: P
             >
               <Puzzle size={13} className="text-text-muted" />
               Plugins
+            </button>
+            <button
+              onClick={() => {
+                onClose();
+                resetConsent();
+              }}
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-surface-hover rounded w-full text-left"
+            >
+              <Cookie size={13} className="text-text-muted" />
+              Cookie Preferences
             </button>
           </div>
 

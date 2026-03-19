@@ -78,6 +78,9 @@ export function Toolbar() {
       >
         OpenGraph Intel
       </Link>
+      <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-warning/15 text-warning border border-warning/30 rounded">
+        beta
+      </span>
       {currentProject && (
         <>
           <ChevronRight size={12} className="text-text-muted" />
