@@ -1,6 +1,28 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Undo2, Redo2, User, Lock, Unlock, ChevronRight, House, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
+import {
+  LayoutGrid,
+  Wand2,
+  ZoomIn,
+  ZoomOut,
+  Focus,
+  Undo2,
+  Redo2,
+  User,
+  Lock,
+  Unlock,
+  ChevronRight,
+  House,
+  Table,
+  Network,
+  Map as MapIcon,
+  EyeOff,
+  Eye,
+  Tags,
+  Trash2,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { useProjectStore } from "../stores/projectStore";
@@ -9,7 +31,11 @@ import { useUndoStore } from "../stores/undoStore";
 import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
-import { applyGraphLayout, GRAPH_LAYOUT_OPTIONS, type GraphLayoutPreset } from "../lib/graphLayouts";
+import {
+  applyGraphLayout,
+  GRAPH_LAYOUT_OPTIONS,
+  type GraphLayoutPreset,
+} from "../lib/graphLayouts";
 import { api } from "../api/client";
 import type { TransformInfo } from "../types/transform";
 import { toast } from "sonner";
@@ -60,7 +86,8 @@ export function Toolbar() {
   const [showBulkTransforms, setShowBulkTransforms] = useState(false);
   const [allTransforms, setAllTransforms] = useState<TransformInfo[]>([]);
   const [bulkRunning, setBulkRunning] = useState<string | null>(null);
-  const [selectedLayout, setSelectedLayout] = useState<GraphLayoutPreset>("force");
+  const [selectedLayout, setSelectedLayout] =
+    useState<GraphLayoutPreset>("force");
   const { user, authEnabled } = useAuthStore();
   const isViewer = useIsViewer();
 
@@ -84,9 +111,12 @@ export function Toolbar() {
     getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
   };
 
-  const handleZoomIn = () => getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
-  const handleZoomOut = () => getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
-  const handleFit = () => getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
+  const handleZoomIn = () =>
+    getSigmaRef()?.getCamera().animatedZoom({ duration: 200 });
+  const handleZoomOut = () =>
+    getSigmaRef()?.getCamera().animatedUnzoom({ duration: 200 });
+  const handleFit = () =>
+    getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
   const hiddenEntities = [...manualHiddenNodeIds]
     .map((id) => entities.get(id))
     .filter((entity): entity is NonNullable<typeof entity> => Boolean(entity));
@@ -100,10 +130,14 @@ export function Toolbar() {
   const applicableBulkTransforms = allTransforms
     .map((transform) => ({
       transform,
-      count: selectedEntities.filter((entity) => transform.input_types.includes(entity.type)).length,
+      count: selectedEntities.filter((entity) =>
+        transform.input_types.includes(entity.type),
+      ).length,
     }))
     .filter((item) => item.count > 0);
-  const selectedPinnedCount = selectedEntities.filter((entity) => pinnedNodeIds.has(entity.id)).length;
+  const selectedPinnedCount = selectedEntities.filter((entity) =>
+    pinnedNodeIds.has(entity.id),
+  ).length;
   const hasActiveDeclutter =
     declutterState.focusMode !== "none" ||
     declutterState.fadeUnselected ||
@@ -113,14 +147,27 @@ export function Toolbar() {
 
   useEffect(() => {
     if (!showBulkTransforms || allTransforms.length > 0) return;
-    api.transforms.list().then(setAllTransforms).catch(() => setAllTransforms([]));
+    api.transforms
+      .list()
+      .then(setAllTransforms)
+      .catch(() => setAllTransforms([]));
   }, [showBulkTransforms, allTransforms.length]);
 
   const handleBulkDelete = async () => {
     if (!currentProject || selectedEntities.length === 0) return;
-    if (!window.confirm(`Delete ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}?`)) return;
-    await removeEntities(currentProject.id, selectedEntities.map((entity) => entity.id));
-    toast.success(`Deleted ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`);
+    if (
+      !window.confirm(
+        `Delete ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}?`,
+      )
+    )
+      return;
+    await removeEntities(
+      currentProject.id,
+      selectedEntities.map((entity) => entity.id),
+    );
+    toast.success(
+      `Deleted ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`,
+    );
     setShowBulkActions(false);
   };
 
@@ -133,26 +180,44 @@ export function Toolbar() {
     const nextEntities = new Map(useGraphStore.getState().entities);
     for (const entity of selectedEntities) {
       const nextTags = [...new Set([...entity.tags, normalized])];
-      const updated = await api.entities.update(currentProject.id, entity.id, { tags: nextTags });
+      const updated = await api.entities.update(currentProject.id, entity.id, {
+        tags: nextTags,
+      });
       nextEntities.set(entity.id, updated);
     }
     useGraphStore.setState({ entities: nextEntities });
-    toast.success(`Added tag to ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`);
+    toast.success(
+      `Added tag to ${selectedEntities.length} selected entit${selectedEntities.length === 1 ? "y" : "ies"}`,
+    );
     setShowBulkActions(false);
   };
 
   const handleBulkTransform = async (transform: TransformInfo) => {
     if (!currentProject) return;
-    const applicable = selectedEntities.filter((entity) => transform.input_types.includes(entity.type));
+    const applicable = selectedEntities.filter((entity) =>
+      transform.input_types.includes(entity.type),
+    );
     if (applicable.length === 0) return;
-    if (applicable.length > 25 && !window.confirm(`Queue ${applicable.length} runs for ${transform.display_name}?`)) return;
+    if (
+      applicable.length > 25 &&
+      !window.confirm(
+        `Queue ${applicable.length} runs for ${transform.display_name}?`,
+      )
+    )
+      return;
     setBulkRunning(transform.name);
     try {
       for (const entity of applicable) {
-        const run = await api.transforms.run(transform.name, entity.id, currentProject.id);
+        const run = await api.transforms.run(
+          transform.name,
+          entity.id,
+          currentProject.id,
+        );
         submitJob(run);
       }
-      toast.success(`Queued ${applicable.length} run${applicable.length === 1 ? "" : "s"} for ${transform.display_name}`);
+      toast.success(
+        `Queued ${applicable.length} run${applicable.length === 1 ? "" : "s"} for ${transform.display_name}`,
+      );
       setShowBulkTransforms(false);
       setShowBulkActions(false);
     } catch (err) {
@@ -165,19 +230,8 @@ export function Toolbar() {
 
   return (
     <div className="flex items-center h-10 px-3 bg-surface border-b border-border gap-2">
-      {/* Dashboard link + breadcrumb */}
-      <Link
-        to="/"
-        className="text-sm font-semibold text-text hover:text-accent transition-colors"
-      >
-        OpenGraph Intel
-      </Link>
-      <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-warning/15 text-warning border border-warning/30 rounded">
-        beta
-      </span>
       {currentProject && (
         <>
-          <ChevronRight size={12} className="text-text-muted" />
           <Link
             to="/projects"
             className="flex items-center justify-center rounded p-1 text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
@@ -247,12 +301,18 @@ export function Toolbar() {
             <LayoutGrid size={12} className="text-text-muted" />
             <select
               value={selectedLayout}
-              onChange={(e) => setSelectedLayout(e.target.value as GraphLayoutPreset)}
+              onChange={(e) =>
+                setSelectedLayout(e.target.value as GraphLayoutPreset)
+              }
               className="bg-transparent text-[11px] text-text focus:outline-none"
               title="Choose layout preset"
             >
               {GRAPH_LAYOUT_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id} className="bg-surface text-text">
+                <option
+                  key={option.id}
+                  value={option.id}
+                  className="bg-surface text-text"
+                >
                   {option.label}
                 </option>
               ))}
@@ -260,7 +320,11 @@ export function Toolbar() {
             <button
               onClick={applySelectedLayout}
               className="p-1 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-              title={GRAPH_LAYOUT_OPTIONS.find((option) => option.id === selectedLayout)?.description ?? "Apply layout"}
+              title={
+                GRAPH_LAYOUT_OPTIONS.find(
+                  (option) => option.id === selectedLayout,
+                )?.description ?? "Apply layout"
+              }
             >
               <Wand2 size={12} />
             </button>
@@ -291,18 +355,23 @@ export function Toolbar() {
                   </button>
                   {showBulkActions && (
                     <div className="absolute right-0 top-8 z-50 w-64 rounded border border-border bg-surface shadow-lg p-2 space-y-1">
-                    <div className="text-[11px] text-text-muted px-1 pb-1">
-                      {selectedNodeIds.size} selected entit{selectedNodeIds.size === 1 ? "y" : "ies"}
-                    </div>
+                      <div className="text-[11px] text-text-muted px-1 pb-1">
+                        {selectedNodeIds.size} selected entit
+                        {selectedNodeIds.size === 1 ? "y" : "ies"}
+                      </div>
                       <button
-                        onClick={() => currentProject && pinSelected(currentProject.id)}
+                        onClick={() =>
+                          currentProject && pinSelected(currentProject.id)
+                        }
                         className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
                       >
                         <Lock size={12} />
                         Pin selected
                       </button>
                       <button
-                        onClick={() => currentProject && unpinSelected(currentProject.id)}
+                        onClick={() =>
+                          currentProject && unpinSelected(currentProject.id)
+                        }
                         disabled={selectedPinnedCount === 0}
                         className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover disabled:opacity-50"
                       >
@@ -310,7 +379,9 @@ export function Toolbar() {
                         Unpin selected
                       </button>
                       <button
-                        onClick={() => currentProject && hideSelected(currentProject.id)}
+                        onClick={() =>
+                          currentProject && hideSelected(currentProject.id)
+                        }
                         className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover"
                       >
                         <EyeOff size={12} />
@@ -333,19 +404,27 @@ export function Toolbar() {
                       {showBulkTransforms && (
                         <div className="max-h-56 overflow-auto rounded bg-bg p-1 space-y-1">
                           {applicableBulkTransforms.length === 0 ? (
-                            <div className="px-2 py-1 text-[11px] text-text-muted">No shared transforms for this selection.</div>
+                            <div className="px-2 py-1 text-[11px] text-text-muted">
+                              No shared transforms for this selection.
+                            </div>
                           ) : (
-                            applicableBulkTransforms.map(({ transform, count }) => (
-                              <button
-                                key={transform.name}
-                                onClick={() => handleBulkTransform(transform)}
-                                disabled={bulkRunning !== null}
-                                className="w-full rounded px-2 py-1.5 text-left text-xs text-text hover:bg-surface-hover disabled:opacity-50"
-                              >
-                                {bulkRunning === transform.name ? "Queuing..." : transform.display_name}
-                                <div className="text-[10px] text-text-muted">{count} selected nodes</div>
-                              </button>
-                            ))
+                            applicableBulkTransforms.map(
+                              ({ transform, count }) => (
+                                <button
+                                  key={transform.name}
+                                  onClick={() => handleBulkTransform(transform)}
+                                  disabled={bulkRunning !== null}
+                                  className="w-full rounded px-2 py-1.5 text-left text-xs text-text hover:bg-surface-hover disabled:opacity-50"
+                                >
+                                  {bulkRunning === transform.name
+                                    ? "Queuing..."
+                                    : transform.display_name}
+                                  <div className="text-[10px] text-text-muted">
+                                    {count} selected nodes
+                                  </div>
+                                </button>
+                              ),
+                            )
                           )}
                         </div>
                       )}
@@ -363,7 +442,9 @@ export function Toolbar() {
               )}
 
               <button
-                onClick={() => currentProject && hideSelected(currentProject.id)}
+                onClick={() =>
+                  currentProject && hideSelected(currentProject.id)
+                }
                 disabled={!currentProject || !hasSelection}
                 className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded disabled:opacity-30 disabled:cursor-default"
                 title="Hide selected item"
@@ -383,7 +464,9 @@ export function Toolbar() {
                 <button
                   onClick={() => setShowDeclutter((open) => !open)}
                   className={`flex items-center gap-1 px-2 py-1 text-xs rounded ${
-                    hasActiveDeclutter ? "text-accent bg-surface-hover" : "text-text-muted hover:text-text hover:bg-surface-hover"
+                    hasActiveDeclutter
+                      ? "text-accent bg-surface-hover"
+                      : "text-text-muted hover:text-text hover:bg-surface-hover"
                   }`}
                   title="Focus and declutter tools"
                 >
@@ -394,7 +477,9 @@ export function Toolbar() {
                   <div className="absolute right-0 top-8 z-50 w-72 rounded border border-border bg-surface shadow-lg p-2 space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-medium text-text">Focus & Declutter</div>
+                        <div className="text-xs font-medium text-text">
+                          Focus & Declutter
+                        </div>
                         <div className="text-[10px] text-text-muted">
                           Reversible view modes for crowded graphs
                         </div>
@@ -409,39 +494,57 @@ export function Toolbar() {
                     </div>
 
                     <div className="space-y-1">
-                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">Focus</div>
+                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">
+                        Focus
+                      </div>
                       <button
-                        onClick={() => setFocusMode(currentProject.id, "selection")}
+                        onClick={() =>
+                          setFocusMode(currentProject.id, "selection")
+                        }
                         disabled={!canUseSelectionFocus}
                         className={`w-full rounded px-2 py-1.5 text-left text-xs ${
-                          declutterState.focusMode === "selection" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                          declutterState.focusMode === "selection"
+                            ? "bg-accent/15 text-accent"
+                            : "text-text hover:bg-surface-hover"
                         } disabled:opacity-40`}
                       >
                         Focus on selection
                       </button>
                       <button
-                        onClick={() => setFocusMode(currentProject.id, "neighbors-1")}
+                        onClick={() =>
+                          setFocusMode(currentProject.id, "neighbors-1")
+                        }
                         disabled={!canUseSelectionFocus}
                         className={`w-full rounded px-2 py-1.5 text-left text-xs ${
-                          declutterState.focusMode === "neighbors-1" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                          declutterState.focusMode === "neighbors-1"
+                            ? "bg-accent/15 text-accent"
+                            : "text-text hover:bg-surface-hover"
                         } disabled:opacity-40`}
                       >
                         Show 1-hop neighborhood
                       </button>
                       <button
-                        onClick={() => setFocusMode(currentProject.id, "neighbors-2")}
+                        onClick={() =>
+                          setFocusMode(currentProject.id, "neighbors-2")
+                        }
                         disabled={!canUseSelectionFocus}
                         className={`w-full rounded px-2 py-1.5 text-left text-xs ${
-                          declutterState.focusMode === "neighbors-2" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                          declutterState.focusMode === "neighbors-2"
+                            ? "bg-accent/15 text-accent"
+                            : "text-text hover:bg-surface-hover"
                         } disabled:opacity-40`}
                       >
                         Show 2-hop neighborhood
                       </button>
                       <button
-                        onClick={() => setFocusMode(currentProject.id, "search")}
+                        onClick={() =>
+                          setFocusMode(currentProject.id, "search")
+                        }
                         disabled={!searchQuery.trim()}
                         className={`w-full rounded px-2 py-1.5 text-left text-xs ${
-                          declutterState.focusMode === "search" ? "bg-accent/15 text-accent" : "text-text hover:bg-surface-hover"
+                          declutterState.focusMode === "search"
+                            ? "bg-accent/15 text-accent"
+                            : "text-text hover:bg-surface-hover"
                         } disabled:opacity-40`}
                       >
                         Show only current search hits
@@ -449,13 +552,20 @@ export function Toolbar() {
                     </div>
 
                     <div className="border-t border-border pt-2 space-y-1">
-                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">Declutter</div>
+                      <div className="px-1 text-[10px] uppercase tracking-wide text-text-muted">
+                        Declutter
+                      </div>
                       <label className="flex items-center justify-between gap-3 rounded px-2 py-1.5 text-xs text-text hover:bg-surface-hover">
                         <span>Fade unselected</span>
                         <input
                           type="checkbox"
                           checked={declutterState.fadeUnselected}
-                          onChange={(e) => setFadeUnselected(currentProject.id, e.target.checked)}
+                          onChange={(e) =>
+                            setFadeUnselected(
+                              currentProject.id,
+                              e.target.checked,
+                            )
+                          }
                           className="accent-accent"
                         />
                       </label>
@@ -464,7 +574,9 @@ export function Toolbar() {
                         <input
                           type="checkbox"
                           checked={declutterState.hideIsolates}
-                          onChange={(e) => setHideIsolates(currentProject.id, e.target.checked)}
+                          onChange={(e) =>
+                            setHideIsolates(currentProject.id, e.target.checked)
+                          }
                           className="accent-accent"
                         />
                       </label>
@@ -473,7 +585,12 @@ export function Toolbar() {
                         <input
                           type="checkbox"
                           checked={declutterState.hideLowDegree}
-                          onChange={(e) => setHideLowDegree(currentProject.id, e.target.checked)}
+                          onChange={(e) =>
+                            setHideLowDegree(
+                              currentProject.id,
+                              e.target.checked,
+                            )
+                          }
                           className="accent-accent"
                         />
                       </label>
@@ -489,36 +606,61 @@ export function Toolbar() {
                   title="Show hidden items"
                 >
                   <Eye size={12} />
-                  Hidden {manualHiddenNodeIds.size + manualHiddenEdgeIds.size > 0 ? `(${manualHiddenNodeIds.size + manualHiddenEdgeIds.size})` : ""}
+                  Hidden{" "}
+                  {manualHiddenNodeIds.size + manualHiddenEdgeIds.size > 0
+                    ? `(${manualHiddenNodeIds.size + manualHiddenEdgeIds.size})`
+                    : ""}
                 </button>
                 {showHiddenItems && (
                   <div className="absolute right-0 top-8 z-50 w-80 rounded border border-border bg-surface shadow-lg p-2">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-text">Hidden Items</span>
+                      <span className="text-xs font-medium text-text">
+                        Hidden Items
+                      </span>
                       <button
-                        onClick={() => currentProject && unhideAll(currentProject.id)}
-                        disabled={!currentProject || (manualHiddenNodeIds.size === 0 && manualHiddenEdgeIds.size === 0)}
+                        onClick={() =>
+                          currentProject && unhideAll(currentProject.id)
+                        }
+                        disabled={
+                          !currentProject ||
+                          (manualHiddenNodeIds.size === 0 &&
+                            manualHiddenEdgeIds.size === 0)
+                        }
                         className="text-[11px] text-accent disabled:opacity-40"
                       >
                         Unhide all
                       </button>
                     </div>
                     {hiddenEntities.length === 0 && hiddenEdges.length === 0 ? (
-                      <div className="text-[11px] text-text-muted">No hidden items.</div>
+                      <div className="text-[11px] text-text-muted">
+                        No hidden items.
+                      </div>
                     ) : (
                       <div className="max-h-72 overflow-auto space-y-2">
                         {hiddenEntities.length > 0 && (
                           <div>
-                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Entities</div>
+                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">
+                              Entities
+                            </div>
                             <div className="space-y-1">
                               {hiddenEntities.map((entity) => (
-                                <div key={entity.id} className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1">
+                                <div
+                                  key={entity.id}
+                                  className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1"
+                                >
                                   <div className="min-w-0">
-                                    <div className="truncate text-xs text-text">{entity.value}</div>
-                                    <div className="text-[10px] text-text-muted">{entity.type}</div>
+                                    <div className="truncate text-xs text-text">
+                                      {entity.value}
+                                    </div>
+                                    <div className="text-[10px] text-text-muted">
+                                      {entity.type}
+                                    </div>
                                   </div>
                                   <button
-                                    onClick={() => currentProject && unhideNode(currentProject.id, entity.id)}
+                                    onClick={() =>
+                                      currentProject &&
+                                      unhideNode(currentProject.id, entity.id)
+                                    }
                                     className="text-[11px] text-accent"
                                   >
                                     Show
@@ -530,16 +672,29 @@ export function Toolbar() {
                         )}
                         {hiddenEdges.length > 0 && (
                           <div>
-                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Edges</div>
+                            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">
+                              Edges
+                            </div>
                             <div className="space-y-1">
                               {hiddenEdges.map((edge) => (
-                                <div key={edge.id} className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1">
+                                <div
+                                  key={edge.id}
+                                  className="flex items-center justify-between gap-2 rounded bg-bg px-2 py-1"
+                                >
                                   <div className="min-w-0">
-                                    <div className="truncate text-xs text-text">{edge.label || "Edge"}</div>
-                                    <div className="text-[10px] text-text-muted">{edge.source_id.slice(0, 6)} {"->"} {edge.target_id.slice(0, 6)}</div>
+                                    <div className="truncate text-xs text-text">
+                                      {edge.label || "Edge"}
+                                    </div>
+                                    <div className="text-[10px] text-text-muted">
+                                      {edge.source_id.slice(0, 6)} {"->"}{" "}
+                                      {edge.target_id.slice(0, 6)}
+                                    </div>
                                   </div>
                                   <button
-                                    onClick={() => currentProject && unhideEdge(currentProject.id, edge.id)}
+                                    onClick={() =>
+                                      currentProject &&
+                                      unhideEdge(currentProject.id, edge.id)
+                                    }
                                     className="text-[11px] text-accent"
                                   >
                                     Show
