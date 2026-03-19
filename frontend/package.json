@@ -18,6 +18,7 @@
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-ga4": "^2.1.0",
     "react-resizable-panels": "^4.6.5",
     "react-router": "^7.13.1",
     "sigma": "^3.0.2",

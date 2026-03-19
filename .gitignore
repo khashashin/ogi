@@ -51,3 +51,6 @@ src-tauri/target/
 
 # Misc
 *.log
+
+# Claude Code
+.claude/

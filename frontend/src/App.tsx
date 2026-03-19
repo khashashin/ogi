@@ -10,9 +10,11 @@ import { MyProjectsPage } from "./components/MyProjectsPage";
 import { DiscoverPage } from "./components/DiscoverPage";
 import { TermsPage } from "./components/TermsPage";
 import { PrivacyPage } from "./components/PrivacyPage";
+import { CookieConsentBanner } from "./components/CookieConsentBanner";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
+import { useAnalytics } from "./hooks/useAnalytics";
 
 function WorkspaceView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -65,6 +67,8 @@ function WorkspaceView() {
 }
 
 function App() {
+  useAnalytics();
+
   return (
     <>
       <Routes>
@@ -83,6 +87,7 @@ function App() {
           <Route path="/projects/:projectId" element={<WorkspaceView />} />
         </Route>
       </Routes>
+      <CookieConsentBanner />
       <Toaster
         theme="dark"
         position="bottom-right"

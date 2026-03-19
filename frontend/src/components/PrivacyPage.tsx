@@ -4,7 +4,7 @@ export function PrivacyPage() {
   return (
     <div className="min-h-screen bg-bg">
       <header className="flex items-center h-12 px-4 bg-surface border-b border-border">
-        <span className="text-sm font-semibold text-text mr-6">OGI</span>
+        <span className="text-sm font-semibold text-text mr-6">OpenGraph Intel</span>
         <nav className="flex items-center gap-4">
           <Link to="/" className="text-sm text-text-muted hover:text-text">
             Home
