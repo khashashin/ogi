@@ -114,7 +114,7 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
               <button onClick={() => handleExport("json")} className={btnClass}>
                 <Download size={14} className="text-accent" />
                 <div className="text-left">
-                  <p className="font-medium">OGI JSON</p>
+                  <p className="font-medium">OpenGraph Intel JSON</p>
                   <p className="text-[10px] text-text-muted">Full project data, re-importable</p>
                 </div>
               </button>
