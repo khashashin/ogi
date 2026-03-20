@@ -1064,6 +1064,48 @@ async def test_project_list_requires_bearer_when_auth_enabled(
 
 
 @pytest.mark.asyncio
+async def test_get_current_user_returns_detached_profile_snapshot(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api import auth as auth_api
+    from ogi.config import settings
+
+    user_id = uuid4()
+
+    class _DummyUser:
+        id = str(user_id)
+        email = "detached@test.com"
+
+    class _DummyResponse:
+        user = _DummyUser()
+
+    class _DummyAuth:
+        def get_user(self, token: str):
+            assert token == "test-token"
+            return _DummyResponse()
+
+    class _DummyClient:
+        auth = _DummyAuth()
+
+    class _DummyRequest:
+        headers = {"Authorization": "Bearer test-token"}
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    monkeypatch.setattr(auth_api, "get_supabase_client", lambda: _DummyClient())
+
+    async for session in db_module.get_session():
+        profile = await auth_api.get_current_user(_DummyRequest(), session)
+        break
+
+    assert profile.id == user_id
+    assert profile.email == "detached@test.com"
+    assert profile.display_name == ""
+
+
+@pytest.mark.asyncio
 async def test_registry_index_can_manage_flag_respects_admin_list(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
