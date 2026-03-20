@@ -1,6 +1,7 @@
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy import pool
 from sqlmodel import SQLModel
 
 from ogi.config import settings
@@ -44,12 +45,13 @@ async def init_db() -> None:
                 else:
                     db_url = base
 
+        import uuid
         engine = create_async_engine(
             db_url,
             echo=False,
-            pool_size=5,
-            max_overflow=10,
+            poolclass=pool.NullPool,
             connect_args={
+                "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
                 "prepared_statement_cache_size": 0,  # Required for PgBouncer/Supabase pooler
                 "statement_cache_size": 0
             }
