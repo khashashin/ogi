@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { X, LogOut, Loader2, Key, Puzzle, Cookie } from "lucide-react";
+import { Link } from "react-router";
+import { X, LogOut, Loader2, Key, Puzzle, Cookie, FileText, Shield } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useCookieConsentStore } from "../stores/cookieConsentStore";
 
@@ -172,6 +173,26 @@ export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: P
               <Cookie size={13} className="text-text-muted" />
               Cookie Preferences
             </button>
+          </div>
+
+          {/* Legal Links */}
+          <div className="flex flex-col gap-1 border-t border-border pt-3">
+            <Link
+              to="/privacy"
+              onClick={onClose}
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-surface-hover rounded w-full"
+            >
+              <Shield size={13} className="text-text-muted" />
+              Privacy Policy
+            </Link>
+            <Link
+              to="/terms"
+              onClick={onClose}
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-surface-hover rounded w-full"
+            >
+              <FileText size={13} className="text-text-muted" />
+              Terms of Use
+            </Link>
           </div>
 
           {/* Sign Out */}
