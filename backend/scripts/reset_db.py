@@ -25,10 +25,27 @@ async def reset_database() -> None:
     db_url = settings.database_url
     if db_url and db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if "?" in db_url:
+            base, query = db_url.split("?", 1)
+            params = [p for p in query.split("&") if not p.startswith("pgbouncer=")]
+            if params:
+                db_url = f"{base}?{'&'.join(params)}"
+            else:
+                db_url = base
 
     print(f"Connecting to: {db_url.split('@')[1] if '@' in db_url else db_url}")
 
-    engine = create_async_engine(db_url)
+    from sqlalchemy import pool
+    import uuid
+    engine = create_async_engine(
+        db_url,
+        poolclass=pool.NullPool,
+        connect_args={
+            "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
+            "prepared_statement_cache_size": 0,
+            "statement_cache_size": 0
+        }
+    )
     async with engine.begin() as conn:
         await conn.execute(text("DROP SCHEMA public CASCADE"))
         await conn.execute(text("CREATE SCHEMA public"))
