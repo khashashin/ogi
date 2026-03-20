@@ -9,6 +9,8 @@ const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
 const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
+const CONNECTION_LABEL_COLOR = "#fef3c7";
+const CONNECTION_LABEL_BG = "#92400e";
 function drawHighlightedNodeHover(
   context: CanvasRenderingContext2D,
   data: {
@@ -105,6 +107,7 @@ export function GraphCanvas() {
     declutterState,
     nodeOverlay,
     recordNodeMove,
+    connectionDraft,
   } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
@@ -425,6 +428,16 @@ export function GraphCanvas() {
         };
       }
 
+      if (connectionDraft.sourceId === node) {
+        data = {
+          ...data,
+          zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 2),
+          highlighted: true,
+          highlightedLabelColor: CONNECTION_LABEL_COLOR,
+          highlightedLabelBackground: CONNECTION_LABEL_BG,
+        };
+      }
+
       // 1. Overlay takes priority when active
       if (nodeOverlay) {
         if (nodeOverlay.type === "search") {
@@ -540,6 +553,7 @@ export function GraphCanvas() {
     nodeOverlay,
     declutterState,
     graph,
+    connectionDraft,
   ]);
 
   // Expose sigma ref for zoom controls and context menu
