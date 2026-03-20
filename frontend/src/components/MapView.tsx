@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, RefreshCcw } from "lucide-react";
+import { Loader2, MapPin, RefreshCcw, X } from "lucide-react";
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import type { MapCluster, MapPoint, MapRoute } from "../types/map";
+import { useIsViewer } from "../hooks/useIsViewer";
 
 const POINT_SOURCE_ID = "ogi-points";
 const CLUSTER_SOURCE_ID = "ogi-clusters";
@@ -17,26 +18,47 @@ const BASE_LAYER_DARK_MINIMAL = "basemap-dark-minimal";
 const BASE_LAYER_LIGHT = "basemap-light";
 const BASE_LAYER_LIGHT_DETAIL = "basemap-light-detail";
 const BASE_LAYER_SAT = "basemap-sat";
+const ADD_LOCATION_CURSOR =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%23ff0000' d='M29.603361,0 V29.603361 H0 v0.793233 h29.603361 v29.603362 h0.793233 V30.396594 H59.999956 V29.603361 H30.396594 V0 Z'/%3E%3C/svg%3E\") 30 30, crosshair";
 
 type Basemap = "dark" | "darkGray" | "darkMinimal" | "light" | "lightDetail" | "sat";
 
+interface PendingLocationDraft {
+  lat: number;
+  lon: number;
+}
+
+interface CursorCoordinates {
+  lat: number;
+  lon: number;
+}
+
 export function MapView() {
   const { currentProject } = useProjectStore();
-  const { selectedNodeId, selectedEdgeId, selectNode, selectEdge } = useGraphStore();
+  const { selectedNodeId, selectedEdgeId, selectNode, selectEdge, addEntity } = useGraphStore();
+  const isViewer = useIsViewer();
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [clusters, setClusters] = useState<MapCluster[]>([]);
   const [routes, setRoutes] = useState<MapRoute[]>([]);
-  const [zoom, setZoom] = useState(4);
+  const [zoom, setZoom] = useState(2);
   const [cluster, setCluster] = useState(true);
   const [basemap, setBasemap] = useState<Basemap>("dark");
   const [showPoints, setShowPoints] = useState(true);
   const [showRoutes, setShowRoutes] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addLocationMode, setAddLocationMode] = useState(false);
+  const [pendingLocation, setPendingLocation] = useState<PendingLocationDraft | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftNotes, setDraftNotes] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [cursorCoordinates, setCursorCoordinates] = useState<CursorCoordinates | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const fitKeyRef = useRef<string>("");
+  const addLocationModeRef = useRef(addLocationMode);
+  const isViewerRef = useRef(isViewer);
 
   const projectId = currentProject?.id ?? null;
 
@@ -46,6 +68,12 @@ export function MapView() {
     const lat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
     return { lon, lat };
   }, [points]);
+
+  const syncCursor = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = !isViewerRef.current && addLocationModeRef.current ? ADD_LOCATION_CURSOR : "";
+  };
 
   const refresh = async () => {
     if (!projectId) return;
@@ -70,6 +98,23 @@ export function MapView() {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, zoom]);
+
+  useEffect(() => {
+    setAddLocationMode(false);
+    setPendingLocation(null);
+    setDraftLabel("");
+    setDraftNotes("");
+  }, [projectId]);
+
+  useEffect(() => {
+    addLocationModeRef.current = addLocationMode;
+    syncCursor();
+  }, [addLocationMode]);
+
+  useEffect(() => {
+    isViewerRef.current = isViewer;
+    syncCursor();
+  }, [isViewer]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -215,28 +260,76 @@ export function MapView() {
 
       map.on("click", "ogi-clusters-layer", (event) => {
         const feature = event.features?.[0];
+        const coordinates = feature?.geometry && "coordinates" in feature.geometry ? feature.geometry.coordinates : null;
+        if (Array.isArray(coordinates) && coordinates.length >= 2) {
+          const nextZoom = Math.max(1, Math.min(20, Math.round(map.getZoom()) + 1));
+          map.easeTo({
+            center: [Number(coordinates[0]), Number(coordinates[1])],
+            zoom: nextZoom,
+            duration: 300,
+          });
+          setZoom(nextZoom);
+          return;
+        }
+
         const firstId = feature?.properties?.first_entity_id as string | undefined;
         if (firstId) selectNode(firstId);
       });
 
+      map.on("click", (event) => {
+        if (isViewerRef.current || !addLocationModeRef.current) return;
+        const hitFeatures = map.queryRenderedFeatures(event.point, {
+          layers: ["ogi-points-layer", "ogi-routes-layer", "ogi-clusters-layer"],
+        });
+        if (hitFeatures.length > 0) return;
+        setPendingLocation({
+          lat: Number(event.lngLat.lat.toFixed(6)),
+          lon: Number(event.lngLat.lng.toFixed(6)),
+        });
+        setDraftLabel("");
+        setDraftNotes("");
+        setAddLocationMode(false);
+      });
+
+      map.on("mousemove", (event) => {
+        setCursorCoordinates({
+          lat: Number(event.lngLat.lat.toFixed(6)),
+          lon: Number(event.lngLat.lng.toFixed(6)),
+        });
+      });
+
+      map.on("mouseout", () => {
+        setCursorCoordinates(null);
+      });
+
       map.on("mouseenter", "ogi-points-layer", () => {
-        map.getCanvas().style.cursor = "pointer";
+        if (!addLocationModeRef.current) {
+          map.getCanvas().style.cursor = "pointer";
+        }
       });
       map.on("mouseleave", "ogi-points-layer", () => {
-        map.getCanvas().style.cursor = "";
+        syncCursor();
       });
       map.on("mouseenter", "ogi-routes-layer", () => {
-        map.getCanvas().style.cursor = "pointer";
+        if (!addLocationModeRef.current) {
+          map.getCanvas().style.cursor = "pointer";
+        }
       });
       map.on("mouseleave", "ogi-routes-layer", () => {
-        map.getCanvas().style.cursor = "";
+        syncCursor();
       });
       map.on("mouseenter", "ogi-clusters-layer", () => {
-        map.getCanvas().style.cursor = "pointer";
+        if (!addLocationModeRef.current) {
+          map.getCanvas().style.cursor = "pointer";
+        }
       });
       map.on("mouseleave", "ogi-clusters-layer", () => {
-        map.getCanvas().style.cursor = "";
+        syncCursor();
       });
+    });
+
+    map.on("zoomend", () => {
+      setZoom(Math.max(1, Math.min(20, Math.round(map.getZoom()))));
     });
 
     mapRef.current = map;
@@ -336,6 +429,39 @@ export function MapView() {
     return <div className="h-full p-3 text-xs text-text-muted">Select a project to view map.</div>;
   }
 
+  const closeLocationDraft = () => {
+    setPendingLocation(null);
+    setDraftLabel("");
+    setDraftNotes("");
+  };
+
+  const handleCreateLocation = async () => {
+    if (!projectId || !pendingLocation) return;
+    const fallbackLabel = `Pinned location (${pendingLocation.lat.toFixed(4)}, ${pendingLocation.lon.toFixed(4)})`;
+    setSavingLocation(true);
+    try {
+      const created = await api.entities.create(projectId, {
+        type: "Location",
+        value: draftLabel.trim() || fallbackLabel,
+        notes: draftNotes.trim(),
+        properties: {
+          lat: pendingLocation.lat,
+          lon: pendingLocation.lon,
+          location_label: draftLabel.trim() || fallbackLabel,
+          geo_confidence: 1.0,
+        },
+      });
+      addEntity(projectId, created);
+      selectNode(created.id);
+      closeLocationDraft();
+      await refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-bg">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -371,7 +497,11 @@ export function MapView() {
               min={1}
               max={20}
               value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
+              onChange={(e) => {
+                const nextZoom = Number(e.target.value);
+                setZoom(nextZoom);
+                mapRef.current?.easeTo({ zoom: nextZoom, duration: 250 });
+              }}
               disabled={!cluster}
               title="Cluster detail level"
             />
@@ -409,7 +539,88 @@ export function MapView() {
             Loading map data...
           </div>
         )}
-        <div ref={mapContainerRef} className="h-full w-full" />
+        <div className="relative h-full w-full">
+          {!isViewer && (
+            <div className="pointer-events-none absolute left-3 top-3 z-10">
+              <button
+                onClick={() => {
+                  setAddLocationMode((current) => !current);
+                  closeLocationDraft();
+                }}
+                className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded border shadow-sm transition-colors ${
+                  addLocationMode
+                    ? "border-green-400 bg-green-500/20 text-green-300"
+                    : "border-border bg-surface text-green-400 hover:bg-surface-hover"
+                }`}
+                title={addLocationMode ? "Cancel add location mode" : "Add location from map"}
+              >
+                <MapPin size={16} />
+              </button>
+            </div>
+          )}
+
+          {pendingLocation && (
+            <div className="absolute bottom-3 left-3 z-10 w-80 rounded-lg border border-border bg-surface p-3 shadow-lg">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className="text-green-400" />
+                  <h3 className="text-sm font-semibold text-text">Create Location</h3>
+                </div>
+                <button onClick={closeLocationDraft} className="text-text-muted hover:text-text">
+                  <X size={14} />
+                </button>
+              </div>
+              <p className="mb-3 text-xs text-text-muted">
+                Lat {pendingLocation.lat.toFixed(6)}, Lon {pendingLocation.lon.toFixed(6)}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs text-text-muted">Label</label>
+                  <input
+                    type="text"
+                    value={draftLabel}
+                    onChange={(event) => setDraftLabel(event.target.value)}
+                    placeholder="Pinned location"
+                    className="w-full rounded border border-border bg-bg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-text-muted">Notes</label>
+                  <textarea
+                    value={draftNotes}
+                    onChange={(event) => setDraftNotes(event.target.value)}
+                    rows={3}
+                    placeholder="Optional notes"
+                    className="w-full rounded border border-border bg-bg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={closeLocationDraft}
+                    className="rounded border border-border px-3 py-1.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateLocation}
+                    disabled={savingLocation}
+                    className="rounded bg-accent px-3 py-1.5 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
+                  >
+                    {savingLocation ? "Creating..." : "Create"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {cursorCoordinates && (
+            <div className="pointer-events-none absolute bottom-3 left-3 z-[9] rounded border border-border bg-surface/90 px-2 py-1 text-[11px] text-text-muted shadow-sm">
+              Lat {cursorCoordinates.lat.toFixed(6)}, Lon {cursorCoordinates.lon.toFixed(6)}
+            </div>
+          )}
+
+          <div ref={mapContainerRef} className="h-full w-full" />
+        </div>
       </div>
     </div>
   );
