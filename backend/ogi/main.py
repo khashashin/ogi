@@ -15,7 +15,7 @@ from ogi.db.database import init_db, close_db
 from ogi.engine.entity_registry import EntityRegistry
 from ogi.engine.transform_engine import TransformEngine
 from ogi.cli.registry import RegistryClient
-from ogi.cli.installer import TransformInstaller
+from ogi.cli.installer import TransformInstaller, get_runtime_ogi_version
 from ogi.api.dependencies import (
     init_transform_engine,
     init_entity_registry,
@@ -146,7 +146,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="OGI — OpenGraph Intel",
     description="Open source link analysis and OSINT framework",
-    version="0.3.0",
+    version=get_runtime_ogi_version(),
     lifespan=lifespan,
 )
 
