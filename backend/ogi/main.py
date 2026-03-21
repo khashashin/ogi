@@ -88,7 +88,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     """Catch-all: log the full traceback so 500s are never silent."""
     logger.error("Unhandled exception on %s %s", request.method, request.url)
     logger.error(traceback.format_exc())
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    return JSONResponse(
+        status_code=500, 
+        content={"detail": "Internal Server Error. Please try again later. If the issue persists, contact support."}
+    )
 
 
 @app.get("/health")
