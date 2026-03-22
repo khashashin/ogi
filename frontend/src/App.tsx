@@ -14,6 +14,7 @@ import { CookieConsentBanner } from "./components/CookieConsentBanner";
 import { BetaNoticeDialog } from "./components/BetaNoticeDialog";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
+import { useAuthStore } from "./stores/authStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
 import { useAnalytics } from "./hooks/useAnalytics";
 
@@ -69,6 +70,11 @@ function WorkspaceView() {
 
 function App() {
   useAnalytics();
+  const initialize = useAuthStore((state) => state.initialize);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   return (
     <>
