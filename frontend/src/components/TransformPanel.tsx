@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Play, Loader2, X, Square } from "lucide-react";
+import { Play, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import type { TransformInfo, TransformRun, TransformJobMessage } from "../types/transform";
 import { useGraphStore } from "../stores/graphStore";

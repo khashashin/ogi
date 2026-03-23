@@ -12,6 +12,7 @@ export function TransformResults({ run }: TransformResultsProps) {
     failed: <XCircle size={14} className="text-danger" />,
     running: <AlertCircle size={14} className="text-warning" />,
     pending: <AlertCircle size={14} className="text-text-muted" />,
+    cancelled: <AlertCircle size={14} className="text-text-muted" />,
   };
 
   return (
