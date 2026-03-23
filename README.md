@@ -42,6 +42,15 @@ Open http://localhost:5173. That's it.
 docker compose up
 ```
 
+For production deployments, use the prebuilt GHCR images:
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (for example `v0.1.0`). By default, `latest` is used.
+
 ## Tech Stack
 
 | Layer            | Tech                                                            |
