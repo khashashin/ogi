@@ -2,6 +2,9 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       - ./plugins:/app/plugins
     environment:
@@ -10,6 +13,30 @@ services:
       - OGI_GITHUB_TOKEN=${OGI_GITHUB_TOKEN:-}
       - OGI_SUPABASE_URL=${OGI_SUPABASE_URL}
       - OGI_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY}
+      - OGI_REDIS_URL=redis://redis:6379/0
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "ogi.worker.run_worker"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./plugins:/app/plugins
+    environment:
+      - OGI_DATABASE_URL=${OGI_DATABASE_URL}
+      - OGI_USE_SQLITE=false
+      - OGI_REDIS_URL=redis://redis:6379/0
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:

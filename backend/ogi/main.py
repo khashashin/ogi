@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from contextlib import asynccontextmanager
@@ -21,12 +22,51 @@ from ogi.api.dependencies import (
     init_plugin_engine,
     init_registry_client,
     init_transform_installer,
+    init_redis,
 )
 from ogi.api.router import api_router
 
 # Configure logging so all errors are visible in the terminal
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("ogi")
+
+
+async def _recover_stale_jobs() -> None:
+    """Mark any RUNNING/PENDING transform runs as FAILED on startup.
+
+    If the server crashed while jobs were in progress, those runs will never
+    complete.  This prevents them from appearing stuck in the UI forever.
+    """
+    from ogi.db.database import get_session
+    from ogi.store.transform_run_store import TransformRunStore
+    from ogi.models import TransformStatus
+    from sqlmodel import select, or_
+    from datetime import datetime, timezone
+
+    try:
+        async for session in get_session():
+            stmt = select(TransformRunStore.__class__).where(False)  # unused; manual query below
+            # Direct query on the model
+            from ogi.models.transform import TransformRun
+            stmt = select(TransformRun).where(
+                or_(
+                    TransformRun.status == TransformStatus.RUNNING,
+                    TransformRun.status == TransformStatus.PENDING,
+                )
+            )
+            result = await session.execute(stmt)
+            stale_runs = list(result.scalars().all())
+            for run in stale_runs:
+                run.status = TransformStatus.FAILED
+                run.error = "Server restarted while job was in progress"
+                run.completed_at = datetime.now(timezone.utc)
+                session.add(run)
+            if stale_runs:
+                await session.commit()
+                logger.info("Recovered %d stale transform runs", len(stale_runs))
+            break
+    except Exception:
+        logger.exception("Failed to recover stale jobs")
 
 
 @asynccontextmanager
@@ -59,9 +99,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     init_transform_installer(installer)
 
+    # Initialize Redis + RQ queue
+    pubsub_task: asyncio.Task | None = None  # type: ignore[type-arg]
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        redis_conn = Redis.from_url(settings.redis_url)
+        redis_conn.ping()  # verify connectivity
+        queue = Queue(settings.rq_queue_name, connection=redis_conn)
+        init_redis(redis_conn, queue)
+        logger.info("Redis connected at %s", settings.redis_url)
+
+        # Recover stale jobs from previous crash
+        await _recover_stale_jobs()
+
+        # Start Redis pub/sub → WebSocket bridge
+        from ogi.api.websocket import redis_pubsub_listener
+        pubsub_task = asyncio.create_task(redis_pubsub_listener())
+
+    except Exception:
+        logger.warning("Redis not available — transforms will fail to enqueue. Start Redis to enable the job queue.")
+
     yield
 
     # Shutdown
+    if pubsub_task is not None:
+        pubsub_task.cancel()
+        try:
+            await pubsub_task
+        except asyncio.CancelledError:
+            pass
+
     await close_db()
 
 

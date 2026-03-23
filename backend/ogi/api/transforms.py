@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ogi.models import TransformInfo, TransformRun, TransformResult, EdgeCreate, UserProfile
+from ogi.config import settings
+from ogi.models import TransformInfo, TransformRun, TransformResult, TransformStatus, TransformJobMessage, EdgeCreate, UserProfile
 from ogi.transforms.base import TransformConfig
 from ogi.api.auth import get_current_user, require_project_viewer
 from ogi.api.dependencies import (
@@ -14,6 +16,8 @@ from ogi.api.dependencies import (
     get_graph_engine,
     get_transform_run_store,
     get_project_store,
+    get_rq_queue,
+    get_redis,
 )
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
@@ -65,7 +69,6 @@ async def run_transform(
     current_user: UserProfile = Depends(get_current_user),
     project_store: ProjectStore = Depends(get_project_store),
     entity_store: EntityStore = Depends(get_entity_store),
-    edge_s: EdgeStore = Depends(get_edge_store),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> TransformRun:
     role = await project_store.get_member_role(request.project_id, current_user.id)
@@ -77,82 +80,106 @@ async def run_transform(
         raise HTTPException(status_code=404, detail="Entity not found")
 
     transform_engine = get_transform_engine()
-    try:
-        run = await transform_engine.run_transform(
-            name, entity, request.project_id, request.config
+    transform = transform_engine.get_transform(name)
+    if transform is None:
+        raise HTTPException(status_code=400, detail=f"Transform '{name}' not found")
+    if not transform.can_run_on(entity):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transform '{name}' cannot run on entity type '{entity.type.value}'",
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-    # Persist discovered entities and edges, deduplicating by type+value
-    # run.result is stored as a JSON dict; parse it back into a TransformResult
-    result_data = run.result
-    if result_data:
-        transform_result = TransformResult.model_validate(result_data)
-        es = entity_store
-        graph = get_graph_engine(request.project_id)
-
-        # Map transform-generated IDs to actual persisted IDs (may differ if deduplicated)
-        id_map: dict[UUID, UUID] = {}
-
-        # Ensure the input entity is in the graph engine so edges can reference it
-        if not graph.get_entity(entity.id):
-            graph.add_entity(entity)
-
-        for new_entity in transform_result.entities:
-            saved = await es.save(request.project_id, new_entity)
-            id_map[new_entity.id] = saved.id
-            if not graph.get_entity(saved.id):
-                graph.add_entity(saved)
-
-        for new_edge in transform_result.edges:
-            # Remap edge endpoints to the actual persisted entity IDs
-            actual_source = id_map.get(new_edge.source_id, new_edge.source_id)
-            actual_target = id_map.get(new_edge.target_id, new_edge.target_id)
-
-            # Skip duplicate edges
-            existing_edges = graph.get_edges_for_entity(actual_source) if graph.get_entity(actual_source) else []
-            is_duplicate = any(
-                e.source_id == actual_source and e.target_id == actual_target and e.label == new_edge.label
-                for e in existing_edges
-            )
-            if is_duplicate:
-                continue
-
-            edge_data = EdgeCreate(
-                source_id=actual_source,
-                target_id=actual_target,
-                label=new_edge.label,
-                source_transform=new_edge.source_transform,
-            )
-            saved_edge = await edge_s.create(request.project_id, edge_data)
-            try:
-                graph.add_edge(saved_edge)
-            except ValueError:
-                pass
-
-        # Update the result to reflect deduplicated IDs so the frontend gets correct data
-        persisted_entity_ids = {id_map.get(e.id, e.id) for e in transform_result.entities}
-        # Include the input entity so edges connecting to it are found
-        persisted_entity_ids.add(entity.id)
-
-        transform_result.entities = [
-            es_entity for eid in persisted_entity_ids
-            if eid != entity.id and (es_entity := graph.get_entity(eid)) is not None
-        ]
-        # Return all edges where both endpoints are in the set of involved entities
-        transform_result.edges = [
-            e for e in graph.edges.values()
-            if e.source_id in persisted_entity_ids and e.target_id in persisted_entity_ids
-        ]
-
-        # Serialize back to dict for DB storage
-        run.result = transform_result.model_dump(mode="json")
-
-    # Persist the run
+    # Create a PENDING run record
+    run = TransformRun(
+        project_id=request.project_id,
+        transform_name=name,
+        input_entity_id=entity.id,
+        status=TransformStatus.PENDING,
+    )
     await run_store.save(run)
 
+    # Enqueue the job via RQ
+    queue = get_rq_queue()
+    if queue is None:
+        raise HTTPException(status_code=503, detail="Job queue not available — Redis may be down")
+
+    from ogi.worker.transform_job import execute_transform
+    queue.enqueue(
+        execute_transform,
+        str(run.id),
+        name,
+        entity.model_dump(mode="json"),
+        str(request.project_id),
+        request.config.model_dump(mode="json"),
+        job_id=str(run.id),
+        job_timeout=settings.transform_timeout,
+    )
+
+    # Publish "job_submitted" event so WS clients see it immediately
+    redis_conn = get_redis()
+    if redis_conn is not None:
+        msg = TransformJobMessage(
+            type="job_submitted",
+            job_id=run.id,
+            project_id=request.project_id,
+            transform_name=name,
+            input_entity_id=entity.id,
+            timestamp=datetime.now(timezone.utc),
+        )
+        redis_conn.publish(
+            f"ogi:transform_events:{request.project_id}",
+            msg.model_dump_json(),
+        )
+
     return run
+
+
+@router.post("/runs/{run_id}/cancel")
+async def cancel_transform(
+    run_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    run_store: TransformRunStore = Depends(get_transform_run_store),
+) -> dict[str, str]:
+    """Cancel a pending/running transform job."""
+    run = await run_store.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Transform run not found")
+
+    if run.status not in (TransformStatus.PENDING, TransformStatus.RUNNING):
+        raise HTTPException(status_code=400, detail=f"Cannot cancel a {run.status.value} job")
+
+    redis_conn = get_redis()
+
+    # Cancel in RQ
+    if redis_conn is not None:
+        try:
+            from rq.job import Job
+            rq_job = Job.fetch(str(run_id), connection=redis_conn)
+            rq_job.cancel()
+        except Exception:
+            pass  # job may have already finished
+
+    # Update DB
+    run.status = TransformStatus.CANCELLED
+    run.completed_at = datetime.now(timezone.utc)
+    await run_store.save(run)
+
+    # Publish cancellation event
+    if redis_conn is not None:
+        msg = TransformJobMessage(
+            type="job_cancelled",
+            job_id=run.id,
+            project_id=run.project_id,
+            transform_name=run.transform_name,
+            input_entity_id=run.input_entity_id,
+            timestamp=datetime.now(timezone.utc),
+        )
+        redis_conn.publish(
+            f"ogi:transform_events:{run.project_id}",
+            msg.model_dump_json(),
+        )
+
+    return {"status": "cancelled", "run_id": str(run_id)}
 
 
 @router.get("/runs/{run_id}", response_model=TransformRun)

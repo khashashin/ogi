@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
+from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Column, JSON, DateTime, String
 
 from .entity import Entity, EntityType
@@ -14,6 +15,7 @@ class TransformStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class TransformResult(SQLModel):
@@ -35,6 +37,20 @@ class TransformRun(SQLModel, table=True):
     error: str | None = None
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column("created_at", DateTime(timezone=True)))
     completed_at: datetime | None = Field(default=None, sa_column=Column("completed_at", DateTime(timezone=True), nullable=True))
+
+class TransformJobMessage(BaseModel):
+    """Message published via Redis pub/sub when a transform job changes state."""
+    type: str  # "job_submitted" | "job_started" | "job_completed" | "job_failed" | "job_cancelled"
+    job_id: UUID
+    project_id: UUID
+    transform_name: str
+    input_entity_id: UUID
+    progress: float | None = None
+    message: str | None = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    timestamp: datetime
+
 
 class TransformInfo(SQLModel):
     name: str

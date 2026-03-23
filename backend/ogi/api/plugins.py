@@ -4,9 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from ogi.models import PluginInfo, UserProfile
-from ogi.api.auth import get_current_user
+from ogi.api.auth import get_current_user, require_admin_user
 from ogi.api.dependencies import get_plugin_engine, get_transform_engine
-from ogi.config import settings
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
 
@@ -35,6 +34,7 @@ async def get_plugin(
 async def toggle_plugin(
     name: str,
     current_user: UserProfile = Depends(get_current_user),
+    admin_user: UserProfile = Depends(require_admin_user),
 ) -> PluginInfo:
     plugin_engine = get_plugin_engine()
     transform_engine = get_transform_engine()
@@ -65,6 +65,7 @@ async def toggle_plugin(
 async def reload_plugin(
     name: str,
     current_user: UserProfile = Depends(get_current_user),
+    admin_user: UserProfile = Depends(require_admin_user),
 ) -> PluginInfo:
     """Reload transforms from a plugin's directory."""
     plugin_engine = get_plugin_engine()

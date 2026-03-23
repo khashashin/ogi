@@ -241,6 +241,8 @@ export const api = {
         }),
       }),
     getRun: (runId: string) => request<TransformRun>(`/transforms/runs/${runId}`),
+    cancel: (runId: string) =>
+      request<{ status: string; run_id: string }>(`/transforms/runs/${runId}/cancel`, { method: "POST" }),
   },
 
   apiKeys: {

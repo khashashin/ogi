@@ -1,17 +1,18 @@
 """Public project discovery endpoint — no auth required."""
 from __future__ import annotations
 
-from typing import Optional
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 
-from ogi.models import ProjectDiscoverRead, UserProfile
+from ogi.models import ProjectDiscoverRead
 from ogi.api.auth import get_current_user
 from ogi.api.dependencies import get_project_store
 from ogi.store.project_store import ProjectStore
 
 router = APIRouter(prefix="/discover", tags=["discover"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[ProjectDiscoverRead])
@@ -34,7 +35,7 @@ async def discover_projects(
                 if user and user.id != UUID("00000000-0000-0000-0000-000000000000"):
                     bookmarked_ids = await store.get_bookmarked_ids(user.id)
     except Exception:
-        pass
+        logger.exception("Failed to resolve discover bookmark status")
 
     return [
         ProjectDiscoverRead(
