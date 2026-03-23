@@ -1,9 +1,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { Hash } from "lucide-react";
 import Sigma from "sigma";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
 import { applyGraphLayout } from "../lib/graphLayouts";
+import { getIconComponent, isCustomSvgIcon, renderLucideIconSvg } from "../lib/iconRegistry";
+import { ENTITY_TYPE_META } from "../types/entity";
 
 const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
@@ -11,6 +14,48 @@ const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
 const CONNECTION_LABEL_COLOR = "#fef3c7";
 const CONNECTION_LABEL_BG = "#92400e";
+const nodeIconImageCache = new Map<string, HTMLImageElement>();
+
+function getContrastIconColor(color?: string): string {
+  const hex = (color ?? "").trim();
+  if (!/^#[0-9a-fA-F]{6,8}$/.test(hex)) return "#ffffff";
+  const raw = hex.slice(1, 7);
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#111827" : "#ffffff";
+}
+
+function getNodeIconImage(iconName: string, color: string): HTMLImageElement | null {
+  const cacheKey = `${iconName}:${color}`;
+  const cached = nodeIconImageCache.get(cacheKey);
+  if (cached) return cached;
+
+  let src: string | null = null;
+  if (isCustomSvgIcon(iconName)) {
+    src = `/icons/${iconName}.svg`;
+  } else if (getIconComponent(iconName)) {
+    const svg = renderLucideIconSvg(iconName, { color, size: 24, strokeWidth: 2.25 });
+    if (svg) src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
+  if (!src) return null;
+
+  const image = new Image();
+  image.src = src;
+  nodeIconImageCache.set(cacheKey, image);
+  return image;
+}
+
+function getCustomNodeIcon(entity: { type: string; icon?: string | null }): string | null {
+  const iconName = entity.icon?.trim();
+  if (!iconName) return null;
+  const defaultIcon = ENTITY_TYPE_META[entity.type as keyof typeof ENTITY_TYPE_META]?.icon;
+  if (defaultIcon && defaultIcon === iconName) return null;
+  return iconName;
+}
+
 function drawHighlightedNodeHover(
   context: CanvasRenderingContext2D,
   data: {
@@ -90,7 +135,9 @@ function drawHighlightedNodeHover(
 }
 
 export function GraphCanvas() {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const iconCanvasRef = useRef<HTMLCanvasElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const {
     graph,
@@ -111,6 +158,9 @@ export function GraphCanvas() {
   } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [nodeIconOverlays, setNodeIconOverlays] = useState<
+    Array<{ id: string; x: number; y: number; size: number; icon: string; color: string }>
+  >([]);
   const [selectionBox, setSelectionBox] = useState<null | {
     startX: number;
     startY: number;
@@ -200,12 +250,12 @@ export function GraphCanvas() {
 
     renderer.on("enterEdge", ({ edge }) => {
       setHoveredEdgeId(edge);
-      if (containerRef.current) containerRef.current.style.cursor = "pointer";
+      if (wrapperRef.current) wrapperRef.current.style.cursor = "pointer";
     });
 
     renderer.on("leaveEdge", () => {
       setHoveredEdgeId(null);
-      if (containerRef.current) containerRef.current.style.cursor = "default";
+      if (wrapperRef.current) wrapperRef.current.style.cursor = "default";
     });
 
     renderer.on("clickStage", () => {
@@ -562,11 +612,169 @@ export function GraphCanvas() {
     return () => setSigmaRef(null);
   });
 
+  const updateNodeIconOverlays = useCallback(() => {
+    const renderer = sigmaRef.current as (Sigma & {
+      getNodeDisplayData?: (key: string) => { x: number; y: number; size: number } | undefined;
+      framedGraphToViewport?: (point: { x: number; y: number }) => { x: number; y: number };
+      scaleSize?: (size?: number, ratio?: number) => number;
+    }) | null;
+    const container = wrapperRef.current;
+    if (
+      !renderer ||
+      !container ||
+      !renderer.getNodeDisplayData ||
+      !renderer.framedGraphToViewport ||
+      !renderer.scaleSize
+    ) {
+      return;
+    }
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const overlays: Array<{ id: string; x: number; y: number; size: number; icon: string; color: string }> = [];
+
+    graph.forEachNode((nodeId, attrs) => {
+      if (hiddenNodeIds.has(nodeId)) return;
+      const entity = entities.get(nodeId);
+      if (!entity) return;
+      const customIcon = getCustomNodeIcon(entity);
+      if (!customIcon) return;
+      const displayData = renderer.getNodeDisplayData?.(nodeId);
+      if (!displayData) return;
+      const point = renderer.framedGraphToViewport?.({
+        x: displayData.x,
+        y: displayData.y,
+      });
+      if (!point) return;
+      if (point.x < -30 || point.y < -30 || point.x > width + 30 || point.y > height + 30) return;
+
+      const rawNodeSize = Number(displayData.size) || Number(attrs.size) || 12;
+      const nodeSize = renderer.scaleSize?.(rawNodeSize) ?? rawNodeSize;
+      overlays.push({
+        id: nodeId,
+        x: point.x,
+        y: point.y,
+        size: Math.max(10, nodeSize * 1.35),
+        icon: customIcon,
+        color: getContrastIconColor(String(attrs.color ?? "")),
+      });
+    });
+
+    setNodeIconOverlays(overlays);
+  }, [entities, graph, hiddenNodeIds]);
+
+  const drawNodeIcons = useCallback(() => {
+    const renderer = sigmaRef.current as (Sigma & {
+      getNodeDisplayData?: (key: string) => { x: number; y: number; size: number } | undefined;
+      framedGraphToViewport?: (point: { x: number; y: number }) => { x: number; y: number };
+      scaleSize?: (size?: number, ratio?: number) => number;
+      refresh: () => void;
+    }) | null;
+    const overlayCanvas = iconCanvasRef.current;
+    const container = wrapperRef.current;
+    if (
+      !renderer ||
+      !overlayCanvas ||
+      !container ||
+      !renderer.getNodeDisplayData ||
+      !renderer.framedGraphToViewport ||
+      !renderer.scaleSize
+    ) {
+      return;
+    }
+
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const pixelRatio = window.devicePixelRatio || 1;
+    const expectedWidth = Math.max(1, Math.floor(width * pixelRatio));
+    const expectedHeight = Math.max(1, Math.floor(height * pixelRatio));
+
+    if (overlayCanvas.width !== expectedWidth || overlayCanvas.height !== expectedHeight) {
+      overlayCanvas.width = expectedWidth;
+      overlayCanvas.height = expectedHeight;
+      overlayCanvas.style.width = `${width}px`;
+      overlayCanvas.style.height = `${height}px`;
+    }
+
+    const context = overlayCanvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    graph.forEachNode((nodeId, attrs) => {
+      if (hiddenNodeIds.has(nodeId)) return;
+      const entity = entities.get(nodeId);
+      if (!entity) return;
+      const customIcon = getCustomNodeIcon(entity);
+      if (!customIcon) return;
+
+      const displayData = renderer.getNodeDisplayData?.(nodeId);
+      if (!displayData) return;
+      const point = renderer.framedGraphToViewport?.({
+        x: displayData.x,
+        y: displayData.y,
+      });
+      if (!point) return;
+
+      const iconImage = getNodeIconImage(customIcon, getContrastIconColor(String(attrs.color ?? "")));
+      if (!iconImage) return;
+      if (!iconImage.complete) {
+        iconImage.onload = () => window.requestAnimationFrame(drawNodeIcons);
+        return;
+      }
+
+      const rawNodeSize = Number(displayData.size) || Number(attrs.size) || 12;
+      const nodeSize = renderer.scaleSize?.(rawNodeSize) ?? rawNodeSize;
+      const iconSize = Math.max(10, nodeSize * 1.35);
+      context.drawImage(
+        iconImage,
+        point.x - iconSize / 2,
+        point.y - iconSize / 2,
+        iconSize,
+        iconSize,
+      );
+    });
+  }, [entities, graph, hiddenNodeIds]);
+
+  useEffect(() => {
+    const renderer = sigmaRef.current as (Sigma & {
+      on?: (event: string, handler: () => void) => void;
+      off?: (event: string, handler: () => void) => void;
+      getCamera: () => {
+        on?: (event: string, handler: () => void) => void;
+        off?: (event: string, handler: () => void) => void;
+      };
+    }) | null;
+    if (!renderer) return;
+
+    const redraw = () => window.requestAnimationFrame(drawNodeIcons);
+    const refreshDomIcons = () => window.requestAnimationFrame(updateNodeIconOverlays);
+    const camera = renderer.getCamera();
+
+    renderer.on?.("afterRender", redraw);
+    renderer.on?.("afterRender", refreshDomIcons);
+    camera.on?.("updated", redraw);
+    camera.on?.("updated", refreshDomIcons);
+    window.addEventListener("resize", redraw);
+    window.addEventListener("resize", refreshDomIcons);
+    redraw();
+    refreshDomIcons();
+
+    return () => {
+      renderer.off?.("afterRender", redraw);
+      renderer.off?.("afterRender", refreshDomIcons);
+      camera.off?.("updated", redraw);
+      camera.off?.("updated", refreshDomIcons);
+      window.removeEventListener("resize", redraw);
+      window.removeEventListener("resize", refreshDomIcons);
+    };
+  }, [drawNodeIcons, updateNodeIconOverlays]);
+
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current || event.button !== 0) return;
+    if (!wrapperRef.current || event.button !== 0) return;
     const isModifier = event.shiftKey || event.ctrlKey || event.metaKey;
     if (!isModifier) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = wrapperRef.current.getBoundingClientRect();
     const startX = event.clientX - rect.left;
     const startY = event.clientY - rect.top;
     selectionStateRef.current = {
@@ -581,10 +789,10 @@ export function GraphCanvas() {
   };
 
   useEffect(() => {
-    if (!selectionBox || !containerRef.current) return;
+    if (!selectionBox || !wrapperRef.current) return;
 
     const handleMove = (event: MouseEvent) => {
-      const rect = containerRef.current?.getBoundingClientRect();
+      const rect = wrapperRef.current?.getBoundingClientRect();
       if (!rect || !selectionStateRef.current) return;
       setSelectionBox((current) =>
         current
@@ -651,11 +859,42 @@ export function GraphCanvas() {
 
   return (
     <div
-      ref={containerRef}
+      ref={wrapperRef}
       className="relative w-full h-full bg-bg"
       style={{ minHeight: "400px" }}
       onMouseDownCapture={handleMouseDownCapture}
     >
+      <div ref={containerRef} className="absolute inset-0" />
+      <canvas ref={iconCanvasRef} className="pointer-events-none absolute inset-0 z-[20]" />
+      <div className="pointer-events-none absolute inset-0 z-[30]">
+        {nodeIconOverlays.map((overlay) => {
+          const IconComponent = getIconComponent(overlay.icon) ?? Hash;
+          return (
+            <div
+              key={overlay.id}
+              className="absolute"
+              style={{
+                left: overlay.x,
+                top: overlay.y,
+                width: overlay.size,
+                height: overlay.size,
+                transform: "translate(-50%, -50%)",
+                color: overlay.color,
+              }}
+            >
+              {isCustomSvgIcon(overlay.icon) ? (
+                <img
+                  src={`/icons/${overlay.icon}.svg`}
+                  alt=""
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <IconComponent size={overlay.size} strokeWidth={2.25} />
+              )}
+            </div>
+          );
+        })}
+      </div>
       {selectionBox && (
         <div
           className="pointer-events-none absolute border border-accent/70 bg-accent/10"
