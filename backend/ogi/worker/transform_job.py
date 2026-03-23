@@ -127,11 +127,11 @@ async def _run_transform_async(
                 except Exception:
                     pass  # skip duplicates
 
-            # Remap entity IDs in result for the frontend
-            result.entities = [
-                Entity.model_validate({**e.model_dump(), "id": str(id_map.get(e.id, e.id))})
-                for e in result.entities
-            ]
+            # Remap entity IDs in result for the frontend without re-validating
+            # through the DB model, which requires fields plugin transforms may omit.
+            for entity_out in result.entities:
+                entity_out.id = id_map.get(entity_out.id, entity_out.id)
+                entity_out.project_id = pid
             for edge in result.edges:
                 edge.source_id = id_map.get(edge.source_id, edge.source_id)
                 edge.target_id = id_map.get(edge.target_id, edge.target_id)

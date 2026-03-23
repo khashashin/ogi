@@ -408,6 +408,44 @@ async def test_graph_get(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_graph_get_refreshes_entities_written_outside_engine(client: AsyncClient):
+    """Graph endpoint should include entities written directly to DB (worker path)."""
+    from uuid import UUID
+
+    from ogi.db.database import get_session
+    from ogi.models import EntityCreate, EntityType
+    from ogi.store.entity_store import EntityStore
+
+    resp = await client.post("/api/v1/projects", json={"name": "GraphRefresh"})
+    pid = resp.json()["id"]
+
+    # Seed + hydrate engine through normal API path.
+    await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "seed.test"},
+    )
+    resp = await client.get(f"/api/v1/projects/{pid}/graph")
+    assert resp.status_code == 200
+    assert len(resp.json()["entities"]) == 1
+
+    # Simulate worker write: persist directly to DB, bypassing GraphEngine.
+    async for session in get_session():
+        store = EntityStore(session)
+        await store.create(
+            UUID(pid),
+            EntityCreate(type=EntityType.DOCUMENT, value="from-worker"),
+        )
+        break
+
+    # Before fix this stayed at 1 due to stale engine cache.
+    resp = await client.get(f"/api/v1/projects/{pid}/graph")
+    assert resp.status_code == 200
+    values = {e["value"] for e in resp.json()["entities"]}
+    assert "seed.test" in values
+    assert "from-worker" in values
+
+
+@pytest.mark.asyncio
 async def test_graph_stats(client: AsyncClient):
     resp = await client.post("/api/v1/projects", json={"name": "StatsTest"})
     pid = resp.json()["id"]
@@ -559,6 +597,138 @@ async def test_disabling_plugin_hides_its_transforms(client: AsyncClient):
     assert resp.status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_plugin_preferences_are_per_user(client: AsyncClient):
+    from uuid import uuid4
+
+    from ogi.api.auth import get_current_user
+    from ogi.models import UserProfile
+
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    plugins = resp.json()
+    if not plugins:
+        pytest.skip("No plugins available in test environment")
+
+    plugin_name = plugins[0]["name"]
+
+    user1 = UserProfile(id=uuid4(), email="user1@test.com")
+    user2 = UserProfile(id=uuid4(), email="user2@test.com")
+
+    app.dependency_overrides[get_current_user] = lambda: user1
+    try:
+        resp = await client.post(f"/api/v1/plugins/{plugin_name}/disable")
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is False
+    finally:
+        app.dependency_overrides.clear()
+
+    app.dependency_overrides[get_current_user] = lambda: user2
+    try:
+        resp = await client.get(f"/api/v1/plugins/{plugin_name}")
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_registry_mutation_requires_admin_when_auth_enabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api.auth import get_current_user
+    from ogi.config import settings
+    from ogi.models import UserProfile
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    monkeypatch.setattr(settings, "admin_emails", "admin@example.com")
+
+    app.dependency_overrides[get_current_user] = lambda: UserProfile(
+        id=uuid4(),
+        email="viewer@example.com",
+    )
+    try:
+        resp = await client.post("/api/v1/registry/install/does-not-matter")
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_registry_index_can_manage_flag_respects_admin_list(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api.auth import get_current_user
+    from ogi.config import settings
+    from ogi.models import UserProfile
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    monkeypatch.setattr(settings, "admin_emails", "admin@example.com")
+
+    # Non-admin
+    app.dependency_overrides[get_current_user] = lambda: UserProfile(
+        id=uuid4(),
+        email="viewer@example.com",
+    )
+    try:
+        resp = await client.get("/api/v1/registry/index")
+        assert resp.status_code == 200
+        assert resp.json().get("can_manage") is False
+    finally:
+        app.dependency_overrides.clear()
+
+    # Admin
+    app.dependency_overrides[get_current_user] = lambda: UserProfile(
+        id=uuid4(),
+        email="admin@example.com",
+    )
+    try:
+        resp = await client.get("/api/v1/registry/index")
+        assert resp.status_code == 200
+        assert resp.json().get("can_manage") is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_plugin_reload_requires_admin_when_auth_enabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api.auth import get_current_user
+    from ogi.config import settings
+    from ogi.models import UserProfile
+
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    plugins = resp.json()
+    if not plugins:
+        pytest.skip("No plugins available in test environment")
+
+    plugin_name = plugins[0]["name"]
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    monkeypatch.setattr(settings, "admin_emails", "admin@example.com")
+
+    app.dependency_overrides[get_current_user] = lambda: UserProfile(
+        id=uuid4(),
+        email="viewer@example.com",
+    )
+    try:
+        resp = await client.post(f"/api/v1/plugins/{plugin_name}/reload")
+        assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
 # ---------------------------------------------------------------------------
 # Transforms — for-entity and runs
 # ---------------------------------------------------------------------------
@@ -583,6 +753,38 @@ async def test_transforms_for_entity(client: AsyncClient):
     # Domain entities should have DNS transforms available
     names = [t["name"] for t in transforms]
     assert "domain_to_ip" in names
+
+
+@pytest.mark.asyncio
+async def test_run_transform_returns_503_when_enqueue_fails(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+
+    class BrokenQueue:
+        def enqueue(self, *args, **kwargs):
+            raise RuntimeError("redis connection dropped")
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: BrokenQueue())
+
+    # Setup: project + domain entity
+    resp = await client.post("/api/v1/projects", json={"name": "QueueFailure"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "example.com"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert resp.status_code == 503
+    assert "Failed to enqueue transform job" in resp.json().get("detail", "")
 
 
 # ---------------------------------------------------------------------------

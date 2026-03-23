@@ -12,7 +12,7 @@ services:
     volumes:
       - ./plugins:/app/plugins
     environment:
-      - OGI_DATABASE_URL=${OGI_DATABASE_URL:-postgresql://postgres:postgres@db:5432/ogi}
+      - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
 
@@ -28,7 +28,7 @@ services:
     volumes:
       - ./plugins:/app/plugins
     environment:
-      - OGI_DATABASE_URL=${OGI_DATABASE_URL:-postgresql://postgres:postgres@db:5432/ogi}
+      - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
 

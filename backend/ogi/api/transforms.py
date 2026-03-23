@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,6 +29,7 @@ from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
+logger = logging.getLogger(__name__)
 
 
 class RunTransformRequest(BaseModel):
@@ -135,17 +137,21 @@ async def run_transform(
     if queue is None:
         raise HTTPException(status_code=503, detail="Job queue not available — Redis may be down")
 
-    from ogi.worker.transform_job import execute_transform
-    queue.enqueue(
-        execute_transform,
-        str(run.id),
-        name,
-        entity.model_dump(mode="json"),
-        str(request.project_id),
-        request.config.model_dump(mode="json"),
-        job_id=str(run.id),
-        job_timeout=settings.transform_timeout,
-    )
+    try:
+        from ogi.worker.transform_job import execute_transform
+        queue.enqueue(
+            execute_transform,
+            str(run.id),
+            name,
+            entity.model_dump(mode="json"),
+            str(request.project_id),
+            request.config.model_dump(mode="json"),
+            job_id=str(run.id),
+            job_timeout=settings.transform_timeout,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue transform job %s", run.id)
+        raise HTTPException(status_code=503, detail="Failed to enqueue transform job — Redis may be unavailable")
 
     # Publish "job_submitted" event so WS clients see it immediately
     redis_conn = get_redis()
