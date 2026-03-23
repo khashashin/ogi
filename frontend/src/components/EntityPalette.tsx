@@ -11,7 +11,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useIsViewer } from "../hooks/useIsViewer";
 import type { LocationSuggestion } from "../types/location";
-import { getIconComponent, isCustomSvgIcon } from "../lib/iconRegistry";
+import { getEntityIconComponent, isCustomSvgIcon } from "../lib/entityIconRegistry";
 
 const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
   [EntityType.Person]: "Enter first and last name",
@@ -254,7 +254,7 @@ export function EntityPalette() {
             </p>
             {types.map((meta) => {
               const isCustomSvg = isCustomSvgIcon(meta.icon);
-              const IconComponent = getIconComponent(meta.icon) ?? Hash;
+              const IconComponent = getEntityIconComponent(meta.icon) ?? Hash;
               return (
                 <button
                   key={meta.type}

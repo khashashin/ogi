@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock, Link2, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
@@ -7,7 +7,11 @@ import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
-import { ChangeIconDialog } from "./ChangeIconDialog";
+import { resolveEntityIconName } from "../lib/entityIconRegistry";
+import { ENTITY_TYPE_META } from "../types/entity";
+const ChangeIconDialog = lazy(() =>
+  import("./ChangeIconDialog").then((module) => ({ default: module.ChangeIconDialog })),
+);
 
 interface MenuState {
   visible: boolean;
@@ -244,7 +248,12 @@ export function ContextMenu() {
   const handleSaveIcon = async (iconName: string) => {
     if (!currentProject || !entity) return;
     try {
-      const updated = await api.entities.update(currentProject.id, entity.id, { icon: iconName });
+      const defaultIcon = ENTITY_TYPE_META[entity.type]?.icon ?? iconName;
+      const normalizedIcon =
+        resolveEntityIconName(iconName) === resolveEntityIconName(defaultIcon)
+          ? defaultIcon
+          : iconName;
+      const updated = await api.entities.update(currentProject.id, entity.id, { icon: normalizedIcon });
       const { entities: entityMap } = useGraphStore.getState();
       entityMap.set(updated.id, updated);
       useGraphStore.setState({ entities: new Map(entityMap) });
@@ -423,13 +432,15 @@ export function ContextMenu() {
         </div>
       )}
 
-      <ChangeIconDialog
-        open={showChangeIcon && Boolean(entity)}
-        currentIcon={entity?.icon ?? "hash"}
-        entityLabel={entity?.value ?? ""}
-        onClose={() => setShowChangeIcon(false)}
-        onSave={handleSaveIcon}
-      />
+      <Suspense fallback={null}>
+        <ChangeIconDialog
+          open={showChangeIcon && Boolean(entity)}
+          currentIcon={entity?.icon ?? "hash"}
+          entityLabel={entity?.value ?? ""}
+          onClose={() => setShowChangeIcon(false)}
+          onSave={handleSaveIcon}
+        />
+      </Suspense>
     </>
   );
 }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Hash, Save, Search, X } from "lucide-react";
-import { LUCIDE_ICON_NAMES, getIconComponent } from "../lib/iconRegistry";
+import { DynamicIcon, iconNames } from "lucide-react/dynamic";
+import type { IconName } from "lucide-react/dynamic";
+import { resolveEntityIconName } from "../lib/entityIconRegistry";
 
 interface ChangeIconDialogProps {
   open: boolean;
@@ -18,25 +20,25 @@ export function ChangeIconDialog({
   onSave,
 }: ChangeIconDialogProps) {
   const [search, setSearch] = useState("");
-  const [selectedIcon, setSelectedIcon] = useState(currentIcon);
+  const [selectedIcon, setSelectedIcon] = useState<IconName>(
+    resolveEntityIconName(currentIcon) as IconName,
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSearch("");
-    setSelectedIcon(currentIcon);
+    setSelectedIcon(resolveEntityIconName(currentIcon) as IconName);
     setSaving(false);
   }, [open, currentIcon]);
 
   const filteredIcons = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return LUCIDE_ICON_NAMES;
-    return LUCIDE_ICON_NAMES.filter((iconName) => iconName.includes(query));
+    if (!query) return iconNames;
+    return iconNames.filter((iconName) => iconName.includes(query));
   }, [search]);
 
   if (!open) return null;
-
-  const SelectedIconComponent = getIconComponent(selectedIcon) ?? Hash;
 
   const handleSave = async () => {
     setSaving(true);
@@ -79,7 +81,7 @@ export function ChangeIconDialog({
               Selected
             </div>
             <div className="flex items-center justify-center rounded-xl border border-border bg-surface p-6">
-              <SelectedIconComponent size={40} />
+              <DynamicIcon name={selectedIcon} size={40} fallback={() => <Hash size={40} />} />
             </div>
             <div className="mt-3 text-center text-sm text-text">{selectedIcon}</div>
           </div>
@@ -96,7 +98,6 @@ export function ChangeIconDialog({
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                   {filteredIcons.map((iconName) => {
-                    const IconComponent = getIconComponent(iconName) ?? Hash;
                     const isSelected = iconName === selectedIcon;
                     return (
                       <button
@@ -110,7 +111,11 @@ export function ChangeIconDialog({
                         }`}
                       >
                         <div className="mb-2 flex justify-center">
-                          <IconComponent size={20} />
+                          <DynamicIcon
+                            name={iconName}
+                            size={20}
+                            fallback={() => <Hash size={20} />}
+                          />
                         </div>
                         <div className="text-[11px] leading-4 break-words">{iconName}</div>
                       </button>

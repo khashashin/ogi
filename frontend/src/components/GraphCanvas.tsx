@@ -1,12 +1,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Hash } from "lucide-react";
 import Sigma from "sigma";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
 import { applyGraphLayout } from "../lib/graphLayouts";
-import { getIconComponent, isCustomSvgIcon, renderLucideIconSvg } from "../lib/iconRegistry";
 import { ENTITY_TYPE_META } from "../types/entity";
+import { isCustomSvgIcon, resolveEntityIconName } from "../lib/entityIconRegistry";
+import { LazyLucideIcon } from "./LazyLucideIcon";
 
 const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
@@ -14,7 +14,6 @@ const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
 const CONNECTION_LABEL_COLOR = "#fef3c7";
 const CONNECTION_LABEL_BG = "#92400e";
-const nodeIconImageCache = new Map<string, HTMLImageElement>();
 
 function getContrastIconColor(color?: string): string {
   const hex = (color ?? "").trim();
@@ -27,32 +26,13 @@ function getContrastIconColor(color?: string): string {
   return luminance > 0.6 ? "#111827" : "#ffffff";
 }
 
-function getNodeIconImage(iconName: string, color: string): HTMLImageElement | null {
-  const cacheKey = `${iconName}:${color}`;
-  const cached = nodeIconImageCache.get(cacheKey);
-  if (cached) return cached;
-
-  let src: string | null = null;
-  if (isCustomSvgIcon(iconName)) {
-    src = `/icons/${iconName}.svg`;
-  } else if (getIconComponent(iconName)) {
-    const svg = renderLucideIconSvg(iconName, { color, size: 24, strokeWidth: 2.25 });
-    if (svg) src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  }
-
-  if (!src) return null;
-
-  const image = new Image();
-  image.src = src;
-  nodeIconImageCache.set(cacheKey, image);
-  return image;
-}
-
 function getCustomNodeIcon(entity: { type: string; icon?: string | null }): string | null {
   const iconName = entity.icon?.trim();
   if (!iconName) return null;
   const defaultIcon = ENTITY_TYPE_META[entity.type as keyof typeof ENTITY_TYPE_META]?.icon;
-  if (defaultIcon && defaultIcon === iconName) return null;
+  if (defaultIcon && resolveEntityIconName(defaultIcon) === resolveEntityIconName(iconName)) {
+    return null;
+  }
   return iconName;
 }
 
@@ -137,7 +117,6 @@ function drawHighlightedNodeHover(
 export function GraphCanvas() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const iconCanvasRef = useRef<HTMLCanvasElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const {
     graph,
@@ -663,79 +642,6 @@ export function GraphCanvas() {
     setNodeIconOverlays(overlays);
   }, [entities, graph, hiddenNodeIds]);
 
-  const drawNodeIcons = useCallback(() => {
-    const renderer = sigmaRef.current as (Sigma & {
-      getNodeDisplayData?: (key: string) => { x: number; y: number; size: number } | undefined;
-      framedGraphToViewport?: (point: { x: number; y: number }) => { x: number; y: number };
-      scaleSize?: (size?: number, ratio?: number) => number;
-      refresh: () => void;
-    }) | null;
-    const overlayCanvas = iconCanvasRef.current;
-    const container = wrapperRef.current;
-    if (
-      !renderer ||
-      !overlayCanvas ||
-      !container ||
-      !renderer.getNodeDisplayData ||
-      !renderer.framedGraphToViewport ||
-      !renderer.scaleSize
-    ) {
-      return;
-    }
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    const pixelRatio = window.devicePixelRatio || 1;
-    const expectedWidth = Math.max(1, Math.floor(width * pixelRatio));
-    const expectedHeight = Math.max(1, Math.floor(height * pixelRatio));
-
-    if (overlayCanvas.width !== expectedWidth || overlayCanvas.height !== expectedHeight) {
-      overlayCanvas.width = expectedWidth;
-      overlayCanvas.height = expectedHeight;
-      overlayCanvas.style.width = `${width}px`;
-      overlayCanvas.style.height = `${height}px`;
-    }
-
-    const context = overlayCanvas.getContext("2d");
-    if (!context) return;
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, width, height);
-
-    graph.forEachNode((nodeId, attrs) => {
-      if (hiddenNodeIds.has(nodeId)) return;
-      const entity = entities.get(nodeId);
-      if (!entity) return;
-      const customIcon = getCustomNodeIcon(entity);
-      if (!customIcon) return;
-
-      const displayData = renderer.getNodeDisplayData?.(nodeId);
-      if (!displayData) return;
-      const point = renderer.framedGraphToViewport?.({
-        x: displayData.x,
-        y: displayData.y,
-      });
-      if (!point) return;
-
-      const iconImage = getNodeIconImage(customIcon, getContrastIconColor(String(attrs.color ?? "")));
-      if (!iconImage) return;
-      if (!iconImage.complete) {
-        iconImage.onload = () => window.requestAnimationFrame(drawNodeIcons);
-        return;
-      }
-
-      const rawNodeSize = Number(displayData.size) || Number(attrs.size) || 12;
-      const nodeSize = renderer.scaleSize?.(rawNodeSize) ?? rawNodeSize;
-      const iconSize = Math.max(10, nodeSize * 1.35);
-      context.drawImage(
-        iconImage,
-        point.x - iconSize / 2,
-        point.y - iconSize / 2,
-        iconSize,
-        iconSize,
-      );
-    });
-  }, [entities, graph, hiddenNodeIds]);
-
   useEffect(() => {
     const renderer = sigmaRef.current as (Sigma & {
       on?: (event: string, handler: () => void) => void;
@@ -747,28 +653,20 @@ export function GraphCanvas() {
     }) | null;
     if (!renderer) return;
 
-    const redraw = () => window.requestAnimationFrame(drawNodeIcons);
     const refreshDomIcons = () => window.requestAnimationFrame(updateNodeIconOverlays);
     const camera = renderer.getCamera();
 
-    renderer.on?.("afterRender", redraw);
     renderer.on?.("afterRender", refreshDomIcons);
-    camera.on?.("updated", redraw);
     camera.on?.("updated", refreshDomIcons);
-    window.addEventListener("resize", redraw);
     window.addEventListener("resize", refreshDomIcons);
-    redraw();
     refreshDomIcons();
 
     return () => {
-      renderer.off?.("afterRender", redraw);
       renderer.off?.("afterRender", refreshDomIcons);
-      camera.off?.("updated", redraw);
       camera.off?.("updated", refreshDomIcons);
-      window.removeEventListener("resize", redraw);
       window.removeEventListener("resize", refreshDomIcons);
     };
-  }, [drawNodeIcons, updateNodeIconOverlays]);
+  }, [updateNodeIconOverlays]);
 
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!wrapperRef.current || event.button !== 0) return;
@@ -865,10 +763,8 @@ export function GraphCanvas() {
       onMouseDownCapture={handleMouseDownCapture}
     >
       <div ref={containerRef} className="absolute inset-0" />
-      <canvas ref={iconCanvasRef} className="pointer-events-none absolute inset-0 z-[20]" />
       <div className="pointer-events-none absolute inset-0 z-[30]">
         {nodeIconOverlays.map((overlay) => {
-          const IconComponent = getIconComponent(overlay.icon) ?? Hash;
           return (
             <div
               key={overlay.id}
@@ -889,7 +785,7 @@ export function GraphCanvas() {
                   className="h-full w-full object-contain"
                 />
               ) : (
-                <IconComponent size={overlay.size} strokeWidth={2.25} />
+                <LazyLucideIcon name={overlay.icon} size={overlay.size} strokeWidth={2.25} />
               )}
             </div>
           );
