@@ -94,6 +94,7 @@ class EntityCreate(SQLModel):
 class EntityUpdate(SQLModel):
     value: str | None = None
     properties: dict[str, Any] | None = None
+    icon: str | None = None
     weight: int | None = None
     notes: str | None = None
     tags: list[str] | None = None
