@@ -14,7 +14,7 @@ from ogi.store.api_key_store import ApiKeyStore
 async def test_require_admin_user_blocks_non_admin(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
     monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
-    monkeypatch.setattr(settings, "admin_emails", ["admin@example.com"])
+    monkeypatch.setattr(settings, "admin_emails", "admin@example.com")
 
     user = UserProfile(id=uuid4(), email="user@example.com")
     with pytest.raises(HTTPException) as exc:
@@ -26,7 +26,7 @@ async def test_require_admin_user_blocks_non_admin(monkeypatch: pytest.MonkeyPat
 async def test_require_admin_user_allows_local_mode(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "supabase_url", "")
     monkeypatch.setattr(settings, "supabase_anon_key", "")
-    monkeypatch.setattr(settings, "admin_emails", [])
+    monkeypatch.setattr(settings, "admin_emails", "")
 
     user = UserProfile(id=uuid4(), email="local@example.com")
     resolved = await require_admin_user(user)

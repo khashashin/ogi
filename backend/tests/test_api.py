@@ -506,6 +506,59 @@ async def test_get_nonexistent_plugin(client: AsyncClient):
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_plugin_enable_disable_is_user_preference(client: AsyncClient):
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    plugins = resp.json()
+    if not plugins:
+        pytest.skip("No plugins available in test environment")
+
+    plugin_name = plugins[0]["name"]
+
+    resp = await client.post(f"/api/v1/plugins/{plugin_name}/disable")
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is False
+
+    resp = await client.get(f"/api/v1/plugins/{plugin_name}")
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is False
+
+    resp = await client.post(f"/api/v1/plugins/{plugin_name}/enable")
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_disabling_plugin_hides_its_transforms(client: AsyncClient):
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    plugins = resp.json()
+    if not plugins:
+        pytest.skip("No plugins available in test environment")
+
+    plugin_with_transforms = next(
+        (p for p in plugins if p.get("transform_names")),
+        None,
+    )
+    if plugin_with_transforms is None:
+        pytest.skip("No plugin transforms available to validate filtering")
+
+    plugin_name = plugin_with_transforms["name"]
+    transform_names = set(plugin_with_transforms["transform_names"])
+
+    resp = await client.post(f"/api/v1/plugins/{plugin_name}/disable")
+    assert resp.status_code == 200
+
+    resp = await client.get("/api/v1/transforms")
+    assert resp.status_code == 200
+    listed_names = {t["name"] for t in resp.json()}
+    assert listed_names.isdisjoint(transform_names)
+
+    resp = await client.post(f"/api/v1/plugins/{plugin_name}/enable")
+    assert resp.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # Transforms — for-entity and runs
 # ---------------------------------------------------------------------------

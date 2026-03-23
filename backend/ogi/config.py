@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,11 +39,21 @@ class Settings(BaseSettings):
     # TODO: Remove after official launch and the repository is public
     github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
     api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
-    admin_emails: list[str] = [
-        email.strip().lower()
-        for email in os.environ.get("OGI_ADMIN_EMAILS", "").split(",")
-        if email.strip()
-    ]
+    admin_emails: str = ""
+
+    @field_validator("admin_emails", mode="before")
+    @classmethod
+    def _parse_admin_emails(cls, v: object) -> str:
+        if isinstance(v, list):
+            return ",".join(str(i) for i in v)
+        return str(v) if v else ""
+
+    def get_admin_emails(self) -> list[str]:
+        return [
+            email.strip().lower()
+            for email in self.admin_emails.split(",")
+            if email.strip()
+        ]
 
     # Redis / RQ job queue
     redis_url: str = "redis://localhost:6379/0"

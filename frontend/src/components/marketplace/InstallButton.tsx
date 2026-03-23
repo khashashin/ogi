@@ -1,21 +1,27 @@
-import { Download, Trash2, Loader2, Check } from "lucide-react";
+import { Download, Loader2, Check, Lock, ToggleLeft, ToggleRight } from "lucide-react";
 
 interface InstallButtonProps {
-  installed: boolean;
+  available: boolean;
+  enabled: boolean;
+  canManage: boolean;
   bundled: boolean;
   installing: boolean;
-  removing: boolean;
+  toggling: boolean;
   onInstall: () => void;
-  onRemove: () => void;
+  onEnable: () => void;
+  onDisable: () => void;
 }
 
 export function InstallButton({
-  installed,
+  available,
+  enabled,
+  canManage,
   bundled,
   installing,
-  removing,
+  toggling,
   onInstall,
-  onRemove,
+  onEnable,
+  onDisable,
 }: InstallButtonProps) {
   if (bundled) {
     return (
@@ -23,6 +29,41 @@ export function InstallButton({
         <Check size={10} />
         Bundled
       </span>
+    );
+  }
+
+  if (toggling) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-accent bg-accent/10 rounded">
+        <Loader2 size={10} className="animate-spin" />
+        Updating...
+      </span>
+    );
+  }
+
+  if (available) {
+    if (enabled) {
+      return (
+        <button
+          onClick={onDisable}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-green-400 bg-green-400/10 rounded hover:bg-green-400/20 transition-colors"
+          title="Disable for me"
+        >
+          <ToggleRight size={10} />
+          Enabled
+        </button>
+      );
+    }
+
+    return (
+      <button
+        onClick={onEnable}
+        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-text-muted bg-surface rounded hover:bg-surface-hover transition-colors"
+        title="Enable for me"
+      >
+        <ToggleLeft size={10} />
+        Disabled
+      </button>
     );
   }
 
@@ -35,30 +76,12 @@ export function InstallButton({
     );
   }
 
-  if (removing) {
+  if (!canManage) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-red-400 bg-red-400/10 rounded">
-        <Loader2 size={10} className="animate-spin" />
-        Removing...
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-text-muted bg-surface rounded">
+        <Lock size={10} />
+        Admin install
       </span>
-    );
-  }
-
-  if (installed) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] text-green-400 bg-green-400/10 rounded">
-          <Check size={10} />
-          Installed
-        </span>
-        <button
-          onClick={onRemove}
-          className="p-1 text-text-muted hover:text-red-400 rounded hover:bg-red-400/10"
-          title="Uninstall"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
     );
   }
 

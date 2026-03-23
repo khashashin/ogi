@@ -11,14 +11,16 @@ export function BrowseTab() {
     searchResults,
     loading,
     installing,
-    removing,
+    toggling,
+    canManage,
     searchQuery,
     selectedCategory,
     selectedTier,
     installedPlugins,
     searchTransforms,
     installTransform,
-    removeTransform,
+    enablePlugin,
+    disablePlugin,
     setSelectedCategory,
     setSelectedTier,
   } = useRegistryStore();
@@ -40,18 +42,22 @@ export function BrowseTab() {
     }
   };
 
-  const installedSlugs = new Set(installedPlugins.map((p) => p.name));
+  const pluginBySlug = new Map(installedPlugins.map((plugin) => [plugin.name, plugin]));
 
   if (selectedTransform) {
+    const installedPlugin = pluginBySlug.get(selectedTransform.slug);
     return (
       <div className="flex-1 overflow-y-auto p-1">
         <TransformDetail
           transform={selectedTransform}
-          installed={installedSlugs.has(selectedTransform.slug)}
+          available={Boolean(installedPlugin)}
+          enabled={Boolean(installedPlugin?.enabled)}
+          canManage={canManage}
           installing={installing === selectedTransform.slug}
-          removing={removing === selectedTransform.slug}
+          toggling={toggling === selectedTransform.slug}
           onInstall={() => installTransform(selectedTransform.slug)}
-          onRemove={() => removeTransform(selectedTransform.slug)}
+          onEnable={() => enablePlugin(selectedTransform.slug)}
+          onDisable={() => disablePlugin(selectedTransform.slug)}
           onBack={() => setSelectedTransform(null)}
         />
       </div>
@@ -97,18 +103,24 @@ export function BrowseTab() {
               No transforms found. Try a different search query.
             </p>
           )}
-          {searchResults.map((t) => (
-            <TransformCard
-              key={t.slug}
-              transform={t}
-              installed={installedSlugs.has(t.slug)}
-              installing={installing === t.slug}
-              removing={removing === t.slug}
-              onInstall={() => installTransform(t.slug)}
-              onRemove={() => removeTransform(t.slug)}
-              onClick={() => setSelectedTransform(t)}
-            />
-          ))}
+          {searchResults.map((t) => {
+            const installedPlugin = pluginBySlug.get(t.slug);
+            return (
+              <TransformCard
+                key={t.slug}
+                transform={t}
+                available={Boolean(installedPlugin)}
+                enabled={Boolean(installedPlugin?.enabled)}
+                canManage={canManage}
+                installing={installing === t.slug}
+                toggling={toggling === t.slug}
+                onInstall={() => installTransform(t.slug)}
+                onEnable={() => enablePlugin(t.slug)}
+                onDisable={() => disablePlugin(t.slug)}
+                onClick={() => setSelectedTransform(t)}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

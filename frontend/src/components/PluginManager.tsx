@@ -40,7 +40,11 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
 
   const handleToggle = async (name: string) => {
     try {
-      const updated = await api.plugins.toggle(name);
+      const current = plugins.find((p) => p.name === name);
+      if (!current) return;
+      const updated = current.enabled
+        ? await api.plugins.disable(name)
+        : await api.plugins.enable(name);
       setPlugins((prev) =>
         prev.map((p) => (p.name === name ? updated : p))
       );

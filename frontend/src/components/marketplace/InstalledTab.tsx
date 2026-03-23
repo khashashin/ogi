@@ -1,4 +1,4 @@
-import { RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
+import { ToggleLeft, ToggleRight } from "lucide-react";
 import { VerificationBadge } from "./VerificationBadge";
 import type { PluginInfoV2, VerificationTier } from "../../types/registry";
 import { api } from "../../api/client";
@@ -11,39 +11,36 @@ interface InstalledTabProps {
 
 export function InstalledTab({ plugins, onRefresh }: InstalledTabProps) {
   const [toggling, setToggling] = useState<string | null>(null);
-  const [reloading, setReloading] = useState<string | null>(null);
 
   const handleToggle = async (name: string) => {
     setToggling(name);
     try {
-      await api.plugins.toggle(name);
+      const current = plugins.find((plugin) => plugin.name === name);
+      if (!current) return;
+      if (current.enabled) {
+        await api.plugins.disable(name);
+      } else {
+        await api.plugins.enable(name);
+      }
       onRefresh();
     } finally {
       setToggling(null);
     }
   };
 
-  const handleReload = async (name: string) => {
-    setReloading(name);
-    try {
-      await api.plugins.reload(name);
-      onRefresh();
-    } finally {
-      setReloading(null);
-    }
-  };
+  const enabledPlugins = plugins.filter((plugin) => plugin.enabled);
 
-  if (plugins.length === 0) {
+  if (enabledPlugins.length === 0) {
     return (
       <p className="text-xs text-text-muted p-4">
-        No plugins installed. Browse the registry to discover and install transforms.
+        No transforms enabled. Use the Catalog tab to enable installed plugins.
       </p>
     );
   }
 
   return (
     <div className="space-y-2 p-1">
-      {plugins.map((plugin) => (
+      {enabledPlugins.map((plugin) => (
         <div
           key={plugin.name}
           className="p-3 rounded bg-bg border border-border"
@@ -82,14 +79,6 @@ export function InstalledTab({ plugins, onRefresh }: InstalledTabProps) {
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={() => handleReload(plugin.name)}
-                disabled={reloading === plugin.name}
-                className="p-1 text-text-muted hover:text-text disabled:opacity-50"
-                title="Reload plugin"
-              >
-                <RefreshCw size={14} className={reloading === plugin.name ? "animate-spin" : ""} />
-              </button>
               <button
                 onClick={() => handleToggle(plugin.name)}
                 disabled={toggling === plugin.name}

@@ -3,7 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
-import type { RegistryIndex, RegistryTransform, UpdateAvailable } from "../types/registry";
+import type { RegistryIndex, RegistryTransform } from "../types/registry";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -259,8 +259,10 @@ export const api = {
   plugins: {
     list: () => request<PluginInfo[]>("/plugins"),
     get: (name: string) => request<PluginInfo>(`/plugins/${name}`),
-    toggle: (name: string) =>
+    enable: (name: string) =>
       request<PluginInfo>(`/plugins/${name}/enable`, { method: "POST" }),
+    disable: (name: string) =>
+      request<PluginInfo>(`/plugins/${name}/disable`, { method: "POST" }),
     reload: (name: string) =>
       request<PluginInfo>(`/plugins/${name}/reload`, { method: "POST" }),
   },
@@ -307,10 +309,7 @@ export const api = {
       request<{ status: string; slug: string }>(`/registry/remove/${slug}`, { method: "DELETE" }),
     update: (slug: string) =>
       request<InstallResult>(`/registry/update/${slug}`, { method: "POST" }),
-    checkUpdates: () =>
-      request<UpdateAvailable[]>("/registry/check-updates"),
   },
 };
 
 export type { DiscoverProject, MyProjectItem, ProjectMember };
-

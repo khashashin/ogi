@@ -191,5 +191,11 @@ class PluginEngine:
     def get_plugin(self, name: str) -> PluginInfo | None:
         return self.plugins.get(name)
 
+    def get_plugin_for_transform(self, transform_name: str) -> str | None:
+        for plugin_name, transform_names in self._plugin_transforms.items():
+            if transform_name in transform_names:
+                return plugin_name
+        return None
+
     def list_plugins(self) -> list[PluginInfo]:
         return list(self.plugins.values())

@@ -20,6 +20,7 @@ from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.api_key_store import ApiKeyStore
+from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -92,6 +93,12 @@ async def get_transform_run_store(session: AsyncSession = Depends(get_session)) 
 
 async def get_api_key_store(session: AsyncSession = Depends(get_session)) -> ApiKeyStore:
     return ApiKeyStore(session)
+
+
+async def get_user_plugin_preference_store(
+    session: AsyncSession = Depends(get_session),
+) -> UserPluginPreferenceStore:
+    return UserPluginPreferenceStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

@@ -18,11 +18,14 @@ from ogi.api.dependencies import (
     get_project_store,
     get_rq_queue,
     get_redis,
+    get_plugin_engine,
+    get_user_plugin_preference_store,
 )
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
 from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
+from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
 
@@ -33,12 +36,29 @@ class RunTransformRequest(BaseModel):
     config: TransformConfig = Field(default_factory=TransformConfig)
 
 
+def _transform_visible_to_user(
+    transform_name: str,
+    plugin_enabled_map: dict[str, bool],
+) -> bool:
+    plugin_name = get_plugin_engine().get_plugin_for_transform(transform_name)
+    if plugin_name is None:
+        return True
+    return plugin_enabled_map.get(plugin_name, True)
+
+
 @router.get("", response_model=list[TransformInfo])
 async def list_transforms(
     current_user: UserProfile = Depends(get_current_user),
+    preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
 ) -> list[TransformInfo]:
     engine = get_transform_engine()
-    return engine.list_transforms()
+    all_transforms = engine.list_transforms()
+    enabled_by_plugin = await preferences.list_for_user(current_user.id)
+    return [
+        transform
+        for transform in all_transforms
+        if _transform_visible_to_user(transform.name, enabled_by_plugin)
+    ]
 
 
 @router.get("/entity-types")
@@ -54,12 +74,18 @@ async def list_transforms_for_entity(
     entity_id: UUID,
     current_user: UserProfile = Depends(get_current_user),
     entity_store: EntityStore = Depends(get_entity_store),
+    preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
 ) -> list[TransformInfo]:
     entity = await entity_store.get(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
     engine = get_transform_engine()
-    return engine.list_for_entity(entity)
+    enabled_by_plugin = await preferences.list_for_user(current_user.id)
+    return [
+        transform
+        for transform in engine.list_for_entity(entity)
+        if _transform_visible_to_user(transform.name, enabled_by_plugin)
+    ]
 
 
 @router.post("/{name}/run", response_model=TransformRun)
@@ -70,6 +96,7 @@ async def run_transform(
     project_store: ProjectStore = Depends(get_project_store),
     entity_store: EntityStore = Depends(get_entity_store),
     run_store: TransformRunStore = Depends(get_transform_run_store),
+    preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
 ) -> TransformRun:
     role = await project_store.get_member_role(request.project_id, current_user.id)
     if role not in ("owner", "editor"):
@@ -83,6 +110,11 @@ async def run_transform(
     transform = transform_engine.get_transform(name)
     if transform is None:
         raise HTTPException(status_code=400, detail=f"Transform '{name}' not found")
+
+    plugin_name = get_plugin_engine().get_plugin_for_transform(name)
+    if plugin_name and not await preferences.is_enabled(current_user.id, plugin_name, default=True):
+        raise HTTPException(status_code=403, detail=f"Plugin '{plugin_name}' is disabled for this user")
+
     if not transform.can_run_on(entity):
         raise HTTPException(
             status_code=400,

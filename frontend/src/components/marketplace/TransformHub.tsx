@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { X, Store } from "lucide-react";
 import { InstalledTab } from "./InstalledTab";
 import { BrowseTab } from "./BrowseTab";
-import { UpdatesTab } from "./UpdatesTab";
 import { useRegistryStore } from "../../stores/registryStore";
 
 interface TransformHubProps {
@@ -15,13 +14,11 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
     activeTab,
     setActiveTab,
     installedPlugins,
-    updates,
     error,
     clearError,
     fetchIndex,
     fetchInstalledPlugins,
     searchTransforms,
-    checkUpdates,
   } = useRegistryStore();
 
   useEffect(() => {
@@ -29,16 +26,14 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
       fetchIndex();
       fetchInstalledPlugins();
       searchTransforms("");
-      checkUpdates();
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
 
-  const tabs: { id: "installed" | "browse" | "updates"; label: string; count?: number }[] = [
-    { id: "installed", label: "Installed", count: installedPlugins.length },
-    { id: "browse", label: "Browse Registry" },
-    { id: "updates", label: "Updates", count: updates.length },
+  const tabs: { id: "enabled" | "catalog"; label: string; count?: number }[] = [
+    { id: "enabled", label: "Enabled", count: installedPlugins.filter((p) => p.enabled).length },
+    { id: "catalog", label: "Catalog" },
   ];
 
   return (
@@ -92,14 +87,13 @@ export function TransformHub({ open, onClose }: TransformHubProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 min-h-0">
-          {activeTab === "installed" && (
+          {activeTab === "enabled" && (
             <InstalledTab
               plugins={installedPlugins}
               onRefresh={fetchInstalledPlugins}
             />
           )}
-          {activeTab === "browse" && <BrowseTab />}
-          {activeTab === "updates" && <UpdatesTab />}
+          {activeTab === "catalog" && <BrowseTab />}
         </div>
       </div>
     </div>

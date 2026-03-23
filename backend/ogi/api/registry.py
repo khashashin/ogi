@@ -39,7 +39,13 @@ async def get_index(
     """Return the full cached registry index."""
     registry = get_registry_client()
     index = await registry.fetch_index()
-    return dict(index)
+    can_manage = (
+        (not settings.supabase_url or not settings.supabase_anon_key)
+        or current_user.email.lower() in settings.admin_emails
+    )
+    payload = dict(index)
+    payload["can_manage"] = can_manage
+    return payload
 
 
 @router.get("/search")

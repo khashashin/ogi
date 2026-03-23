@@ -114,7 +114,7 @@ async def require_admin_user(
     if not settings.supabase_url or not settings.supabase_anon_key:
         return current_user
 
-    if current_user.email.lower() not in settings.admin_emails:
+    if current_user.email.lower() not in settings.get_admin_emails():
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 

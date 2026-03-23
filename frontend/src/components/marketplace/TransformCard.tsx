@@ -5,21 +5,27 @@ import type { RegistryTransform, VerificationTier } from "../../types/registry";
 
 interface TransformCardProps {
   transform: RegistryTransform;
-  installed: boolean;
+  available: boolean;
+  enabled: boolean;
+  canManage: boolean;
   installing: boolean;
-  removing: boolean;
+  toggling: boolean;
   onInstall: () => void;
-  onRemove: () => void;
+  onEnable: () => void;
+  onDisable: () => void;
   onClick: () => void;
 }
 
 export function TransformCard({
   transform,
-  installed,
+  available,
+  enabled,
+  canManage,
   installing,
-  removing,
+  toggling,
   onInstall,
-  onRemove,
+  onEnable,
+  onDisable,
   onClick,
 }: TransformCardProps) {
   const score = transform.popularity?.computed_score ?? 0;
@@ -56,12 +62,15 @@ export function TransformCard({
         </div>
         <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <InstallButton
-            installed={installed}
+            available={available}
+            enabled={enabled}
+            canManage={canManage}
             bundled={transform.bundled}
             installing={installing}
-            removing={removing}
+            toggling={toggling}
             onInstall={onInstall}
-            onRemove={onRemove}
+            onEnable={onEnable}
+            onDisable={onDisable}
           />
         </div>
       </div>
