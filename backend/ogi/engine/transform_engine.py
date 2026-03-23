@@ -31,6 +31,7 @@ class TransformEngine:
                 input_types=t.input_types,
                 output_types=t.output_types,
                 category=t.category,
+                settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
             )
             for t in self._transforms.values()
         ]
@@ -44,6 +45,7 @@ class TransformEngine:
                 input_types=t.input_types,
                 output_types=t.output_types,
                 category=t.category,
+                settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
             )
             for t in self._transforms.values()
             if t.can_run_on(entity)
@@ -113,6 +115,7 @@ class TransformEngine:
         from ogi.transforms.cert.cert_transparency import CertTransparency
         from ogi.transforms.social.username_search import UsernameSearch
         from ogi.transforms.hash.hash_lookup import HashLookup
+        from ogi.transforms.org.organization_to_team_members import OrganizationToTeamMembers
 
         for cls in [
             DomainToIP, DomainToMX, DomainToNS, IPToDomain, WhoisLookup,
@@ -121,5 +124,6 @@ class TransformEngine:
             EmailToDomain, DomainToEmails,
             DomainToCerts, CertTransparency,
             UsernameSearch, HashLookup,
+            OrganizationToTeamMembers,
         ]:
             self.register(cls())

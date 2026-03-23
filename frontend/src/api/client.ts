@@ -2,7 +2,7 @@ import type { Project, ProjectCreate, ProjectUpdate } from "../types/project";
 import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../types/entity";
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
-import type { TransformInfo, TransformRun, TransformConfig } from "../types/transform";
+import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
 import type { RegistryIndex, RegistryTransform } from "../types/registry";
 import { supabase } from "../lib/supabase";
 
@@ -239,6 +239,18 @@ export const api = {
           project_id: projectId,
           config: config ?? { settings: {} },
         }),
+      }),
+    getSettings: (name: string) =>
+      request<TransformSettingsResponse>(`/transforms/${name}/settings`),
+    saveUserSettings: (name: string, settings: Record<string, string>) =>
+      request<TransformSettingsResponse>(`/transforms/${name}/settings/user`, {
+        method: "PUT",
+        body: JSON.stringify({ settings }),
+      }),
+    saveGlobalSettings: (name: string, settings: Record<string, string>) =>
+      request<TransformSettingsResponse>(`/transforms/${name}/settings/global`, {
+        method: "PUT",
+        body: JSON.stringify({ settings }),
       }),
     getRun: (runId: string) => request<TransformRun>(`/transforms/runs/${runId}`),
     cancel: (runId: string) =>

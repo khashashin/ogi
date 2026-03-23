@@ -1,32 +1,34 @@
 from datetime import datetime, timezone
 import logging
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ogi.config import settings
-from ogi.models import TransformInfo, TransformRun, TransformResult, TransformStatus, TransformJobMessage, EdgeCreate, UserProfile
-from ogi.transforms.base import TransformConfig
-from ogi.api.auth import get_current_user, require_project_viewer
+from ogi.models import TransformInfo, TransformRun, TransformStatus, TransformJobMessage, UserProfile
+from ogi.transforms.base import TransformConfig, TransformSetting
+from ogi.api.auth import get_current_user, require_project_viewer, require_admin_user
 from ogi.api.dependencies import (
     get_transform_engine,
     get_entity_store,
     get_entity_registry,
-    get_edge_store,
-    get_graph_engine,
     get_transform_run_store,
     get_project_store,
     get_rq_queue,
     get_redis,
     get_plugin_engine,
     get_user_plugin_preference_store,
+    get_api_key_store,
+    get_transform_settings_store,
 )
 from ogi.store.project_store import ProjectStore
 from ogi.store.entity_store import EntityStore
-from ogi.store.edge_store import EdgeStore
 from ogi.store.transform_run_store import TransformRunStore
 from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
+from ogi.store.api_key_store import ApiKeyStore
+from ogi.store.transform_settings_store import TransformSettingsStore
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
 logger = logging.getLogger(__name__)
@@ -38,6 +40,20 @@ class RunTransformRequest(BaseModel):
     config: TransformConfig = Field(default_factory=TransformConfig)
 
 
+class SaveTransformSettingsRequest(BaseModel):
+    settings: dict[str, str] = Field(default_factory=dict)
+
+
+class TransformSettingsResponse(BaseModel):
+    transform_name: str
+    settings_schema: list[dict[str, object]]
+    defaults: dict[str, str]
+    global_settings: dict[str, str]
+    user_settings: dict[str, str]
+    resolved: dict[str, str]
+    can_manage_global: bool
+
+
 def _transform_visible_to_user(
     transform_name: str,
     plugin_enabled_map: dict[str, bool],
@@ -46,6 +62,91 @@ def _transform_visible_to_user(
     if plugin_name is None:
         return True
     return plugin_enabled_map.get(plugin_name, True)
+
+
+def _base_default_settings(transform: object) -> dict[str, str]:
+    return {
+        s.name: s.default
+        for s in getattr(transform, "settings", [])
+        if isinstance(s, TransformSetting) and s.default
+    }
+
+
+def _normalize_bool(raw: str) -> str | None:
+    normalized = raw.strip().lower()
+    if normalized in {"true", "1", "yes", "on"}:
+        return "true"
+    if normalized in {"false", "0", "no", "off"}:
+        return "false"
+    return None
+
+
+def _sanitize_settings(
+    transform: object,
+    incoming: dict[str, str],
+) -> dict[str, str]:
+    allowed: dict[str, TransformSetting] = {
+        s.name: s
+        for s in getattr(transform, "settings", [])
+        if isinstance(s, TransformSetting)
+    }
+    sanitized: dict[str, str] = {}
+    for key, raw_value in incoming.items():
+        setting = allowed.get(key)
+        if setting is None:
+            continue
+        value = str(raw_value).strip()
+        if setting.field_type in {"string", "secret"}:
+            if setting.pattern and not re.match(setting.pattern, value):
+                raise HTTPException(status_code=400, detail=f"Invalid value for setting '{key}'")
+            if len(value) > 2000:
+                raise HTTPException(status_code=400, detail=f"Value too long for setting '{key}'")
+            sanitized[key] = value
+        elif setting.field_type == "boolean":
+            norm = _normalize_bool(value)
+            if norm is None:
+                raise HTTPException(status_code=400, detail=f"Invalid boolean for setting '{key}'")
+            sanitized[key] = norm
+        elif setting.field_type == "integer":
+            try:
+                parsed = int(value)
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid integer for setting '{key}'")
+            if setting.min_value is not None and parsed < int(setting.min_value):
+                raise HTTPException(status_code=400, detail=f"Setting '{key}' is below minimum")
+            if setting.max_value is not None and parsed > int(setting.max_value):
+                raise HTTPException(status_code=400, detail=f"Setting '{key}' is above maximum")
+            sanitized[key] = str(parsed)
+        elif setting.field_type == "number":
+            try:
+                parsed_num = float(value)
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid number for setting '{key}'")
+            if setting.min_value is not None and parsed_num < setting.min_value:
+                raise HTTPException(status_code=400, detail=f"Setting '{key}' is below minimum")
+            if setting.max_value is not None and parsed_num > setting.max_value:
+                raise HTTPException(status_code=400, detail=f"Setting '{key}' is above maximum")
+            sanitized[key] = str(parsed_num)
+        elif setting.field_type == "select":
+            if setting.options and value not in setting.options:
+                raise HTTPException(status_code=400, detail=f"Invalid option for setting '{key}'")
+            sanitized[key] = value
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+async def _resolve_settings(
+    transform: object,
+    transform_name: str,
+    current_user: UserProfile,
+    store: TransformSettingsStore,
+) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
+    defaults = _base_default_settings(transform)
+    global_settings = await store.get_global(transform_name)
+    user_settings = await store.get_user(current_user.id, transform_name)
+    resolved = {**defaults, **global_settings, **user_settings}
+    return defaults, global_settings, user_settings, _sanitize_settings(transform, resolved)
 
 
 @router.get("", response_model=list[TransformInfo])
@@ -60,7 +161,89 @@ async def list_transforms(
         transform
         for transform in all_transforms
         if _transform_visible_to_user(transform.name, enabled_by_plugin)
-    ]
+    ]   
+
+
+@router.get("/{name}/settings", response_model=TransformSettingsResponse)
+async def get_transform_settings(
+    name: str,
+    current_user: UserProfile = Depends(get_current_user),
+    store: TransformSettingsStore = Depends(get_transform_settings_store),
+) -> TransformSettingsResponse:
+    transform = get_transform_engine().get_transform(name)
+    if transform is None:
+        raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
+    defaults, global_settings, user_settings, resolved = await _resolve_settings(
+        transform, name, current_user, store
+    )
+    return TransformSettingsResponse(
+        transform_name=name,
+        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        defaults=defaults,
+        global_settings=global_settings,
+        user_settings=user_settings,
+        resolved=resolved,
+        can_manage_global=(
+            (not settings.supabase_url or not settings.supabase_anon_key)
+            or current_user.email.lower() in settings.get_admin_emails()
+        ),
+    )
+
+
+@router.put("/{name}/settings/user", response_model=TransformSettingsResponse)
+async def save_user_transform_settings(
+    name: str,
+    data: SaveTransformSettingsRequest,
+    current_user: UserProfile = Depends(get_current_user),
+    store: TransformSettingsStore = Depends(get_transform_settings_store),
+) -> TransformSettingsResponse:
+    transform = get_transform_engine().get_transform(name)
+    if transform is None:
+        raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
+    sanitized = _sanitize_settings(transform, data.settings)
+    await store.set_user(current_user.id, name, sanitized)
+    defaults, global_settings, user_settings, resolved = await _resolve_settings(
+        transform, name, current_user, store
+    )
+    return TransformSettingsResponse(
+        transform_name=name,
+        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        defaults=defaults,
+        global_settings=global_settings,
+        user_settings=user_settings,
+        resolved=resolved,
+        can_manage_global=(
+            (not settings.supabase_url or not settings.supabase_anon_key)
+            or current_user.email.lower() in settings.get_admin_emails()
+        ),
+    )
+
+
+@router.put("/{name}/settings/global", response_model=TransformSettingsResponse)
+async def save_global_transform_settings(
+    name: str,
+    data: SaveTransformSettingsRequest,
+    current_user: UserProfile = Depends(get_current_user),
+    admin_user: UserProfile = Depends(require_admin_user),
+    store: TransformSettingsStore = Depends(get_transform_settings_store),
+) -> TransformSettingsResponse:
+    transform = get_transform_engine().get_transform(name)
+    if transform is None:
+        raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
+    sanitized = _sanitize_settings(transform, data.settings)
+    await store.set_global(name, sanitized)
+    defaults, global_settings, user_settings, resolved = await _resolve_settings(
+        transform, name, current_user, store
+    )
+    return TransformSettingsResponse(
+        transform_name=name,
+        settings_schema=[s.model_dump(mode="json") for s in getattr(transform, "settings", [])],
+        defaults=defaults,
+        global_settings=global_settings,
+        user_settings=user_settings,
+        resolved=resolved,
+        can_manage_global=True,
+    )
 
 
 @router.get("/entity-types")
@@ -99,6 +282,8 @@ async def run_transform(
     entity_store: EntityStore = Depends(get_entity_store),
     run_store: TransformRunStore = Depends(get_transform_run_store),
     preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
+    api_key_store: ApiKeyStore = Depends(get_api_key_store),
+    settings_store: TransformSettingsStore = Depends(get_transform_settings_store),
 ) -> TransformRun:
     role = await project_store.get_member_role(request.project_id, current_user.id)
     if role not in ("owner", "editor"):
@@ -123,6 +308,32 @@ async def run_transform(
             detail=f"Transform '{name}' cannot run on entity type '{entity.type.value}'",
         )
 
+    defaults, global_settings, user_settings, resolved = await _resolve_settings(
+        transform, name, current_user, settings_store
+    )
+    merged_settings = {
+        **resolved,
+        **_sanitize_settings(transform, request.config.settings),
+    }
+
+    # Auto-inject required API keys when a setting follows "<service>_api_key".
+    for setting in getattr(transform, "settings", []):
+        if not getattr(setting, "required", False):
+            continue
+        setting_name = getattr(setting, "name", "")
+        if merged_settings.get(setting_name):
+            continue
+        if setting_name.endswith("_api_key"):
+            service_name = setting_name.removesuffix("_api_key")
+            if service_name:
+                stored = await api_key_store.get_key(current_user.id, service_name)
+                if stored:
+                    merged_settings[setting_name] = stored
+        if getattr(setting, "required", False) and not merged_settings.get(setting_name):
+            raise HTTPException(status_code=400, detail=f"Missing required setting '{setting_name}'")
+
+    config_payload = TransformConfig(settings=merged_settings)
+
     # Create a PENDING run record
     run = TransformRun(
         project_id=request.project_id,
@@ -145,7 +356,7 @@ async def run_transform(
             name,
             entity.model_dump(mode="json"),
             str(request.project_id),
-            request.config.model_dump(mode="json"),
+            config_payload.model_dump(mode="json"),
             job_id=str(run.id),
             job_timeout=settings.transform_timeout,
         )

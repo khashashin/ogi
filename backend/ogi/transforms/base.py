@@ -11,6 +11,11 @@ class TransformSetting(BaseModel):
     description: str = ""
     required: bool = False
     default: str = ""
+    field_type: str = "string"  # string | integer | number | boolean | select | secret
+    options: list[str] = Field(default_factory=list)
+    min_value: float | None = None
+    max_value: float | None = None
+    pattern: str = ""
 
 
 class TransformConfig(BaseModel):

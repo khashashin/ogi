@@ -17,6 +17,7 @@ class HashLookup(BaseTransform):
             display_name="VirusTotal API Key",
             description="API key for VirusTotal lookups",
             required=True,
+            field_type="secret",
         ),
     ]
 

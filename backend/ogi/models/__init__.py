@@ -7,6 +7,7 @@ from .auth import UserProfile, ProjectMember, ProjectMemberCreate, ProjectMember
 from .plugin import PluginInfo
 from .api_key import ApiKey
 from .user_plugin_preference import UserPluginPreference
+from .transform_settings import GlobalTransformSetting, UserTransformSetting
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -18,4 +19,6 @@ __all__ = [
     "PluginInfo",
     "ApiKey",
     "UserPluginPreference",
+    "GlobalTransformSetting",
+    "UserTransformSetting",
 ]

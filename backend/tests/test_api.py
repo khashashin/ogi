@@ -787,6 +787,102 @@ async def test_run_transform_returns_503_when_enqueue_fails(
     assert "Failed to enqueue transform job" in resp.json().get("detail", "")
 
 
+@pytest.mark.asyncio
+async def test_run_transform_injects_required_api_key_from_store(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+
+    captured_config: dict = {}
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            nonlocal captured_config
+            captured_config = args[5]
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+
+    # Save API key in user settings store.
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "virustotal", "key": "vt-test-key"},
+    )
+    assert resp.status_code == 201
+
+    # Setup: project + hash entity
+    resp = await client.post("/api/v1/projects", json={"name": "InjectAPIKey"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Hash", "value": "d41d8cd98f00b204e9800998ecf8427e"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    # hash_lookup requires virustotal_api_key but request provides empty settings.
+    resp = await client.post(
+        "/api/v1/transforms/hash_lookup/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert resp.status_code == 200
+    assert captured_config.get("settings", {}).get("virustotal_api_key") == "vt-test-key"
+
+
+@pytest.mark.asyncio
+async def test_transform_settings_user_defaults_are_applied_on_run(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+
+    captured_config: dict = {}
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            nonlocal captured_config
+            captured_config = args[5]
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+
+    # Create project + organization entity
+    resp = await client.post("/api/v1/projects", json={"name": "SettingsRun"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Organization", "value": "Example Org", "properties": {"website": "example.com"}},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    # Save required OpenAI key and user defaults for transform settings.
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.put(
+        "/api/v1/transforms/organization_to_team_members/settings/user",
+        json={"settings": {"openai_model": "gpt-4.1-mini", "max_members": "42"}},
+    )
+    assert resp.status_code == 200
+
+    resp = await client.post(
+        "/api/v1/transforms/organization_to_team_members/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert resp.status_code == 200
+    settings = captured_config.get("settings", {})
+    assert settings.get("openai_model") == "gpt-4.1-mini"
+    assert settings.get("max_members") == "42"
+    assert settings.get("openai_api_key") == "sk-test"
+
+
 # ---------------------------------------------------------------------------
 # Entity edge cases
 # ---------------------------------------------------------------------------
