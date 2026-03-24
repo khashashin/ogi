@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
     admin_emails: str = ""
     expose_error_details: bool = False
+    media_dir: str = os.environ.get("OGI_MEDIA_DIR", "media")
+    media_bucket_name: str = os.environ.get("OGI_MEDIA_BUCKET_NAME", "media")
+    media_upload_max_bytes: int = int(
+        os.environ.get("OGI_MEDIA_UPLOAD_MAX_BYTES", str(5 * 1024 * 1024))
+    )
 
     @field_validator("admin_emails", mode="before")
     @classmethod
@@ -173,6 +178,10 @@ class Settings(BaseSettings):
     @property
     def abs_database_path(self) -> Path:
         return Path(self.database_path).resolve()
+
+    @property
+    def abs_media_path(self) -> Path:
+        return Path(self.media_dir).resolve()
 
 
 settings = Settings()
