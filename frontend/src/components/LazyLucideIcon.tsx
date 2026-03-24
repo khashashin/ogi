@@ -8,11 +8,6 @@ type DynamicIconModule = {
   default: ComponentType<LucideProps>;
 };
 
-interface AsyncIconState {
-  name: string;
-  icon: ComponentType<LucideProps>;
-}
-
 const iconComponentCache = new Map<string, ComponentType<LucideProps>>();
 
 function normalizeIconName(iconName: string): string {
@@ -25,11 +20,16 @@ interface LazyLucideIconProps extends LucideProps {
 
 export function LazyLucideIcon({ name, ...props }: LazyLucideIconProps) {
   const normalizedName = normalizeIconName(name);
+  const [IconComponent, setIconComponent] = useState<ComponentType<LucideProps> | null>(
+    () => iconComponentCache.get(normalizedName) ?? null,
+  );
+  const [resolvedName, setResolvedName] = useState(normalizedName);
 
-  // Read cache synchronously during render (no effect needed for cache hits)
-  const cachedIcon = iconComponentCache.get(normalizedName) ?? null;
-
-  const [asyncState, setAsyncState] = useState<AsyncIconState | null>(null);
+  // Sync from cache during render when name changes (React-recommended pattern)
+  if (resolvedName !== normalizedName) {
+    setResolvedName(normalizedName);
+    setIconComponent(iconComponentCache.get(normalizedName) ?? null);
+  }
 
   useEffect(() => {
     if (iconComponentCache.has(normalizedName)) return;
@@ -42,15 +42,13 @@ export function LazyLucideIcon({ name, ...props }: LazyLucideIconProps) {
       if (cancelled) return;
       const resolved = (module as DynamicIconModule).default;
       iconComponentCache.set(normalizedName, resolved);
-      setAsyncState({ name: normalizedName, icon: resolved });
+      setIconComponent(() => resolved);
     });
 
     return () => {
       cancelled = true;
     };
   }, [normalizedName]);
-
-  const IconComponent = cachedIcon ?? (asyncState?.name === normalizedName ? asyncState.icon : null);
 
   if (!IconComponent) return <Hash {...props} />;
 
