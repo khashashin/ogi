@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
+import { getEnv } from "../lib/env";
 
 interface AuthState {
   user: User | null;
@@ -59,13 +60,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signUp: async (email, password) => {
     if (!supabase) return "Auth not configured";
-    const redirectUrl = import.meta.env.VITE_SUPABASE_REDIRECT_URL || window.location.origin;
-    const { error } = await supabase.auth.signUp({ 
-      email, 
+    const redirectUrl = getEnv("VITE_SUPABASE_REDIRECT_URL") || window.location.origin;
+    const { error } = await supabase.auth.signUp({
+      email,
       password,
       options: {
-        emailRedirectTo: redirectUrl
-      }
+        emailRedirectTo: redirectUrl,
+      },
     });
     return error ? error.message : null;
   },
@@ -78,7 +79,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   resetPassword: async (email) => {
     if (!supabase) return "Auth not configured";
-    const redirectUrl = import.meta.env.VITE_SUPABASE_REDIRECT_URL || window.location.origin;
+    const redirectUrl = getEnv("VITE_SUPABASE_REDIRECT_URL") || window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirectUrl,
     });

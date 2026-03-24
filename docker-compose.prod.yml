@@ -44,6 +44,10 @@ services:
     image: ${OGI_FRONTEND_IMAGE:-ghcr.io/khashashin/ogi-frontend}:${OGI_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
+    environment:
+      - VITE_SUPABASE_URL=${OGI_SUPABASE_URL:-}
+      - VITE_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY:-}
+      - VITE_SUPABASE_REDIRECT_URL=${OGI_SUPABASE_REDIRECT_URL:-}
     ports:
       - "80" # Coolify Traefik proxy will route the configured domain to this port
     depends_on:
