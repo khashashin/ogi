@@ -7,7 +7,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 from pathlib import Path
 
 from ogi.config import settings
@@ -157,6 +156,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+settings.abs_media_path.mkdir(parents=True, exist_ok=True)
 
 app.include_router(api_router)
 
