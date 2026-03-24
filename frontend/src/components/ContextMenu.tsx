@@ -1,5 +1,18 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock, Link2, Palette } from "lucide-react";
+import {
+  Trash2,
+  Play,
+  Copy,
+  Focus,
+  Loader2,
+  Pencil,
+  EyeOff,
+  Lock,
+  Unlock,
+  Link2,
+  Palette,
+  ImageIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -8,9 +21,14 @@ import { api } from "../api/client";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { resolveEntityIconName } from "../lib/entityIconRegistry";
-import { ENTITY_TYPE_META } from "../types/entity";
+import { ENTITY_TYPE_META, EntityType } from "../types/entity";
 const ChangeIconDialog = lazy(() =>
   import("./ChangeIconDialog").then((module) => ({ default: module.ChangeIconDialog })),
+);
+const ChangePersonImageDialog = lazy(() =>
+  import("./ChangePersonImageDialog").then((module) => ({
+    default: module.ChangePersonImageDialog,
+  })),
 );
 
 interface MenuState {
@@ -33,6 +51,7 @@ export function ContextMenu() {
   const [showTransforms, setShowTransforms] = useState(false);
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
   const [showChangeIcon, setShowChangeIcon] = useState(false);
+  const [showChangeImage, setShowChangeImage] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -56,6 +75,7 @@ export function ContextMenu() {
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
   const isPinned = Boolean(menu.id && pinnedNodeIds.has(menu.id));
   const isConnectionSource = Boolean(menu.id && connectionDraft.sourceId === menu.id);
+  const isPersonNode = entity?.type === EntityType.Person;
   const menuVisible = menu.visible;
   const menuX = menu.x;
   const menuY = menu.y;
@@ -245,6 +265,12 @@ export function ContextMenu() {
     close();
   };
 
+  const handleOpenChangeImage = () => {
+    if (!menu.id || menu.type !== "node" || !isPersonNode) return;
+    setShowChangeImage(true);
+    close();
+  };
+
   const handleSaveIcon = async (iconName: string) => {
     if (!currentProject || !entity) return;
     try {
@@ -261,6 +287,45 @@ export function ContextMenu() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Icon update failed: ${msg}`);
+      throw e;
+    }
+  };
+
+  const handleSavePersonImage = async (file: File) => {
+    if (!currentProject || !entity || entity.type !== EntityType.Person) return;
+    try {
+      const result = await api.entities.uploadPersonImage(currentProject.id, entity.id, file);
+      const updated = result.entity;
+      const { entities: entityMap } = useGraphStore.getState();
+      entityMap.set(updated.id, updated);
+      useGraphStore.setState({ entities: new Map(entityMap) });
+      toast.success("Person image updated");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Image update failed: ${msg}`);
+      throw e;
+    }
+  };
+
+  const handleRemovePersonImage = async () => {
+    if (!currentProject || !entity || entity.type !== EntityType.Person) return;
+    try {
+      const updated = await api.entities.update(currentProject.id, entity.id, {
+        properties: {
+          ...entity.properties,
+          visual_image_url: null,
+          visual_image_backend: null,
+          visual_image_path: null,
+          visual_image_content_type: null,
+        },
+      });
+      const { entities: entityMap } = useGraphStore.getState();
+      entityMap.set(updated.id, updated);
+      useGraphStore.setState({ entities: new Map(entityMap) });
+      toast.success("Person image removed");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Image update failed: ${msg}`);
       throw e;
     }
   };
@@ -330,6 +395,13 @@ export function ContextMenu() {
             <button onClick={handleOpenChangeIcon} className={itemClass}>
               <Palette size={12} />
               Change Icon...
+            </button>
+          )}
+
+          {!isViewer && isPersonNode && (
+            <button onClick={handleOpenChangeImage} className={itemClass}>
+              <ImageIcon size={12} />
+              Change Image...
             </button>
           )}
 
@@ -439,6 +511,23 @@ export function ContextMenu() {
           entityLabel={entity?.value ?? ""}
           onClose={() => setShowChangeIcon(false)}
           onSave={handleSaveIcon}
+        />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <ChangePersonImageDialog
+          open={showChangeImage && isPersonNode}
+          currentImageUrl={
+            typeof entity?.properties?.visual_image_url === "string"
+              ? entity.properties.visual_image_url
+              : ""
+          }
+          projectId={currentProject?.id ?? null}
+          entityId={entity?.id ?? null}
+          entityLabel={entity?.value ?? ""}
+          onClose={() => setShowChangeImage(false)}
+          onSave={handleSavePersonImage}
+          onRemove={handleRemovePersonImage}
         />
       </Suspense>
     </>
