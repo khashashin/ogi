@@ -18,8 +18,8 @@ export function ProtectedMediaImage({
   className,
   onError,
 }: ProtectedMediaImageProps) {
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
   const fallbackSrc = src?.trim() || null;
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(fallbackSrc);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +51,6 @@ export function ProtectedMediaImage({
       }
     }
 
-    setResolvedSrc(null);
     void resolveImage();
 
     return () => {
