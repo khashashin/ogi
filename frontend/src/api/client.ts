@@ -43,6 +43,12 @@ interface CloudExportResponse {
   url: string;
 }
 
+interface PersonImageUploadResponse {
+  image_url: string;
+  storage_backend: string;
+  entity: Entity;
+}
+
 interface CapabilitiesResponse {
   cloud_export_enabled: boolean;
 }
@@ -124,6 +130,28 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: {
+      ...authHeaders,
+      ...options?.headers,
+    },
+    ...options,
+  });
+  if (res.status === 401) {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    throw new Error("Unauthorized — please sign in again");
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error ${res.status}: ${body}`);
+  }
+  return res.blob();
+}
+
 // Projects
 export const api = {
   settings: {
@@ -176,6 +204,29 @@ export const api = {
           body: JSON.stringify({ entity_ids: entityIds }),
         }
       ),
+    uploadPersonImage: async (projectId: string, entityId: string, file: File) => {
+      const authHeaders = await getAuthHeaders();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${BASE_URL}/projects/${projectId}/entities/${entityId}/person-image`, {
+        method: "POST",
+        headers: { ...authHeaders },
+        body: formData,
+      });
+      if (res.status === 401) {
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
+        throw new Error("Unauthorized — please sign in again");
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`API error ${res.status}: ${body}`);
+      }
+      return res.json() as Promise<PersonImageUploadResponse>;
+    },
+    fetchPersonImage: (projectId: string, entityId: string) =>
+      requestBlob(`/projects/${projectId}/entities/${entityId}/person-image`),
   },
 
   edges: {
