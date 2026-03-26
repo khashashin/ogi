@@ -15,6 +15,18 @@ services:
       - OGI_SUPABASE_URL=${OGI_SUPABASE_URL}
       - OGI_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY}
       - OGI_REDIS_URL=redis://redis:6379/0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   worker:
     image: ${OGI_WORKER_IMAGE:-ghcr.io/khashashin/ogi-worker}:${OGI_IMAGE_TAG:-latest}
@@ -51,4 +63,11 @@ services:
     ports:
       - "80" # Coolify Traefik proxy will route the configured domain to this port
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
