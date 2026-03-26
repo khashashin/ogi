@@ -20,6 +20,8 @@ An open source visual link analysis and OSINT framework. Think Maltego, but free
 
 ### Backend
 
+Tested with Python 3.14+.
+
 ```bash
 cd backend
 uv sync
