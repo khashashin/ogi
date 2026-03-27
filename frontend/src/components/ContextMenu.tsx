@@ -34,6 +34,9 @@ export function ContextMenu() {
   const isViewer = useIsViewer();
 
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
+  const menuVisible = menu.visible;
+  const menuX = menu.x;
+  const menuY = menu.y;
 
   // Listen for context menu events from GraphCanvas
   useEffect(() => {
@@ -87,9 +90,10 @@ export function ContextMenu() {
 
   // Adjust menu position to stay within viewport
   useEffect(() => {
-    if (!menu.visible || !menuRef.current) return;
+    if (!menuVisible || !menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
-    let { x, y } = menu;
+    let x = menuX;
+    let y = menuY;
     if (rect.right > window.innerWidth) {
       x = window.innerWidth - rect.width - 8;
     }
@@ -98,10 +102,10 @@ export function ContextMenu() {
     }
     if (x < 0) x = 8;
     if (y < 0) y = 8;
-    if (x !== menu.x || y !== menu.y) {
+    if (x !== menuX || y !== menuY) {
       setMenu((m) => ({ ...m, x, y }));
     }
-  }, [menu.visible]);
+  }, [menuVisible, menuX, menuY]);
 
   if (!menu.visible) return null;
 
