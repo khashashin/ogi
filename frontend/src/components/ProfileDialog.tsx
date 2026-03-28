@@ -12,38 +12,40 @@ interface ProfileDialogProps {
 }
 
 export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: ProfileDialogProps) {
+  if (!open) return null;
+
+  return (
+    <ProfileDialogContent
+      onClose={onClose}
+      onOpenApiKeys={onOpenApiKeys}
+      onOpenPlugins={onOpenPlugins}
+    />
+  );
+}
+
+function ProfileDialogContent({ onClose, onOpenApiKeys, onOpenPlugins }: Omit<ProfileDialogProps, "open">) {
   const { user, signOut, updateProfile, authEnabled } = useAuthStore();
   const resetConsent = useCookieConsentStore((s) => s.resetConsent);
-  const [displayName, setDisplayName] = useState("");
+  const currentDisplayName = (user?.user_metadata?.display_name as string) ?? "";
+  const [displayName, setDisplayName] = useState(currentDisplayName);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const userEmail = user?.email ?? "anonymous";
-  const currentDisplayName = (user?.user_metadata?.display_name as string) ?? "";
-
-  useEffect(() => {
-    if (open) {
-      setDisplayName(currentDisplayName);
-      setError(null);
-      setSaved(false);
-    }
-  }, [open, currentDisplayName]);
 
   // Close on Escape
   useEffect(() => {
-    if (!open) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [onClose]);
 
   // Close on click outside
   useEffect(() => {
-    if (!open) return;
     const handler = (e: MouseEvent) => {
       if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
         onClose();
@@ -51,7 +53,7 @@ export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: P
     };
     window.addEventListener("mousedown", handler);
     return () => window.removeEventListener("mousedown", handler);
-  }, [open, onClose]);
+  }, [onClose]);
 
   const handleSaveProfile = async () => {
     setError(null);
@@ -70,8 +72,6 @@ export function ProfileDialog({ open, onClose, onOpenApiKeys, onOpenPlugins }: P
     await signOut();
     onClose();
   };
-
-  if (!open) return null;
 
   const initials = currentDisplayName
     ? currentDisplayName.slice(0, 2).toUpperCase()
