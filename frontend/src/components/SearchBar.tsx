@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Search, X, ChevronUp, ChevronDown } from "lucide-react";
 import { useGraphStore } from "../stores/graphStore";
 import { getSigmaRef } from "../stores/sigmaRef";
@@ -9,6 +9,13 @@ export function SearchBar() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const { graph, entities, selectNode, setNodeOverlay } = useGraphStore();
+
+  const handleClose = useCallback(() => {
+    setVisible(false);
+    setQuery("");
+    setCurrentIndex(0);
+    setNodeOverlay(null);
+  }, [setNodeOverlay]);
 
   // Ctrl+F to toggle search
   useEffect(() => {
@@ -24,7 +31,7 @@ export function SearchBar() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [visible]);
+  }, [visible, handleClose]);
 
   // Compute matches
   const matchingIds = useMemo(() => {
@@ -45,11 +52,6 @@ export function SearchBar() {
     return ids;
   }, [query, entities]);
 
-  // Reset index when matches change
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [matchingIds.length]);
-
   // Push search overlay to the centralized store (GraphCanvas owns the nodeReducer)
   useEffect(() => {
     if (!visible || !query.trim() || matchingIds.length === 0) {
@@ -67,13 +69,6 @@ export function SearchBar() {
       focusId: matchingIds[currentIndex] ?? null,
     });
   }, [visible, matchingIds, currentIndex, query, setNodeOverlay]);
-
-  const handleClose = () => {
-    setVisible(false);
-    setQuery("");
-    setCurrentIndex(0);
-    setNodeOverlay(null);
-  };
 
   const navigateTo = (index: number) => {
     const id = matchingIds[index];
@@ -110,7 +105,10 @@ export function SearchBar() {
         type="text"
         placeholder="Search entities..."
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setCurrentIndex(0);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) handleNext();
           if (e.key === "Enter" && e.shiftKey) handlePrev();
