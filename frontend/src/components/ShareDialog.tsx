@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X, UserPlus, Trash2 } from "lucide-react";
 import { api } from "../api/client";
 
@@ -25,13 +25,7 @@ export function ShareDialog({ open, onClose, projectId }: ShareDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      loadMembers();
-    }
-  }, [open, projectId]);
-
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     try {
       const data = await api.members.list(projectId);
       setMembers(data);
@@ -39,7 +33,13 @@ export function ShareDialog({ open, onClose, projectId }: ShareDialogProps) {
       // Members may not be supported (SQLite mode)
       setMembers([]);
     }
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (open) {
+      loadMembers();
+    }
+  }, [open, loadMembers]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
