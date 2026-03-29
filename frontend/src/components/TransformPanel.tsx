@@ -70,10 +70,7 @@ export function TransformPanel() {
   });
 
   useEffect(() => {
-    if (!entity) {
-      setTransforms([]);
-      return;
-    }
+    if (!entity) return;
     api.transforms
       .forEntity(entity.id)
       .then(setTransforms)
