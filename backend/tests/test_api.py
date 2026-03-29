@@ -383,6 +383,91 @@ async def test_edge_crud(client: AsyncClient):
     assert all(e["id"] != edge_id for e in resp.json())
 
 
+@pytest.mark.asyncio
+async def test_edge_create_rejects_cross_project_entities(client: AsyncClient):
+    """POST /edges rejects source/target entities from different projects."""
+    resp = await client.post("/api/v1/projects", json={"name": "EdgeP1"})
+    p1 = resp.json()["id"]
+    resp = await client.post("/api/v1/projects", json={"name": "EdgeP2"})
+    p2 = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{p1}/entities",
+        json={"type": "Domain", "value": "p1.example"},
+    )
+    e1 = resp.json()["id"]
+    resp = await client.post(
+        f"/api/v1/projects/{p2}/entities",
+        json={"type": "IPAddress", "value": "8.8.8.8"},
+    )
+    e2 = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{p1}/edges",
+        json={"source_id": e1, "target_id": e2, "label": "invalid_cross_project"},
+    )
+    assert resp.status_code == 400
+    assert "same project" in resp.json().get("detail", "")
+
+
+@pytest.mark.asyncio
+async def test_edge_create_deduplicates_identical_tuple(client: AsyncClient):
+    """POST /edges returns existing edge for identical project/source/target/label."""
+    resp = await client.post("/api/v1/projects", json={"name": "EdgeDedup"})
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "dup.example"},
+    )
+    source_id = resp.json()["id"]
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "IPAddress", "value": "1.1.1.1"},
+    )
+    target_id = resp.json()["id"]
+
+    payload = {"source_id": source_id, "target_id": target_id, "label": "resolves_to"}
+    first = await client.post(f"/api/v1/projects/{pid}/edges", json=payload)
+    second = await client.post(f"/api/v1/projects/{pid}/edges", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_project_delete_cascades_entities_and_edges(client: AsyncClient):
+    """Deleting a project removes related entities/edges from list endpoints."""
+    resp = await client.post("/api/v1/projects", json={"name": "CascadeProject"})
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "cascade.example"},
+    )
+    e1 = resp.json()["id"]
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "IPAddress", "value": "9.9.9.9"},
+    )
+    e2 = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/edges",
+        json={"source_id": e1, "target_id": e2, "label": "resolves_to"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.delete(f"/api/v1/projects/{pid}")
+    assert resp.status_code == 204
+
+    resp = await client.get(f"/api/v1/projects/{pid}/entities")
+    assert resp.status_code in (403, 404)
+    resp = await client.get(f"/api/v1/projects/{pid}/edges")
+    assert resp.status_code in (403, 404)
+
+
 # ---------------------------------------------------------------------------
 # Graph endpoints
 # ---------------------------------------------------------------------------

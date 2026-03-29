@@ -18,7 +18,10 @@ async def create_edge(
     current_user: UserProfile = Depends(get_current_user),
     store: EdgeStore = Depends(get_edge_store),
 ) -> Edge:
-    edge = await store.create(project_id, data)
+    try:
+        edge = await store.create(project_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     engine = get_graph_engine(project_id)
     try:
         engine.add_edge(edge)
