@@ -75,8 +75,26 @@ export function PrivacyPage() {
             </p>
           </section>
 
+          <section id="telemetry">
+            <h2 className="text-base font-medium text-text mb-2">4. Product Telemetry</h2>
+            <p>
+              OGI can send installation-level product telemetry to help us understand how the
+              software is used in the wild, especially for self-hosted deployments. This telemetry
+              can be disabled entirely with <code>OGI_TELEMETRY_ENABLED=false</code> or reduced to
+              the <code>basic</code> level with <code>OGI_TELEMETRY_LEVEL=basic</code>.
+            </p>
+            <p className="mt-2">
+              The <code>basic</code> level includes the running OGI version and a daily active
+              installation ping. The <code>full</code> level additionally includes the instance
+              creation date, aggregate counts for projects, entities, edges, transform runs,
+              investigator runs, active users for the period, and the installed transform list with
+              versions. We do not use this channel to collect graph contents, entity values, API
+              keys, or other user-supplied investigation data.
+            </p>
+          </section>
+
           <section>
-            <h2 className="text-base font-medium text-text mb-2">4. Cookies</h2>
+            <h2 className="text-base font-medium text-text mb-2">5. Cookies</h2>
             <p>
               We use cookies and similar technologies for authentication session management and
               analytics. Essential cookies are required for the service to function properly.
@@ -85,7 +103,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">5. Data Retention</h2>
+            <h2 className="text-base font-medium text-text mb-2">6. Data Retention</h2>
             <p>
               We retain your account information and project data for as long as your account is
               active. If you delete your account, we will remove your personal data within a
@@ -94,7 +112,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">6. Third-Party Services</h2>
+            <h2 className="text-base font-medium text-text mb-2">7. Third-Party Services</h2>
             <p>We use the following third-party services that may process your data:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>
@@ -109,7 +127,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">7. Your Rights</h2>
+            <h2 className="text-base font-medium text-text mb-2">8. Your Rights</h2>
             <p>You have the right to:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>Access your personal data</li>
@@ -121,7 +139,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">8. Contact</h2>
+            <h2 className="text-base font-medium text-text mb-2">9. Contact</h2>
             <p>
               If you have questions about this Privacy Policy or wish to exercise your rights, please
               open an issue on our{" "}
@@ -138,7 +156,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">9. Changes to This Policy</h2>
+            <h2 className="text-base font-medium text-text mb-2">10. Changes to This Policy</h2>
             <p>
               We may update this Privacy Policy from time to time. Continued use of the service after
               changes constitutes acceptance of the revised policy. We encourage you to review this
