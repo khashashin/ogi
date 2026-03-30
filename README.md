@@ -197,6 +197,28 @@ OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=none,max_urls=none,max_links=non
 
 The override is keyed by transform setting name and applies to built-in transforms and community plugins that use OGI's shared transform base/runtime.
 
+### Telemetry
+
+OGI includes installation-level product telemetry intended to help us understand real-world usage, especially across self-hosted deployments.
+
+- `OGI_TELEMETRY_ENABLED=true` enables telemetry collection
+- `OGI_TELEMETRY_LEVEL=full` is the default collection level
+- set `OGI_TELEMETRY_ENABLED=false` to disable telemetry entirely
+- set `OGI_TELEMETRY_LEVEL=basic` to reduce what is sent
+
+`basic` sends:
+
+- OGI version
+- a daily active installation ping
+
+`full` additionally sends:
+
+- instance created date
+- aggregate counts for projects, entities, edges, transform runs, investigator runs, and active users for the period
+- installed transforms with their versions
+
+Telemetry is designed to avoid sending graph contents, entity values, API keys, prompts, or other investigation data. The current policy details are also published in the [Privacy Policy](https://ogi.khas.app/privacy#telemetry).
+
 <details>
 <summary><strong>Development Compose Services</strong></summary>
 
@@ -403,6 +425,8 @@ List-style settings accept either:
 | `OGI_SUPABASE_JWT_SECRET`                       | Supabase JWT secret                                                                                              | unset                                               |
 | `OGI_SUPABASE_REDIRECT_URL`                     | Redirect URL used by frontend auth flows                                                                         | unset                                               |
 | `OGI_ADMIN_EMAILS`                              | Admin users for registry/plugin management                                                                       | unset                                               |
+| `OGI_TELEMETRY_ENABLED`                        | Enable or disable installation-level telemetry                                                                   | `true`                                              |
+| `OGI_TELEMETRY_LEVEL`                          | Telemetry level (`basic` or `full`)                                                                              | `full`                                              |
 | `OGI_API_KEY_ENCRYPTION_KEY`                    | Fernet key for encrypted API key storage                                                                         | unset but strongly recommended                      |
 | `OGI_API_KEY_INJECTION_ALLOW_COMMUNITY_PLUGINS` | Allow community plugins to receive stored API keys                                                               | `true`                                              |
 | `OGI_API_KEY_INJECTION_TRUSTED_TIERS_ONLY`      | Restrict stored key injection to trusted tiers only                                                              | `false`                                             |
