@@ -11,6 +11,7 @@ unaffected.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import Request, HTTPException, Path, Depends
@@ -49,6 +50,7 @@ def _detach_profile(profile: UserProfile) -> UserProfile:
         display_name=profile.display_name,
         avatar_url=profile.avatar_url,
         created_at=profile.created_at,
+        last_active_at=profile.last_active_at,
     )
 
 async def get_current_user(
@@ -105,14 +107,22 @@ async def get_current_user(
         session.add(profile)
         await session.commit()
 
+    now = datetime.now(timezone.utc)
+    if profile.last_active_at is None or (now - profile.last_active_at) >= timedelta(hours=1):
+        profile.last_active_at = now
+        session.add(profile)
+        await session.commit()
+
     return _detach_profile(profile)
 
 async def get_optional_user(request: Request) -> UserProfile | None:
     """Like ``get_current_user`` but returns ``None`` instead of raising."""
     try:
-        return await get_current_user(request)
+        async for session in get_session():
+            return await get_current_user(request, session)
     except HTTPException:
         return None
+    return None
 
 
 async def require_admin_user(
