@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 import httpx
@@ -19,6 +19,7 @@ os.environ["OGI_SUPABASE_ANON_KEY"] = ""
 os.environ["OGI_SUPABASE_SERVICE_ROLE_KEY"] = ""
 os.environ["OGI_SUPABASE_JWT_SECRET"] = ""
 os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7LrD0WBE="
+os.environ["OGI_TELEMETRY_ENABLED"] = "false"
 
 from ogi.main import app
 from ogi.db import database as db_module
@@ -72,6 +73,122 @@ async def test_settings_capabilities_reports_cloud_export_disabled_without_supab
     resp = await client.get("/api/v1/settings/capabilities")
     assert resp.status_code == 200
     assert resp.json()["cloud_export_enabled"] is False
+    assert resp.json()["telemetry_enabled"] is False
+    assert resp.json()["telemetry_level"] == "full"
+
+
+@pytest.mark.asyncio
+async def test_telemetry_ingest_rejected_outside_cloud_mode(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "deployment_mode", "self-hosted")
+    resp = await client.post(
+        "/api/v1/telemetry/ingest",
+        json={
+            "instance_id": str(uuid4()),
+            "instance_created_at": "2026-03-30T00:00:00Z",
+            "ogi_version": "0.6.3",
+            "metric_date": "2026-03-30",
+            "sent_at": "2026-03-30T12:00:00Z",
+            "telemetry_level": "basic",
+            "deployment_mode": "self-hosted",
+            "metrics": None,
+            "installed_transforms": [],
+        },
+    )
+    assert_error_envelope(resp, 404, code="HTTP_404", message_contains="Telemetry endpoint not available")
+
+
+@pytest.mark.asyncio
+async def test_telemetry_ingest_and_admin_overview(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.config import settings
+    from ogi.models import (
+        TelemetryDailyMetric,
+        TelemetryInstallation,
+        TelemetryInstalledTransform,
+        UserProfile,
+    )
+    from ogi.api.auth import get_current_user
+
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon")
+    monkeypatch.setattr(settings, "admin_emails", "admin@example.com")
+
+    admin_user = UserProfile(id=uuid4(), email="admin@example.com")
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+
+    try:
+        instance_id = str(uuid4())
+        resp = await client.post(
+            "/api/v1/telemetry/ingest",
+            headers={"CF-IPCountry": "CH"},
+            json={
+                "instance_id": instance_id,
+                "instance_created_at": "2026-03-29T00:00:00Z",
+                "ogi_version": "0.6.3",
+                "metric_date": "2026-03-30",
+                "sent_at": "2026-03-30T12:00:00Z",
+                "telemetry_level": "full",
+                "deployment_mode": "self-hosted",
+                "metrics": {
+                    "projects_total": 4,
+                    "entities_total": 10,
+                    "edges_total": 12,
+                    "transform_runs_total": 8,
+                    "investigator_runs_total": 2,
+                    "active_users_total": 1,
+                },
+                "installed_transforms": [
+                    {"name": "whois_lookup", "version": "1.0.0"},
+                    {"name": "ip_to_shodan_host", "version": "1.1.0"},
+                ],
+            },
+        )
+        assert resp.status_code == 202
+
+        overview_resp = await client.get("/api/v1/telemetry/admin/overview")
+        assert overview_resp.status_code == 200
+        overview = overview_resp.json()
+        assert overview["active_instances_30d"] >= 1
+        assert overview["self_hosted_instances_30d"] >= 1
+
+        instances_resp = await client.get("/api/v1/telemetry/admin/instances")
+        assert instances_resp.status_code == 200
+        instances = instances_resp.json()
+        assert instances
+        assert instances[0]["latest_country_code"] == "CH"
+        assert {item["name"] for item in instances[0]["installed_transforms"]} >= {
+            "whois_lookup",
+            "ip_to_shodan_host",
+        }
+
+        assert db_module.async_session_maker is not None
+        async with db_module.async_session_maker() as session:
+            installation = await session.get(TelemetryInstallation, UUID(instance_id))
+            assert installation is not None
+            assert installation.latest_country_code == "CH"
+            metric = (
+                await session.execute(
+                    select(TelemetryDailyMetric).where(
+                        TelemetryDailyMetric.instance_id == UUID(instance_id),
+                        TelemetryDailyMetric.metric_date == date(2026, 3, 30),
+                    )
+                )
+            ).scalars().first()
+            assert metric is not None
+            transforms = list(
+                (
+                    await session.execute(
+                        select(TelemetryInstalledTransform).where(
+                            TelemetryInstalledTransform.daily_metric_id == metric.id
+                        )
+                    )
+                ).scalars().all()
+            )
+            assert len(transforms) == 2
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
