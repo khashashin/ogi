@@ -3,25 +3,28 @@ import { Link } from "react-router";
 import { X, LogOut, Loader2, Key, Cookie, FileText, Shield } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useCookieConsentStore } from "../stores/cookieConsentStore";
+import type { CapabilitiesResponse } from "../api/client";
 
 interface ProfileDialogProps {
   open: boolean;
   onClose: () => void;
   onOpenApiKeys: () => void;
+  capabilities?: CapabilitiesResponse | null;
 }
 
-export function ProfileDialog({ open, onClose, onOpenApiKeys }: ProfileDialogProps) {
+export function ProfileDialog({ open, onClose, onOpenApiKeys, capabilities }: ProfileDialogProps) {
   if (!open) return null;
 
   return (
     <ProfileDialogContent
       onClose={onClose}
       onOpenApiKeys={onOpenApiKeys}
+      capabilities={capabilities}
     />
   );
 }
 
-function ProfileDialogContent({ onClose, onOpenApiKeys }: Omit<ProfileDialogProps, "open">) {
+function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<ProfileDialogProps, "open">) {
   const { user, signOut, updateProfile, authEnabled } = useAuthStore();
   const resetConsent = useCookieConsentStore((s) => s.resetConsent);
   const currentDisplayName = (user?.user_metadata?.display_name as string) ?? "";
@@ -141,6 +144,17 @@ function ProfileDialogContent({ onClose, onOpenApiKeys }: Omit<ProfileDialogProp
 
           {/* Quick Links */}
           <div className="flex flex-col gap-1 border-t border-border pt-3">
+            {capabilities?.telemetry_enabled && (
+              <div className="px-2 py-2 mb-1 rounded bg-bg text-xs text-text-muted leading-relaxed">
+                Usage telemetry is currently on at the{" "}
+                <span className="text-text">{capabilities.telemetry_level}</span> level. You can adjust
+                it with the `OGI_TELEMETRY_ENABLED` and `OGI_TELEMETRY_LEVEL` environment settings.{" "}
+                <a href={capabilities.telemetry_docs_url} className="text-accent hover:underline">
+                  Learn more
+                </a>
+                .
+              </div>
+            )}
             <button
               onClick={() => {
                 onClose();
