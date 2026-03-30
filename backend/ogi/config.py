@@ -50,10 +50,8 @@ class Settings(BaseSettings):
     media_upload_max_bytes: int = int(
         os.environ.get("OGI_MEDIA_UPLOAD_MAX_BYTES", str(5 * 1024 * 1024))
     )
-    telemetry_enabled: bool = os.environ.get("OGI_TELEMETRY_ENABLED", "true").strip().lower() not in {
-        "0", "false", "no", "off"
-    }
-    telemetry_level: str = os.environ.get("OGI_TELEMETRY_LEVEL", "full")
+    telemetry_enabled: bool = True
+    telemetry_level: str = "full"
 
     @field_validator("admin_emails", mode="before")
     @classmethod
