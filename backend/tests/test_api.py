@@ -14,9 +14,27 @@ os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7
 from ogi.main import app
 
 
+def assert_error_envelope(
+    response,
+    status_code: int,
+    code: str | None = None,
+    message_contains: str | None = None,
+) -> dict:
+    assert response.status_code == status_code
+    body = response.json()
+    assert "error" in body
+    assert "code" in body["error"]
+    assert "message" in body["error"]
+    if code is not None:
+        assert body["error"]["code"] == code
+    if message_contains is not None:
+        assert message_contains in body["error"]["message"]
+    return body
+
+
 @pytest.fixture
 async def client():
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         # Trigger lifespan startup manually
         async with app.router.lifespan_context(app):
@@ -298,13 +316,13 @@ async def test_bookmark_private_project_forbidden(client: AsyncClient):
     project_id = resp.json()["id"]
 
     resp = await client.post(f"/api/v1/projects/{project_id}/bookmark")
-    assert resp.status_code == 403
+    assert_error_envelope(resp, 403, code="HTTP_403")
 
 
 @pytest.mark.asyncio
 async def test_bookmark_nonexistent_project(client: AsyncClient):
     resp = await client.post("/api/v1/projects/00000000-0000-0000-0000-000000000099/bookmark")
-    assert resp.status_code == 404
+    assert_error_envelope(resp, 404, code="HTTP_404")
 
 
 @pytest.mark.asyncio
@@ -406,8 +424,7 @@ async def test_edge_create_rejects_cross_project_entities(client: AsyncClient):
         f"/api/v1/projects/{p1}/edges",
         json={"source_id": e1, "target_id": e2, "label": "invalid_cross_project"},
     )
-    assert resp.status_code == 400
-    assert "same project" in resp.json().get("detail", "")
+    assert_error_envelope(resp, 400, code="HTTP_400", message_contains="same project")
 
 
 @pytest.mark.asyncio
@@ -869,8 +886,7 @@ async def test_run_transform_returns_503_when_enqueue_fails(
         "/api/v1/transforms/domain_to_ip/run",
         json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
     )
-    assert resp.status_code == 503
-    assert "Failed to enqueue transform job" in resp.json().get("detail", "")
+    assert_error_envelope(resp, 503, code="HTTP_503", message_contains="Failed to enqueue transform job")
 
 
 @pytest.mark.asyncio
@@ -1047,3 +1063,43 @@ async def test_import_json(client: AsyncClient):
     values = [e["value"] for e in resp.json()]
     assert "imported.com" in values
     assert "10.0.0.1" in values
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_for_422_validation(client: AsyncClient):
+    """Invalid payload returns unified 422 error envelope."""
+    resp = await client.post("/api/v1/projects", json={})
+    body = assert_error_envelope(resp, 422, code="VALIDATION_ERROR", message_contains="validation")
+    assert "details" in body["error"]
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_for_500_internal(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    """Unhandled server errors return unified 500 error envelope."""
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "api_key_encryption_key", None)
+    monkeypatch.setattr(settings, "expose_error_details", False)
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    body = assert_error_envelope(resp, 500, code="INTERNAL_SERVER_ERROR", message_contains="Internal Server Error")
+    assert "details" not in body["error"]
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_for_500_internal_in_debug_mode(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    """When debug exposure is enabled, 500 includes internal error details."""
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "api_key_encryption_key", None)
+    monkeypatch.setattr(settings, "expose_error_details", True)
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-test"},
+    )
+    body = assert_error_envelope(resp, 500, code="INTERNAL_SERVER_ERROR")
+    assert body["error"].get("details", {}).get("type") == "RuntimeError"
