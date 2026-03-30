@@ -17,6 +17,7 @@ import ogi.models.plugin  # noqa: F401
 import ogi.models.user_plugin_preference  # noqa: F401
 import ogi.models.transform_settings  # noqa: F401
 import ogi.models.eventing  # noqa: F401
+import ogi.models.telemetry  # noqa: F401
 import ogi.agent.models  # noqa: F401
 import ogi.agent.settings_models  # noqa: F401
 
