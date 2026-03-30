@@ -8,6 +8,18 @@ from .plugin import PluginInfo
 from .api_key import ApiKey
 from .user_plugin_preference import UserPluginPreference
 from .transform_settings import GlobalTransformSetting, UserTransformSetting
+from .telemetry import (
+    TelemetryDailyMetric,
+    TelemetryIngestPayload,
+    TelemetryInstallation,
+    TelemetryInstalledTransform,
+    TelemetryInstanceSummary,
+    TelemetryLocalState,
+    TelemetryMetricsSnapshot,
+    TelemetryOverviewResponse,
+    TelemetryTransformSnapshot,
+    TelemetryVersionCount,
+)
 from .eventing import (
     AuditLog,
     AuditLogCreate,
@@ -66,6 +78,16 @@ __all__ = [
     "UserPluginPreference",
     "GlobalTransformSetting",
     "UserTransformSetting",
+    "TelemetryDailyMetric",
+    "TelemetryIngestPayload",
+    "TelemetryInstallation",
+    "TelemetryInstalledTransform",
+    "TelemetryInstanceSummary",
+    "TelemetryLocalState",
+    "TelemetryMetricsSnapshot",
+    "TelemetryOverviewResponse",
+    "TelemetryTransformSnapshot",
+    "TelemetryVersionCount",
     "AuditLog",
     "AuditLogCreate",
     "SystemAuditLog",
