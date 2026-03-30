@@ -224,7 +224,7 @@ async def save_global_transform_settings(
     name: str,
     data: SaveTransformSettingsRequest,
     current_user: UserProfile = Depends(get_current_user),
-    admin_user: UserProfile = Depends(require_admin_user),
+    _admin_user: UserProfile = Depends(require_admin_user),
     store: TransformSettingsStore = Depends(get_transform_settings_store),
 ) -> TransformSettingsResponse:
     transform = get_transform_engine().get_transform(name)
@@ -248,7 +248,7 @@ async def save_global_transform_settings(
 
 @router.get("/entity-types")
 async def list_entity_types(
-    current_user: UserProfile = Depends(get_current_user),
+    _current_user: UserProfile = Depends(get_current_user),
 ) -> list[dict[str, str]]:
     registry = get_entity_registry()
     return registry.list_types_dict()
@@ -386,7 +386,7 @@ async def run_transform(
 @router.post("/runs/{run_id}/cancel")
 async def cancel_transform(
     run_id: UUID,
-    current_user: UserProfile = Depends(get_current_user),
+    _current_user: UserProfile = Depends(get_current_user),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> dict[str, str]:
     """Cancel a pending/running transform job."""
@@ -434,7 +434,7 @@ async def cancel_transform(
 @router.get("/runs/{run_id}", response_model=TransformRun)
 async def get_run(
     run_id: UUID,
-    current_user: UserProfile = Depends(get_current_user),
+    _current_user: UserProfile = Depends(get_current_user),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> TransformRun:
     # Try in-memory first, then DB
@@ -451,8 +451,7 @@ async def get_run(
 @router.get("/project/{project_id}/runs", response_model=list[TransformRun])
 async def list_project_runs(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     run_store: TransformRunStore = Depends(get_transform_run_store),
 ) -> list[TransformRun]:
     return await run_store.list_by_project(project_id)

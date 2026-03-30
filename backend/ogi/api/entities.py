@@ -2,9 +2,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ogi.models import Entity, EntityCreate, EntityUpdate, UserProfile
+from ogi.models import Entity, EntityCreate, EntityUpdate
 from ogi.api.dependencies import get_entity_store, get_graph_engine
-from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
+from ogi.api.auth import require_project_editor, require_project_viewer
 from ogi.store.entity_store import EntityStore
 
 router = APIRouter(prefix="/projects/{project_id}/entities", tags=["entities"])
@@ -14,8 +14,7 @@ router = APIRouter(prefix="/projects/{project_id}/entities", tags=["entities"])
 async def create_entity(
     project_id: UUID,
     data: EntityCreate,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EntityStore = Depends(get_entity_store),
 ) -> Entity:
     entity = await store.create(project_id, data)
@@ -27,8 +26,7 @@ async def create_entity(
 @router.get("", response_model=list[Entity])
 async def list_entities(
     project_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     store: EntityStore = Depends(get_entity_store),
 ) -> list[Entity]:
     return await store.list_by_project(project_id)
@@ -38,8 +36,7 @@ async def list_entities(
 async def get_entity(
     project_id: UUID,
     entity_id: UUID,
-    role: str = Depends(require_project_viewer),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_viewer),
     store: EntityStore = Depends(get_entity_store),
 ) -> Entity:
     entity = await store.get(entity_id)
@@ -53,8 +50,7 @@ async def update_entity(
     project_id: UUID,
     entity_id: UUID,
     data: EntityUpdate,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EntityStore = Depends(get_entity_store),
 ) -> Entity:
     entity = await store.update(entity_id, data)
@@ -69,8 +65,7 @@ async def update_entity(
 async def delete_entity(
     project_id: UUID,
     entity_id: UUID,
-    role: str = Depends(require_project_editor),
-    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
     store: EntityStore = Depends(get_entity_store),
 ) -> None:
     deleted = await store.delete(entity_id)
