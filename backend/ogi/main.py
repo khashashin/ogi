@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from ogi.db.database import async_session_maker
 
-    if settings.telemetry_enabled and async_session_maker is not None:
+    if settings.effective_telemetry_enabled and async_session_maker is not None:
         try:
             async with async_session_maker() as session:
                 await telemetry_manager.run_due_cycle(session)

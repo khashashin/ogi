@@ -146,7 +146,16 @@ class Settings(BaseSettings):
 
     @property
     def normalized_telemetry_level(self) -> str:
-        return "basic" if self.telemetry_level.strip().lower() == "basic" else "full"
+        raw = os.environ.get("OGI_TELEMETRY_LEVEL")
+        value = raw if raw is not None else self.telemetry_level
+        return "basic" if value.strip().lower() == "basic" else "full"
+
+    @property
+    def effective_telemetry_enabled(self) -> bool:
+        raw = os.environ.get("OGI_TELEMETRY_ENABLED")
+        if raw is None:
+            return self.telemetry_enabled
+        return raw.strip().lower() not in {"0", "false", "no", "off"}
 
     # Redis / RQ job queue
     redis_url: str = "redis://localhost:6379/0"

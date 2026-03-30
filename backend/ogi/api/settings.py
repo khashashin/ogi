@@ -30,7 +30,7 @@ async def get_capabilities(
     return CapabilitiesResponse(
         cloud_export_enabled=bool(settings.supabase_url and settings.supabase_service_role_key),
         deployment_mode=settings.deployment_mode,
-        telemetry_enabled=settings.telemetry_enabled,
+        telemetry_enabled=settings.effective_telemetry_enabled,
         telemetry_level=settings.normalized_telemetry_level,
         telemetry_admin_enabled=telemetry_admin_enabled,
         telemetry_docs_url=telemetry_docs_url(),

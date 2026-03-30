@@ -87,7 +87,7 @@ class TelemetryManager:
         return payload
 
     async def run_due_cycle(self, session: AsyncSession) -> None:
-        if not settings.telemetry_enabled:
+        if not settings.effective_telemetry_enabled:
             return
         state = await self.ensure_local_state(session)
         telemetry_level = settings.normalized_telemetry_level
