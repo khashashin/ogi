@@ -946,9 +946,20 @@ async def poll_orchestrator(
 ) -> None:
     stop_event = stop_event or asyncio.Event()
     orchestrator = orchestrator_factory()
-    await orchestrator.recover_stale_state()
+    try:
+        await orchestrator.recover_stale_state()
+    except Exception:
+        logger.exception("AI Investigator worker failed to recover stale state")
 
     while not stop_event.is_set():
-        result = await orchestrator.run_once()
+        try:
+            result = await orchestrator.run_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("AI Investigator worker iteration failed")
+            await asyncio.sleep(settings.agent_worker_poll_interval_sec)
+            continue
+
         if not result.processed:
             await asyncio.sleep(settings.agent_worker_poll_interval_sec)
