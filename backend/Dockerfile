@@ -19,7 +19,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml .
 
 # Install dependencies into the venv
-RUN uv pip install -e .
+RUN uv pip install -e ".[web_extract]"
+
+# Install Playwright browser binaries and required system packages
+RUN playwright install --with-deps chromium
 
 # Copy application code and migrations
 COPY ogi/ ogi/
