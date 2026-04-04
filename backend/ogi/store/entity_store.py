@@ -49,6 +49,29 @@ class EntityStore:
     async def save(self, project_id: UUID, entity: Entity) -> Entity:
         existing = await self.find_by_type_and_value(project_id, entity.type, entity.value)
         if existing is not None:
+            # Upsert behavior: merge incoming transform data into existing record.
+            existing.properties = {**existing.properties, **entity.properties}
+
+            if entity.tags:
+                merged_tags = list(dict.fromkeys([*existing.tags, *entity.tags]))
+                existing.tags = merged_tags
+
+            if entity.notes:
+                existing.notes = entity.notes
+
+            if entity.source:
+                existing.source = entity.source
+
+            if entity.icon:
+                existing.icon = entity.icon
+
+            if entity.weight is not None:
+                existing.weight = max(existing.weight, entity.weight)
+
+            existing.updated_at = datetime.now(timezone.utc)
+            self.session.add(existing)
+            await self.session.commit()
+            await self.session.refresh(existing)
             return existing
             
         entity.project_id = project_id
