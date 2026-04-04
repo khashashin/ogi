@@ -8,6 +8,26 @@ import { api } from "../api/client";
 import { useUndoStore } from "./undoStore";
 import type { UndoAction } from "./undoStore";
 
+export interface GraphFilterState {
+  types: string[];
+  tags: string[];
+  sources: string[];
+  dateFrom: string;
+  dateTo: string;
+  hideFiltered: boolean;
+}
+
+export const DEFAULT_FILTER_STATE: GraphFilterState = {
+  types: [],
+  tags: [],
+  sources: [],
+  dateFrom: "",
+  dateTo: "",
+  hideFiltered: true,
+};
+
+type CenterView = "graph" | "table";
+
 interface NodePositions {
   [nodeId: string]: { x: number; y: number };
 }
@@ -29,6 +49,65 @@ function savePositions(projectId: string, graph: Graph): void {
     }
   });
   localStorage.setItem(`ogi-positions-${projectId}`, JSON.stringify(positions));
+}
+
+function loadFilters(projectId: string): GraphFilterState {
+  try {
+    const raw = localStorage.getItem(`ogi-filters-${projectId}`);
+    if (!raw) return { ...DEFAULT_FILTER_STATE };
+    const parsed = JSON.parse(raw) as Partial<GraphFilterState>;
+    return {
+      ...DEFAULT_FILTER_STATE,
+      ...parsed,
+      types: Array.isArray(parsed.types) ? parsed.types : [],
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+      sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+    };
+  } catch {
+    return { ...DEFAULT_FILTER_STATE };
+  }
+}
+
+function saveFilters(projectId: string, filters: GraphFilterState): void {
+  localStorage.setItem(`ogi-filters-${projectId}`, JSON.stringify(filters));
+}
+
+function computeHiddenNodeIds(
+  entities: Map<string, Entity>,
+  filters: GraphFilterState,
+): Set<string> {
+  if (!filters.hideFiltered) return new Set();
+
+  const hidden = new Set<string>();
+  const from = filters.dateFrom ? Date.parse(filters.dateFrom) : NaN;
+  const to = filters.dateTo ? Date.parse(filters.dateTo) : NaN;
+
+  for (const [id, entity] of entities.entries()) {
+    let visible = true;
+
+    if (filters.types.length > 0 && !filters.types.includes(entity.type)) visible = false;
+    if (visible && filters.sources.length > 0 && !filters.sources.includes(entity.source)) visible = false;
+    if (
+      visible &&
+      filters.tags.length > 0 &&
+      !filters.tags.some((tag) => entity.tags.includes(tag))
+    ) {
+      visible = false;
+    }
+
+    if (visible && !Number.isNaN(from)) {
+      const created = Date.parse(entity.created_at);
+      if (Number.isFinite(created) && created < from) visible = false;
+    }
+    if (visible && !Number.isNaN(to)) {
+      const created = Date.parse(entity.created_at);
+      if (Number.isFinite(created) && created > to) visible = false;
+    }
+
+    if (!visible) hidden.add(id);
+  }
+
+  return hidden;
 }
 
 /** Visual overlays that temporarily override node rendering in the graph canvas. */
@@ -66,6 +145,11 @@ interface GraphState {
   selectedEdgeId: string | null;
   entities: Map<string, Entity>;
   edges: Map<string, Edge>;
+  hiddenNodeIds: Set<string>;
+  filterState: GraphFilterState;
+  searchQuery: string;
+  centerView: CenterView;
+  currentProjectId: string | null;
   loading: boolean;
   error: string | null;
   nodeOverlay: NodeOverlay | null;
@@ -79,6 +163,10 @@ interface GraphState {
   updateEdge: (projectId: string, edgeId: string, data: EdgeUpdate) => Promise<Edge | null>;
   selectNode: (nodeId: string | null) => void;
   selectEdge: (edgeId: string | null) => void;
+  setSearchQuery: (query: string) => void;
+  setFilterState: (projectId: string, patch: Partial<GraphFilterState>) => void;
+  resetFilters: (projectId: string) => void;
+  setCenterView: (view: CenterView) => void;
   setNodeOverlay: (overlay: NodeOverlay | null) => void;
   setAnalysisResults: (results: AnalysisResults | null) => void;
   clearGraph: () => void;
@@ -97,6 +185,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   selectedEdgeId: null,
   entities: new Map(),
   edges: new Map(),
+  hiddenNodeIds: new Set(),
+  filterState: { ...DEFAULT_FILTER_STATE },
+  searchQuery: "",
+  centerView: "graph",
+  currentProjectId: null,
   loading: false,
   error: null,
   nodeOverlay: null,
@@ -110,6 +203,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const entities = new Map<string, Entity>();
       const edges = new Map<string, Edge>();
       const savedPositions = loadPositions(projectId);
+      const filterState = loadFilters(projectId);
 
       for (const entity of data.entities) {
         const meta = ENTITY_TYPE_META[entity.type];
@@ -137,7 +231,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
 
-      set({ graph, entities, edges, loading: false, selectedNodeId: null, selectedEdgeId: null, nodeOverlay: null, analysisResults: null });
+      const hiddenNodeIds = computeHiddenNodeIds(entities, filterState);
+      set({
+        graph,
+        entities,
+        edges,
+        hiddenNodeIds,
+        filterState,
+        currentProjectId: projectId,
+        loading: false,
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        nodeOverlay: null,
+        analysisResults: null,
+      });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
@@ -160,7 +267,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     entities.set(entity.id, entity);
     useUndoStore.getState().push({ type: "add_entity", entity, nodeAttrs });
-    set({ graph, entities: new Map(entities) });
+    const filterState = get().filterState;
+    set({
+      graph,
+      entities: new Map(entities),
+      hiddenNodeIds: computeHiddenNodeIds(entities, filterState),
+    });
   },
 
   removeEntity: async (projectId, entityId) => {
@@ -203,6 +315,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       graph,
       entities: new Map(entities),
       edges: new Map(edges),
+      hiddenNodeIds: computeHiddenNodeIds(entities, get().filterState),
       selectedNodeId: get().selectedNodeId === entityId ? null : get().selectedNodeId,
     });
   },
@@ -258,6 +371,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null }),
   selectEdge: (edgeId) => set({ selectedEdgeId: edgeId, selectedNodeId: null }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setFilterState: (projectId, patch) => {
+    const nextFilterState = { ...get().filterState, ...patch };
+    saveFilters(projectId, nextFilterState);
+    set({
+      filterState: nextFilterState,
+      hiddenNodeIds: computeHiddenNodeIds(get().entities, nextFilterState),
+    });
+  },
+  resetFilters: (projectId) => {
+    const nextFilterState = { ...DEFAULT_FILTER_STATE };
+    saveFilters(projectId, nextFilterState);
+    set({
+      filterState: nextFilterState,
+      hiddenNodeIds: computeHiddenNodeIds(get().entities, nextFilterState),
+    });
+  },
+  setCenterView: (view) => set({ centerView: view }),
   setNodeOverlay: (overlay) => set({ nodeOverlay: overlay }),
   setAnalysisResults: (results) => set({ analysisResults: results }),
 
@@ -269,6 +400,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedEdgeId: null,
       entities: new Map(),
       edges: new Map(),
+      hiddenNodeIds: new Set(),
+      filterState: { ...DEFAULT_FILTER_STATE },
+      searchQuery: "",
+      centerView: "graph",
+      currentProjectId: null,
       nodeOverlay: null,
       analysisResults: null,
     });

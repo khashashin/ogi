@@ -2,20 +2,20 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Search, X, ChevronUp, ChevronDown } from "lucide-react";
 import { useGraphStore } from "../stores/graphStore";
 import { getSigmaRef } from "../stores/sigmaRef";
+import { matchesEntitySearch } from "../lib/entitySearch";
 
 export function SearchBar() {
-  const [query, setQuery] = useState("");
   const [visible, setVisible] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { graph, entities, selectNode, setNodeOverlay } = useGraphStore();
+  const { graph, entities, searchQuery, setSearchQuery, selectNode, setNodeOverlay } = useGraphStore();
 
   const handleClose = useCallback(() => {
     setVisible(false);
-    setQuery("");
+    setSearchQuery("");
     setCurrentIndex(0);
     setNodeOverlay(null);
-  }, [setNodeOverlay]);
+  }, [setSearchQuery, setNodeOverlay]);
 
   // Ctrl+F to toggle search
   useEffect(() => {
@@ -35,28 +35,19 @@ export function SearchBar() {
 
   // Compute matches
   const matchingIds = useMemo(() => {
-    if (!query.trim()) return [];
-    const lowerQuery = query.toLowerCase();
+    if (!searchQuery.trim()) return [];
     const ids: string[] = [];
     entities.forEach((entity, id) => {
-      const matches =
-        entity.value.toLowerCase().includes(lowerQuery) ||
-        entity.type.toLowerCase().includes(lowerQuery) ||
-        entity.notes.toLowerCase().includes(lowerQuery) ||
-        entity.tags.some((t) => t.toLowerCase().includes(lowerQuery)) ||
-        Object.values(entity.properties).some((v) =>
-          String(v).toLowerCase().includes(lowerQuery)
-        );
-      if (matches) ids.push(id);
+      if (matchesEntitySearch(entity, searchQuery)) ids.push(id);
     });
     return ids;
-  }, [query, entities]);
+  }, [searchQuery, entities]);
 
   // Push search overlay to the centralized store (GraphCanvas owns the nodeReducer)
   useEffect(() => {
-    if (!visible || !query.trim() || matchingIds.length === 0) {
+    if (!visible || !searchQuery.trim() || matchingIds.length === 0) {
       // Clear search overlay when not searching
-      if (visible && query.trim() && matchingIds.length === 0) {
+      if (visible && searchQuery.trim() && matchingIds.length === 0) {
         // Active search with no results — still show the overlay to dim everything
         setNodeOverlay({ type: "search", matchIds: new Set(), focusId: null });
       }
@@ -68,7 +59,7 @@ export function SearchBar() {
       matchIds: new Set(matchingIds),
       focusId: matchingIds[currentIndex] ?? null,
     });
-  }, [visible, matchingIds, currentIndex, query, setNodeOverlay]);
+  }, [visible, matchingIds, currentIndex, searchQuery, setNodeOverlay]);
 
   const navigateTo = (index: number) => {
     const id = matchingIds[index];
@@ -76,12 +67,29 @@ export function SearchBar() {
     setCurrentIndex(index);
     selectNode(id);
     const sigma = getSigmaRef();
-    if (sigma && graph.hasNode(id)) {
-      const attrs = graph.getNodeAttributes(id);
-      sigma.getCamera().animate(
-        { x: attrs.x, y: attrs.y, ratio: 0.5 },
-        { duration: 300 }
-      );
+    if (sigma) {
+      const displayData = sigma.getNodeDisplayData(id);
+      const target = displayData
+        ? { x: displayData.x, y: displayData.y }
+        : graph.hasNode(id)
+          ? (() => {
+              const attrs = graph.getNodeAttributes(id);
+              return { x: Number(attrs.x) || 0, y: Number(attrs.y) || 0 };
+            })()
+          : null;
+
+      if (target) {
+        const camera = sigma.getCamera();
+        const current = camera.getState();
+        camera.animate(
+          {
+            x: target.x,
+            y: target.y,
+            ratio: Math.min(current.ratio, 0.8),
+          },
+          { duration: 300 }
+        );
+      }
     }
   };
 
@@ -103,10 +111,10 @@ export function SearchBar() {
       <input
         ref={inputRef}
         type="text"
-        placeholder="Search entities..."
-        value={query}
+        placeholder="Search... type:Domain tag:important source:whois"
+        value={searchQuery}
         onChange={(e) => {
-          setQuery(e.target.value);
+          setSearchQuery(e.target.value);
           setCurrentIndex(0);
         }}
         onKeyDown={(e) => {
@@ -116,7 +124,7 @@ export function SearchBar() {
         }}
         className="w-64 px-1 py-0.5 text-xs bg-transparent text-text focus:outline-none"
       />
-      {query && (
+      {searchQuery && (
         <span className="text-[10px] text-text-muted whitespace-nowrap tabular-nums">
           {matchingIds.length === 0
             ? "No matches"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight } from "lucide-react";
+import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -18,7 +18,7 @@ import { useIsViewer } from "../hooks/useIsViewer";
 
 export function Toolbar() {
   const { currentProject, updateProject } = useProjectStore();
-  const { graph, entities, edges, persistPositions, performUndo, performRedo } = useGraphStore();
+  const { graph, entities, edges, centerView, setCenterView, persistPositions, performUndo, performRedo } = useGraphStore();
   const canUndo = useUndoStore((s) => s.undoStack.length > 0);
   const canRedo = useUndoStore((s) => s.redoStack.length > 0);
   const [showExportImport, setShowExportImport] = useState(false);
@@ -158,6 +158,23 @@ export function Toolbar() {
         title="Circular layout"
       >
         <Maximize2 size={14} />
+      </button>
+
+      <div className="w-px h-4 bg-border" />
+
+      <button
+        onClick={() => setCenterView("graph")}
+        className={`p-1.5 rounded ${centerView === "graph" ? "text-accent bg-surface-hover" : "text-text-muted hover:text-text hover:bg-surface-hover"}`}
+        title="Graph view"
+      >
+        <Network size={14} />
+      </button>
+      <button
+        onClick={() => setCenterView("table")}
+        className={`p-1.5 rounded ${centerView === "table" ? "text-accent bg-surface-hover" : "text-text-muted hover:text-text hover:bg-surface-hover"}`}
+        title="Table view"
+      >
+        <Table size={14} />
       </button>
 
       <div className="w-px h-4 bg-border" />

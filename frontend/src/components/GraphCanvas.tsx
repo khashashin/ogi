@@ -8,7 +8,7 @@ import { setSigmaRef } from "../stores/sigmaRef";
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, nodeOverlay, persistPositions } = useGraphStore();
+  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, hiddenNodeIds, nodeOverlay, persistPositions } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
@@ -182,6 +182,10 @@ export function GraphCanvas() {
     const renderer = sigmaRef.current;
 
     renderer.setSetting("nodeReducer", (node, data) => {
+      if (hiddenNodeIds.has(node)) {
+        return { ...data, hidden: true, label: "" };
+      }
+
       // 1. Overlay takes priority when active
       if (nodeOverlay) {
         if (nodeOverlay.type === "search") {
@@ -223,6 +227,12 @@ export function GraphCanvas() {
     });
 
     renderer.setSetting("edgeReducer", (edge, data) => {
+      const src = graph.source(edge);
+      const tgt = graph.target(edge);
+      if (hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
+        return { ...data, hidden: true };
+      }
+
       if (selectedEdgeId && edge === selectedEdgeId) {
         return {
           ...data,
@@ -242,8 +252,6 @@ export function GraphCanvas() {
       }
 
       if (selectedNodeId && !nodeOverlay) {
-        const src = graph.source(edge);
-        const tgt = graph.target(edge);
         if (src !== selectedNodeId && tgt !== selectedNodeId) {
           return { ...data, hidden: true };
         }
@@ -252,7 +260,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, nodeOverlay, graph]);
+  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {
