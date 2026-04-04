@@ -20,31 +20,35 @@ class GraphData:
 @router.get("")
 async def get_graph(
     project_id: UUID,
+    refresh: bool = False,
     _role: str = Depends(require_project_viewer),
     entity_store: EntityStore = Depends(get_entity_store),
     edge_store: EdgeStore = Depends(get_edge_store),
 ) -> dict[str, list[Entity] | list[Edge]]:
     """Get full graph data for a project.
 
-    Always merge latest DB rows into the in-memory engine. Transform workers
-    persist directly to DB and do not mutate this process-local engine.
+    Hydrates in-memory state from DB once per project process. Use
+    `refresh=true` to force a DB re-sync for out-of-band writes.
     """
     engine = get_graph_engine(project_id)
 
-    # Merge from DB each time to avoid stale cache when workers write directly.
-    entities = await entity_store.list_by_project(project_id)
-    edges = await edge_store.list_by_project(project_id)
-    for entity in entities:
-        if not engine.get_entity(entity.id):
-            engine.add_entity(entity)
-    for edge in edges:
-        if edge.id in engine.edges:
-            continue
-        try:
-            engine.add_edge(edge)
-        except ValueError:
-            pass
-    engine._hydrated = True
+    if refresh or not engine.is_hydrated:
+        if refresh:
+            engine.clear()
+
+        entities = await entity_store.list_by_project(project_id)
+        edges = await edge_store.list_by_project(project_id)
+        for entity in entities:
+            if not engine.get_entity(entity.id):
+                engine.add_entity(entity)
+        for edge in edges:
+            if edge.id in engine.edges:
+                continue
+            try:
+                engine.add_edge(edge)
+            except ValueError:
+                pass
+        engine.mark_hydrated()
 
     return {
         "entities": list(engine.entities.values()),
