@@ -46,8 +46,12 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
         summary = await api.import.json(currentProject.id, file);
       } else if (ext === "csv") {
         summary = await api.import.csv(currentProject.id, file);
+      } else if (ext === "graphml") {
+        summary = await api.import.graphml(currentProject.id, file);
+      } else if (ext === "mtgx") {
+        summary = await api.import.maltego(currentProject.id, file);
       } else {
-        toast.error("Unsupported file format. Use .json or .csv");
+        toast.error("Unsupported file format. Use .json, .csv, .graphml, or .mtgx");
         setImporting(false);
         return;
       }
@@ -145,13 +149,13 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
               >
                 <Upload size={24} className="text-text-muted" />
                 <p className="text-xs text-text-muted">
-                  {importing ? "Importing..." : "Click to select a file (.json or .csv)"}
+                  {importing ? "Importing..." : "Click to select a file (.json, .csv, .graphml, .mtgx)"}
                 </p>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.csv"
+                accept=".json,.csv,.graphml,.mtgx"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
