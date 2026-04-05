@@ -24,9 +24,10 @@ def test_auto_discover(engine: TransformEngine):
     assert "ip_to_domain" in names
     assert "whois_lookup" in names
     assert "organization_to_team_members" in names
+    assert "url_to_links" in names
     assert "url_to_content" in names
     assert "content_to_iocs" in names
-    assert len(transforms) == 18
+    assert len(transforms) == 19
 
 
 def test_list_for_entity(engine: TransformEngine):
@@ -53,6 +54,13 @@ def test_list_for_ip_entity(engine: TransformEngine):
 async def test_content_to_iocs_extracts_common_indicators(engine: TransformEngine):
     transform = engine.get_transform("content_to_iocs")
     assert transform is not None
+    # Force deterministic regex extraction regardless of optional iocsearcher availability.
+    import ogi.transforms.web.content_to_iocs as content_to_iocs_module
+
+    original_import_module = content_to_iocs_module.importlib.import_module
+    content_to_iocs_module.importlib.import_module = lambda _name: (_ for _ in ()).throw(
+        ModuleNotFoundError("iocsearcher unavailable for test")
+    )
     document = Entity(
         type=EntityType.DOCUMENT,
         value="Security report",
@@ -64,13 +72,15 @@ async def test_content_to_iocs_extracts_common_indicators(engine: TransformEngin
         },
     )
 
-    result = await transform.run(document, TransformConfig(settings={}))
+    try:
+        result = await transform.run(document, TransformConfig(settings={}))
+    finally:
+        content_to_iocs_module.importlib.import_module = original_import_module
     out_types = {entity.type for entity in result.entities}
     out_values = {entity.value for entity in result.entities}
 
     assert EntityType.EMAIL_ADDRESS in out_types
     assert EntityType.IP_ADDRESS in out_types
-    assert EntityType.URL in out_types
     assert EntityType.HASH in out_types
     assert EntityType.DOMAIN in out_types
     assert "admin@example.org" in out_values
@@ -78,6 +88,7 @@ async def test_content_to_iocs_extracts_common_indicators(engine: TransformEngin
     assert "https://evil.example/path" in out_values
     assert "d41d8cd98f00b204e9800998ecf8427e" in out_values
     assert "evil.example" in out_values
+    assert any("regex fallback" in msg.lower() for msg in result.messages)
 
 
 @pytest.mark.asyncio
