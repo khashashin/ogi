@@ -14,6 +14,8 @@ interface ExportImportDialogProps {
 export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
   const [tab, setTab] = useState<"export" | "import">("export");
   const [importing, setImporting] = useState(false);
+  const [cloudImportUrl, setCloudImportUrl] = useState("");
+  const [cloudExportBusy, setCloudExportBusy] = useState<null | "json" | "csv" | "graphml">(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentProject } = useProjectStore();
   const { loadGraph } = useGraphStore();
@@ -35,6 +37,25 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
     a.download = "";
     a.click();
     toast.success(`Exporting as ${format.toUpperCase()}...`);
+  };
+
+  const handleCloudExport = async (format: "json" | "csv" | "graphml") => {
+    setCloudExportBusy(format);
+    try {
+      const { url } = await api.export.cloud(currentProject.id, format);
+      if (!url) {
+        toast.error("Cloud export failed: missing signed URL");
+        return;
+      }
+
+      await navigator.clipboard.writeText(url);
+      toast.success(`Cloud export ready (${format.toUpperCase()}). Signed URL copied.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Cloud export failed: ${msg}`);
+    } finally {
+      setCloudExportBusy(null);
+    }
   };
 
   const handleImport = async (file: File) => {
@@ -70,6 +91,48 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
     }
   };
 
+  const handleImportFromCloudUrl = async () => {
+    const raw = cloudImportUrl.trim();
+    if (!raw) {
+      toast.error("Provide a cloud export URL first");
+      return;
+    }
+    setImporting(true);
+    try {
+      let url: URL;
+      try {
+        url = new URL(raw);
+      } catch {
+        toast.error("Invalid URL");
+        return;
+      }
+
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        throw new Error(`Cloud URL fetch failed: ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const pathname = url.pathname.toLowerCase();
+      let filename = pathname.split("/").pop() || "cloud-import";
+      if (!filename.includes(".")) {
+        const ct = (blob.type || "").toLowerCase();
+        if (ct.includes("json")) filename += ".json";
+        else if (ct.includes("zip")) filename += ".csv";
+        else if (ct.includes("xml")) filename += ".graphml";
+      }
+
+      const file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
+      await handleImport(file);
+      setCloudImportUrl("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Cloud import failed: ${msg}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const tabClass = (t: string) =>
     `px-3 py-1.5 text-xs rounded-t ${
       tab === t
@@ -79,6 +142,8 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
 
   const btnClass =
     "w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-text hover:bg-surface-hover border border-border";
+  const cloudBtnClass =
+    "w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-text hover:bg-surface-hover border border-border bg-surface/40";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -122,6 +187,19 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   <p className="text-[10px] text-text-muted">Full project data, re-importable</p>
                 </div>
               </button>
+              <button
+                onClick={() => handleCloudExport("json")}
+                className={cloudBtnClass}
+                disabled={cloudExportBusy !== null}
+              >
+                <Upload size={14} className="text-accent" />
+                <div className="text-left">
+                  <p className="font-medium">Save JSON to Cloud</p>
+                  <p className="text-[10px] text-text-muted">
+                    {cloudExportBusy === "json" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                  </p>
+                </div>
+              </button>
               <button onClick={() => handleExport("csv")} className={btnClass}>
                 <Download size={14} className="text-accent" />
                 <div className="text-left">
@@ -129,11 +207,37 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   <p className="text-[10px] text-text-muted">Entities + edges as CSV files</p>
                 </div>
               </button>
+              <button
+                onClick={() => handleCloudExport("csv")}
+                className={cloudBtnClass}
+                disabled={cloudExportBusy !== null}
+              >
+                <Upload size={14} className="text-accent" />
+                <div className="text-left">
+                  <p className="font-medium">Save CSV to Cloud</p>
+                  <p className="text-[10px] text-text-muted">
+                    {cloudExportBusy === "csv" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                  </p>
+                </div>
+              </button>
               <button onClick={() => handleExport("graphml")} className={btnClass}>
                 <Download size={14} className="text-accent" />
                 <div className="text-left">
                   <p className="font-medium">GraphML</p>
                   <p className="text-[10px] text-text-muted">Compatible with Gephi, yEd</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleCloudExport("graphml")}
+                className={cloudBtnClass}
+                disabled={cloudExportBusy !== null}
+              >
+                <Upload size={14} className="text-accent" />
+                <div className="text-left">
+                  <p className="font-medium">Save GraphML to Cloud</p>
+                  <p className="text-[10px] text-text-muted">
+                    {cloudExportBusy === "graphml" ? "Preparing signed URL..." : "Upload to Supabase Storage and copy signed URL"}
+                  </p>
                 </div>
               </button>
             </div>
@@ -163,6 +267,25 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   e.target.value = "";
                 }}
               />
+              <div className="pt-2 border-t border-border/70">
+                <p className="text-[10px] text-text-muted mb-2">Import from Cloud Signed URL</p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://...signed-download-url"
+                    value={cloudImportUrl}
+                    onChange={(e) => setCloudImportUrl(e.target.value)}
+                    className="flex-1 px-2 py-1.5 text-xs bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    onClick={handleImportFromCloudUrl}
+                    disabled={importing}
+                    className="px-3 py-1.5 text-xs bg-surface border border-border rounded text-text hover:bg-surface-hover disabled:opacity-50"
+                  >
+                    Load URL
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
