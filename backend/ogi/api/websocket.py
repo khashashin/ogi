@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from ogi.config import settings
+from ogi.models import UserProfile
 
 logger = logging.getLogger("ogi.ws")
 
@@ -96,27 +97,62 @@ async def redis_pubsub_listener() -> None:
         await conn.aclose()
 
 
-def _validate_ws_auth(token: str | None) -> bool:
-    """Validate a WebSocket auth token.
-
-    In local mode (no Supabase configured) all connections are accepted.
-    When Supabase is configured the token is verified via get_user().
-    """
+async def _resolve_ws_user(token: str | None) -> UserProfile | None:
+    """Resolve the websocket caller to a user profile."""
+    # Local mode: behave like HTTP auth dependency and allow anonymous profile.
     if not settings.supabase_url or not settings.supabase_anon_key:
-        return True  # local dev — accept all
+        return UserProfile(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            email="local@localhost",
+        )
 
     if not token:
-        return False
+        return None
 
     try:
         from ogi.api.auth import get_supabase_client
+        from ogi.db.database import get_session
+
         client = get_supabase_client()
         if not client:
-            return False
+            return None
         resp = client.auth.get_user(token)
-        return resp is not None and resp.user is not None
+        if resp is None or resp.user is None:
+            return None
+
+        user_id = UUID(str(resp.user.id))
+        email = str(resp.user.email or "")
+
+        async for session in get_session():
+            profile = await session.get(UserProfile, user_id)
+            if not profile:
+                profile = UserProfile(id=user_id, email=email)
+                profile = await session.merge(profile)
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    profile = await session.get(UserProfile, user_id)
+                    if not profile:
+                        return None
+            elif profile.email != email:
+                profile.email = email
+                session.add(profile)
+                await session.commit()
+            return profile
     except Exception:
-        return False
+        return None
+    return None
+
+
+async def _get_project_role(project_id: UUID, user_id: UUID) -> str | None:
+    from ogi.db.database import get_session
+    from ogi.store.project_store import ProjectStore
+
+    async for session in get_session():
+        store = ProjectStore(session)
+        return await store.get_member_role(project_id, user_id)
+    return None
 
 
 @router.websocket("/transforms/{project_id}")
@@ -127,8 +163,14 @@ async def ws_transforms(
 ) -> None:
     """WebSocket endpoint for transform job events on a project."""
 
-    if not _validate_ws_auth(token):
+    user = await _resolve_ws_user(token)
+    if user is None:
         await ws.close(code=4001, reason="Unauthorized")
+        return
+
+    role = await _get_project_role(project_id, user.id)
+    if role not in ("owner", "editor", "viewer"):
+        await ws.close(code=4003, reason="Forbidden")
         return
 
     await ws_manager.connect(project_id, ws)
@@ -149,7 +191,7 @@ async def ws_transforms(
             elif msg_type == "cancel":
                 job_id = msg.get("job_id")
                 if job_id:
-                    await _handle_cancel(project_id, job_id)
+                    await _handle_cancel(project_id, user.id, job_id)
 
     except WebSocketDisconnect:
         pass
@@ -159,11 +201,12 @@ async def ws_transforms(
         ws_manager.disconnect(project_id, ws)
 
 
-async def _handle_cancel(project_id: UUID, job_id: str) -> None:
+async def _handle_cancel(project_id: UUID, user_id: UUID, job_id: str) -> None:
     """Cancel an RQ job and publish cancellation event."""
-    from ogi.api.dependencies import get_redis, get_rq_queue
+    from ogi.api.dependencies import get_redis
     from ogi.models import TransformStatus, TransformJobMessage
     from ogi.db.database import get_session
+    from ogi.store.project_store import ProjectStore
     from ogi.store.transform_run_store import TransformRunStore
     from datetime import datetime, timezone
     from rq.job import Job
@@ -173,35 +216,49 @@ async def _handle_cancel(project_id: UUID, job_id: str) -> None:
         return
 
     try:
-        rq_job = Job.fetch(job_id, connection=redis_conn)
-        rq_job.cancel()
-    except Exception:
-        logger.warning("Could not cancel RQ job %s", job_id)
+        run_id = UUID(job_id)
+    except ValueError:
+        logger.warning("Received invalid cancel job id: %s", job_id)
+        return
 
-    # Update DB
-    run_id = UUID(job_id)
     try:
         async for session in get_session():
+            project_store = ProjectStore(session)
             run_store = TransformRunStore(session)
             run = await run_store.get(run_id)
-            if run:
-                run.status = TransformStatus.CANCELLED
-                run.completed_at = datetime.now(timezone.utc)
-                await run_store.save(run)
+            if run is None or run.project_id != project_id:
+                break
 
-                # Publish cancellation event
-                msg = TransformJobMessage(
-                    type="job_cancelled",
-                    job_id=run_id,
-                    project_id=project_id,
-                    transform_name=run.transform_name,
-                    input_entity_id=run.input_entity_id,
-                    timestamp=datetime.now(timezone.utc),
-                )
-                redis_conn.publish(
-                    f"ogi:transform_events:{project_id}",
-                    msg.model_dump_json(),
-                )
+            role = await project_store.get_member_role(project_id, user_id)
+            if role not in ("owner", "editor"):
+                break
+
+            if run.status not in (TransformStatus.PENDING, TransformStatus.RUNNING):
+                break
+
+            try:
+                rq_job = Job.fetch(job_id, connection=redis_conn)
+                rq_job.cancel()
+            except Exception:
+                logger.warning("Could not cancel RQ job %s", job_id)
+
+            run.status = TransformStatus.CANCELLED
+            run.completed_at = datetime.now(timezone.utc)
+            await run_store.save(run)
+
+            # Publish cancellation event
+            msg = TransformJobMessage(
+                type="job_cancelled",
+                job_id=run_id,
+                project_id=project_id,
+                transform_name=run.transform_name,
+                input_entity_id=run.input_entity_id,
+                timestamp=datetime.now(timezone.utc),
+            )
+            redis_conn.publish(
+                f"ogi:transform_events:{project_id}",
+                msg.model_dump_json(),
+            )
             break
     except Exception:
         logger.exception("Failed to update cancelled run %s", job_id)
