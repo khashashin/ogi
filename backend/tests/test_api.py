@@ -667,6 +667,50 @@ async def test_export_graphml(client: AsyncClient):
     assert "graphml" in resp.text
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fmt", "expected_suffix"),
+    [
+        ("json", ".ogi.json"),
+        ("csv", ".csv.zip"),
+        ("graphml", ".graphml"),
+    ],
+)
+async def test_export_cloud_returns_signed_url_payload(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    fmt: str,
+    expected_suffix: str,
+):
+    from ogi.api import export as export_api
+
+    captured: dict[str, str] = {}
+
+    async def fake_upload(project_id, filename, content, content_type):  # type: ignore[no-untyped-def]
+        captured["filename"] = filename
+        captured["content_type"] = content_type
+        return f"https://signed.example/{project_id}/{filename}?token=abc123"
+
+    monkeypatch.setattr(export_api, "_upload_to_storage", fake_upload)
+
+    resp = await client.post("/api/v1/projects", json={"name": "ExportCloud"})
+    pid = resp.json()["id"]
+
+    # Seed at least one entity so JSON/GraphML payloads contain data.
+    await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "cloud.test"},
+    )
+
+    resp = await client.get(f"/api/v1/projects/{pid}/export/{fmt}?cloud=true")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    payload = resp.json()
+    assert "url" in payload
+    assert payload["url"].startswith("https://signed.example/")
+    assert captured["filename"].endswith(expected_suffix)
+
+
 # ---------------------------------------------------------------------------
 # Plugins
 # ---------------------------------------------------------------------------
