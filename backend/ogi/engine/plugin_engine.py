@@ -61,10 +61,7 @@ class PluginEngine:
 
     @staticmethod
     def _parse_manifest(data: dict[str, object], fallback_name: str) -> PluginInfo:
-        """Parse a plugin.yaml manifest, supporting both v1 and v2 schemas."""
-        schema_version = int(data.get("schema_version", 1))
-
-        # v1 fields (always parsed)
+        """Parse a plugin.yaml manifest using the current schema."""
         info = PluginInfo(
             name=str(data.get("name", fallback_name)),
             version=str(data.get("version", "")),
@@ -72,47 +69,44 @@ class PluginEngine:
             description=str(data.get("description", "")),
             author=str(data.get("author", "")),
             enabled=bool(data.get("enabled", True)),
-            schema_version=schema_version,
         )
 
-        # v2 additions
-        if schema_version >= 2:
-            info.category = str(data.get("category", ""))
-            info.license = str(data.get("license", ""))
-            info.author_github = str(data.get("author_github", ""))
-            info.homepage = str(data.get("homepage", ""))
-            info.repository = str(data.get("repository", ""))
-            info.min_ogi_version = str(data.get("min_ogi_version", ""))
-            info.icon = str(data.get("icon", ""))
-            info.color = str(data.get("color", ""))
+        info.category = str(data.get("category", ""))
+        info.license = str(data.get("license", ""))
+        info.author_github = str(data.get("author_github", ""))
+        info.homepage = str(data.get("homepage", ""))
+        info.repository = str(data.get("repository", ""))
+        info.min_ogi_version = str(data.get("min_ogi_version", ""))
+        info.icon = str(data.get("icon", ""))
+        info.color = str(data.get("color", ""))
 
-            raw_tags = data.get("tags")
-            if isinstance(raw_tags, list):
-                info.tags = [str(t) for t in raw_tags]
+        raw_tags = data.get("tags")
+        if isinstance(raw_tags, list):
+            info.tags = [str(t) for t in raw_tags]
 
-            raw_input = data.get("input_types")
-            if isinstance(raw_input, list):
-                info.input_types = [str(t) for t in raw_input]
+        raw_input = data.get("input_types")
+        if isinstance(raw_input, list):
+            info.input_types = [str(t) for t in raw_input]
 
-            raw_output = data.get("output_types")
-            if isinstance(raw_output, list):
-                info.output_types = [str(t) for t in raw_output]
+        raw_output = data.get("output_types")
+        if isinstance(raw_output, list):
+            info.output_types = [str(t) for t in raw_output]
 
-            raw_deps = data.get("python_dependencies")
-            if isinstance(raw_deps, list):
-                info.python_dependencies = [str(d) for d in raw_deps]
+        raw_deps = data.get("python_dependencies")
+        if isinstance(raw_deps, list):
+            info.python_dependencies = [str(d) for d in raw_deps]
 
-            raw_api_keys = data.get("api_keys_required")
-            if isinstance(raw_api_keys, list):
-                info.api_keys_required = [
-                    {str(k): str(v) for k, v in entry.items()}
-                    for entry in raw_api_keys
-                    if isinstance(entry, dict)
-                ]
+        raw_api_keys = data.get("api_keys_required")
+        if isinstance(raw_api_keys, list):
+            info.api_keys_required = [
+                {str(k): str(v) for k, v in entry.items()}
+                for entry in raw_api_keys
+                if isinstance(entry, dict)
+            ]
 
-            raw_perms = data.get("permissions")
-            if isinstance(raw_perms, dict):
-                info.permissions = {str(k): bool(v) for k, v in raw_perms.items()}
+        raw_perms = data.get("permissions")
+        if isinstance(raw_perms, dict):
+            info.permissions = {str(k): bool(v) for k, v in raw_perms.items()}
 
         return info
 

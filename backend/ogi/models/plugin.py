@@ -30,8 +30,7 @@ class PluginInfo(SQLModel, table=True):
     enabled: bool = True
     installed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
 
-    # v2 additions
-    schema_version: int = 1
+    # Manifest metadata
     category: str = ""
     license: str = ""
     author_github: str = ""
