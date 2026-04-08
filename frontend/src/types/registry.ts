@@ -84,7 +84,7 @@ export interface InstalledTransform {
   files: string[];
 }
 
-export interface PluginInfoV2 {
+export interface PluginInfo {
   name: string;
   version: string;
   display_name: string;
@@ -93,7 +93,6 @@ export interface PluginInfoV2 {
   enabled: boolean;
   transform_count: number;
   transform_names: string[];
-  schema_version: number;
   category: string;
   license: string;
   author_github: string;
