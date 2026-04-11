@@ -9,12 +9,13 @@ An open source visual link analysis and OSINT framework. Think Maltego, but free
 ## What it does
 
 - **Visual graph investigation** — drag-and-drop entities, explore connections
-- **15 built-in transforms** — DNS, WHOIS, SSL certs, geolocation, certificate transparency, and more
+- **20+ transforms** — DNS, WHOIS, SSL certs, geolocation, web/email/hash/social enrichment, and more
 - **Transform Hub** — browse and install community transforms from the [registry](https://github.com/opengraphintel/ogi-transforms)
-- **Import/Export** — JSON, CSV, GraphML
+- **Import/Export** — JSON, CSV, GraphML, and Maltego MTGX import
 - **Graph analysis** — centrality, community detection, shortest paths
-- **Collaboration** — projects, sharing, real-time sync (via Supabase)
-- **Runs anywhere** — local SQLite mode (zero config) or PostgreSQL + Supabase for teams
+- **Collaboration** — projects, sharing, and real-time sync
+- **Async transform jobs** — Redis/RQ queue + WebSocket updates
+- **Runs anywhere** — local SQLite mode (zero config) or PostgreSQL + Supabase for team/cloud setups
 
 ## Quick Start
 
@@ -73,9 +74,9 @@ Optional env vars:
 
 | Layer            | Tech                                                            |
 | ---------------- | --------------------------------------------------------------- |
-| Backend          | Python, FastAPI, SQLModel, asyncpg/aiosqlite                    |
+| Backend          | Python, FastAPI, SQLModel, PostgreSQL/SQLite, Redis/RQ          |
 | Frontend         | React, TypeScript, Sigma.js (graphology), Zustand, Tailwind CSS |
-| Auth & Realtime  | Supabase (optional — works without it)                          |
+| Auth & Realtime  | Supabase + WebSocket events (optional auth in local mode)       |
 | Package managers | uv (backend), pnpm (frontend)                                   |
 
 ## Transform Hub
@@ -94,19 +95,19 @@ Want to build your own? See the [contributing guide](https://github.com/opengrap
 This is an early-stage project. Here's what exists:
 
 - Graph engine, entity registry, undo/redo
-- 15 transforms across DNS, email, web, IP, certs, social, and hash categories
-- Full REST API with project management
-- Plugin system with v2 manifest spec
+- 20+ transforms across DNS, email, web, IP, cert, social, hash, and org categories
+- Full REST API with project/member management
+- Plugin system + Transform Hub integration
 - CLI tool (`ogi transform ...`)
-- Docker deployment
-- Auth and real-time collaboration (Supabase)
+- Docker deployment (backend/frontend/db/worker/redis)
+- Auth and real-time collaboration (Supabase-backed)
+- Cloud export/import signed URL flows
 
 What's missing or incomplete:
 
-- Tests cover the basics but not edge cases
+- Test coverage is improving but still uneven across features
 - No formal security audit
 - Limited error handling in some transforms
-- Desktop app (Tauri) is planned but not started
 
 ## Contributing
 
