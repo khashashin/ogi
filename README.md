@@ -39,6 +39,29 @@ pnpm dev
 
 Open http://localhost:5173. That's it.
 
+### CLI (`ogi`)
+
+Two supported ways to run the CLI:
+
+1. Recommended (no activation required):
+
+```bash
+cd backend
+uv sync
+uv run ogi --help
+```
+
+2. Activated virtualenv (plain `ogi` command):
+
+```bash
+cd backend
+uv venv
+# PowerShell:
+.\.venv\Scripts\Activate.ps1
+uv pip install -e .
+ogi --help
+```
+
 ### Docker
 
 ```bash
@@ -84,8 +107,9 @@ Optional env vars:
 OpenGraph Intel has a built-in transform marketplace. Browse, install, and manage transforms from the [community registry](https://github.com/opengraphintel/ogi-transforms).
 
 ```bash
-ogi transform search dns
-ogi transform install shodan-host-lookup
+cd backend
+uv run ogi transform search dns
+uv run ogi transform install shodan-host-lookup
 ```
 
 Want to build your own? See the [contributing guide](https://github.com/opengraphintel/ogi-transforms/blob/main/CONTRIBUTING.md).
