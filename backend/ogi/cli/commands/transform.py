@@ -59,11 +59,12 @@ def _run(coro: Coroutine[Any, Any, Any]) -> Any:
 def search(
     query: str = typer.Argument("", help="Search query (name, tag, description)"),
     category: str | None = typer.Option(None, "--category", "-c", help="Filter by category"),
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
 ) -> None:
     """Search for transforms in the registry."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
 
     results = registry.search(query, category=category)
 
@@ -72,7 +73,7 @@ def search(
         raise typer.Exit()
 
     typer.echo(f"\n  {'NAME':<28} {'CATEGORY':<16} {'AUTHOR':<16} {'VERSION':<10} {'TIER'}")
-    typer.echo(f"  {'─' * 28} {'─' * 16} {'─' * 16} {'─' * 10} {'─' * 12}")
+    typer.echo(f"  {'-' * 28} {'-' * 16} {'-' * 16} {'-' * 10} {'-' * 12}")
     for t in results:
         typer.echo(
             f"  {t.get('slug', ''):<28} "
@@ -88,11 +89,12 @@ def search(
 @app.command()
 def install(
     slug: str = typer.Argument(..., help="Transform slug to install"),
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
 ) -> None:
     """Install a transform from the registry."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
     installer = _get_installer(registry, cfg)
 
     typer.echo(f"\n  Installing {slug}...")
@@ -129,11 +131,13 @@ def install(
 
 
 @app.command("list")
-def list_transforms() -> None:
+def list_transforms(
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
+) -> None:
     """List installed and available transforms."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
     installer = _get_installer(registry, cfg)
 
     installed = installer.list_installed()
@@ -190,11 +194,12 @@ def list_transforms() -> None:
 @app.command()
 def update(
     slug: str | None = typer.Argument(None, help="Transform slug to update (all if omitted)"),
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
 ) -> None:
     """Update installed transforms to the latest version."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
     installer = _get_installer(registry, cfg)
 
     if slug:
@@ -234,11 +239,12 @@ def update(
 @app.command()
 def remove(
     slug: str = typer.Argument(..., help="Transform slug to remove"),
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
 ) -> None:
     """Remove an installed transform."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
     installer = _get_installer(registry, cfg)
 
     try:
@@ -254,11 +260,12 @@ def remove(
 @app.command()
 def info(
     slug: str = typer.Argument(..., help="Transform slug to inspect"),
+    refresh: bool = typer.Option(False, "--refresh", help="Force refresh registry index from remote"),
 ) -> None:
     """Show detailed info for a transform."""
     cfg = _cli_config()
     registry = _get_registry(cfg)
-    _run(registry.fetch_index())
+    _run(registry.fetch_index(force=refresh))
 
     meta = registry.get_transform(slug)
     if meta is None:
@@ -266,7 +273,7 @@ def info(
         raise typer.Exit(1)
 
     typer.echo(f"\n  {meta.get('display_name', slug)}")
-    typer.echo(f"  {'─' * 40}")
+    typer.echo(f"  {'-' * 40}")
     typer.echo(f"  Slug:         {meta.get('slug', '')}")
     typer.echo(f"  Version:      {meta.get('version', '')}")
     typer.echo(f"  Author:       {meta.get('author', '')} (@{meta.get('author_github', '')})")
