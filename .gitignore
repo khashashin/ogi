@@ -54,3 +54,7 @@ src-tauri/target/
 
 # Claude Code
 .claude/
+
+# OGI runtime plugin installs (local dev)
+backend/plugins/*
+!backend/plugins/.gitkeep
