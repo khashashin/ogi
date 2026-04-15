@@ -4,7 +4,7 @@ An open source visual link analysis and OSINT framework. Think Maltego, but free
 
 ![OpenGraph Intel Screenshot](docs/images/image.png)
 
-> **Heads up:** This project was largely vibe-coded — built fast with AI assistance to explore what's possible. It works, it's fun to use, but it's rough around the edges. Documentation is thin, there are likely security issues, and it is **not recommended for production use**. Contributions, bug reports, and feedback are very welcome.
+> **Heads up:** This project is actively evolving. It has solid core capabilities and test coverage, and we continue to improve documentation, hardening, and feature depth with each release. Contributions, bug reports, and feedback are very welcome.
 
 ## What it does
 
