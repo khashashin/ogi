@@ -1,0 +1,113 @@
+name: Cut Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as prerelease"
+        required: true
+        default: false
+        type: boolean
+      generate_notes:
+        description: "Auto-generate release notes"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  cut:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Version must match X.Y.Z"
+            exit 1
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ensure tag does not already exist
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          TAG="v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally."
+            exit 1
+          fi
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists on origin."
+            exit 1
+          fi
+
+      - name: Ensure main already has requested version
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          BACKEND_VERSION="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          content = Path("backend/pyproject.toml").read_text(encoding="utf-8")
+          in_project = False
+          for line in content.splitlines():
+              s = line.strip()
+              if s == "[project]":
+                  in_project = True
+                  continue
+              if in_project and s.startswith("[") and s != "[project]":
+                  in_project = False
+              if in_project and s.startswith("version"):
+                  m = re.search(r'"([^"]+)"', s)
+                  if m:
+                      print(m.group(1))
+                      break
+          PY
+          )"
+          FRONTEND_VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path("frontend/package.json").read_text(encoding="utf-8"))["version"])
+          PY
+          )"
+
+          if [ "$BACKEND_VERSION" != "$VERSION" ]; then
+            echo "backend/pyproject.toml version ($BACKEND_VERSION) does not match requested $VERSION"
+            exit 1
+          fi
+          if [ "$FRONTEND_VERSION" != "$VERSION" ]; then
+            echo "frontend/package.json version ($FRONTEND_VERSION) does not match requested $VERSION"
+            exit 1
+          fi
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          TAG="v$VERSION"
+          git fetch origin main --tags
+          git checkout main
+          git pull --ff-only origin main
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          target_commitish: main
+          generate_release_notes: ${{ github.event.inputs.generate_notes }}
+          prerelease: ${{ github.event.inputs.prerelease }}
