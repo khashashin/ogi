@@ -35,6 +35,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Update version files
         env:
           VERSION: ${{ github.event.inputs.version }}
@@ -77,6 +80,11 @@ jobs:
           package_json.write_text(json.dumps(package_data, indent=2) + "\n", encoding="utf-8")
           PY
 
+      - name: Refresh backend lockfile
+        run: |
+          cd backend
+          uv lock
+
       - name: Create release PR
         uses: peter-evans/create-pull-request@v7
         with:
@@ -88,6 +96,7 @@ jobs:
             Release preparation PR.
 
             - Bumps `backend/pyproject.toml` version
+            - Refreshes `backend/uv.lock`
             - Bumps `frontend/package.json` version
 
             Merge this PR into `main`, then run **Cut Release** with version `${{ github.event.inputs.version }}`.
