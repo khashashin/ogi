@@ -15,17 +15,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy project definition first for layer caching
-COPY pyproject.toml .
+# Copy package metadata and source before install so CLI entry points resolve modules.
+COPY pyproject.toml README.md ./
+COPY ogi/ ogi/
 
-# Install dependencies into the venv
+# Install project + dependencies into the venv
 RUN uv pip install -e ".[web_extract]"
 
 # Install Playwright browser binaries and required system packages
 RUN playwright install --with-deps chromium
 
-# Copy application code and migrations
-COPY ogi/ ogi/
+# Copy non-package runtime files
 COPY alembic/ alembic/
 COPY alembic.ini .
 COPY entrypoint.sh /app/entrypoint.sh
