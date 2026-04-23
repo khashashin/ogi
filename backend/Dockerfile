@@ -16,7 +16,8 @@ RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy package metadata and source before install so CLI entry points resolve modules.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml ./
+RUN printf "# OGI backend image\n" > README.md
 COPY ogi/ ogi/
 
 # Install project + dependencies into the venv
