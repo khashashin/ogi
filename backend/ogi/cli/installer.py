@@ -41,6 +41,7 @@ class TransformInstaller:
 
     def _save_lock(self, lock: LockFile) -> None:
         write_lockfile(self.plugins_dir, lock)
+        self._sync_boot_requirements(lock)
 
     async def install(self, slug: str) -> list[str]:
         """Install a transform from the registry.
@@ -172,3 +173,27 @@ class TransformInstaller:
         if result.returncode != 0:
             logger.warning("Dependency install stderr: %s", result.stderr)
             raise InstallError(f"Failed to install dependencies: {result.stderr[:500]}")
+
+    def _sync_boot_requirements(self, lock: LockFile) -> None:
+        """Sync shared boot requirements file from installed transform dependencies.
+
+        Containers install this file on startup via ``entrypoint.sh`` so backend and
+        worker environments stay aligned after plugin installs.
+        """
+        deps: set[str] = set()
+        for entry in lock.get("transforms", {}).values():
+            raw = entry.get("python_dependencies", [])
+            if not isinstance(raw, list):
+                continue
+            for dep in raw:
+                dep_text = str(dep).strip()
+                if dep_text:
+                    deps.add(dep_text)
+
+        req_file = self.plugins_dir / "requirements.txt"
+        if not deps:
+            req_file.unlink(missing_ok=True)
+            return
+
+        req_file.parent.mkdir(parents=True, exist_ok=True)
+        req_file.write_text("".join(f"{dep}\n" for dep in sorted(deps)), encoding="utf-8")

@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    command: ["uvicorn", "ogi.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "ogi.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "${OGI_PORT:-8000}:8000"
     env_file: .env
@@ -17,6 +17,18 @@ services:
       - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
       - OGI_USE_SQLITE=false
       - OGI_REDIS_URL=redis://redis:6379/0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   worker:
     build: ./backend
@@ -44,7 +56,8 @@ services:
     ports:
       - "${OGI_FRONTEND_PORT:-3000}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine

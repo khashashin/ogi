@@ -58,3 +58,5 @@ src-tauri/target/
 # OGI runtime plugin installs (local dev)
 backend/plugins/*
 !backend/plugins/.gitkeep
+plugins/*
+!plugins/.gitkeep
