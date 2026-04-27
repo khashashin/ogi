@@ -60,7 +60,7 @@ export function TermsPage() {
 
           <section>
             <h2 className="text-base font-medium text-text mb-2">
-              5. Cloud Supporter Subscription, Cancellation, and Refunds
+              5. Cloud Supporter Subscription and Cancellation
             </h2>
             <p>
               The hosted cloud version of OpenGraph Intel may offer an optional Supporter
@@ -72,17 +72,14 @@ export function TermsPage() {
             <p className="mt-2">
               Supporter subscriptions are billed monthly through Stripe at the price shown during
               checkout, currently USD 3 per month unless otherwise stated. Subscriptions renew
-              automatically until cancelled. You can cancel through the Stripe billing portal or by
-              contacting the project maintainer. Cancellation stops future billing; Supporter access
-              may continue until the end of the paid billing period unless the subscription is
-              cancelled immediately or refunded.
+              automatically until cancelled. You can cancel through the app, the Stripe billing
+              portal, or by contacting the project maintainer. Cancellation stops future billing;
+              Supporter access may continue until the end of the paid billing period.
             </p>
             <p className="mt-2">
-              Refunds are available on request for the most recent monthly charge within 14 days of
-              payment. Approved refunds are returned to the original payment method through Stripe,
-              and processing time depends on Stripe, the card network, and the issuing bank. Refunds
-              may be refused for abuse, fraud, chargebacks, or accounts suspended for violating these
-              Terms.
+              Supporter subscription payments are non-refundable except where a refund is required
+              by applicable law. Cancelled subscriptions are not prorated, and fees already paid for
+              the current billing period are not returned.
             </p>
           </section>
 
