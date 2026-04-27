@@ -8,6 +8,7 @@ from ogi.api.auth import get_current_user, get_optional_user
 from ogi.billing import (
     BillingStatus,
     build_billing_status,
+    cancel_supporter_subscription,
     is_billing_enabled,
     origin_url_from_request_headers,
     parse_stripe_event,
@@ -122,6 +123,17 @@ async def create_customer_portal_session(
     if not url:
         raise HTTPException(status_code=502, detail="Stripe portal did not return a URL")
     return BillingSessionResponse(url=url)
+
+
+@router.post("/subscription/cancel", response_model=BillingStatus)
+async def cancel_subscription(
+    current_user: UserProfile = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> BillingStatus:
+    _require_billing_enabled()
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=503, detail="Stripe is not configured")
+    return await cancel_supporter_subscription(session=session, user=current_user)
 
 
 @router.post("/webhook")

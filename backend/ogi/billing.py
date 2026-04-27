@@ -5,6 +5,7 @@ import hmac
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
@@ -30,6 +31,8 @@ class BillingStatus(BaseModel):
     currency: str
     free_transform_cooldown_seconds: int
     paid_transform_cooldown_seconds: int
+    cancel_at_period_end: bool = False
+    current_period_end: datetime | None = None
     last_transform_run_at: datetime | None = None
     next_allowed_transform_at: datetime | None = None
     retry_after_seconds: int = 0
@@ -57,6 +60,8 @@ async def build_billing_status(session: AsyncSession, user: UserProfile | None) 
     store = BillingStore(session)
     subscribed = False
     status = "disabled" if not billing_enabled else "free"
+    cancel_at_period_end = False
+    current_period_end = None
     last_run = None
     next_allowed = None
     retry_after = 0
@@ -66,6 +71,8 @@ async def build_billing_status(session: AsyncSession, user: UserProfile | None) 
         subscription = await store.get_subscription(user.id)
         if subscription is not None:
             status = subscription.status
+            cancel_at_period_end = subscription.cancel_at_period_end
+            current_period_end = as_utc(subscription.current_period_end)
         usage = await store.get_usage(user.id)
         last_run = as_utc(usage.last_transform_run_at) if usage else None
         if not subscribed and last_run is not None:
@@ -85,6 +92,8 @@ async def build_billing_status(session: AsyncSession, user: UserProfile | None) 
         currency=settings.stripe_supporter_currency.lower(),
         free_transform_cooldown_seconds=_safe_cooldown(settings.free_transform_cooldown_seconds),
         paid_transform_cooldown_seconds=_safe_cooldown(settings.paid_transform_cooldown_seconds),
+        cancel_at_period_end=cancel_at_period_end,
+        current_period_end=current_period_end,
         last_transform_run_at=last_run,
         next_allowed_transform_at=next_allowed,
         retry_after_seconds=retry_after,
@@ -194,6 +203,32 @@ async def stripe_get(path: str) -> dict[str, object]:
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail="Stripe request failed")
     return response.json()
+
+
+async def cancel_supporter_subscription(
+    *,
+    session: AsyncSession,
+    user: UserProfile,
+) -> BillingStatus:
+    store = BillingStore(session)
+    subscription = await store.get_subscription(user.id)
+    if subscription is None or not subscription.stripe_subscription_id:
+        raise HTTPException(status_code=404, detail="No active Supporter subscription found")
+    if subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
+        raise HTTPException(status_code=409, detail="Supporter subscription is not active")
+    if subscription.cancel_at_period_end:
+        return await build_billing_status(session, user)
+
+    stripe_subscription = await stripe_post(
+        f"/subscriptions/{quote(subscription.stripe_subscription_id, safe='')}",
+        {"cancel_at_period_end": "true"},
+    )
+    await sync_subscription_from_stripe(
+        session=session,
+        subscription=stripe_subscription,
+        fallback_user_id=user.id,
+    )
+    return await build_billing_status(session, user)
 
 
 def _period_end_from_subscription(subscription: dict[str, object]) -> datetime | None:
