@@ -203,6 +203,8 @@ The hosted cloud version at [ogi.khas.app](https://ogi.khas.app) was initially b
 
 That usage also increased the infrastructure costs for this side project. The repository therefore includes a cloud-only Supporter subscription and transformer-run cooldown system. On the public cloud instance, free users may be limited by a timeout between transformer runs, while Supporter users can subscribe for a symbolic USD 3/month to help cover Supabase and VPS costs.
 
+Supporter subscriptions can be cancelled from the profile billing controls or the Stripe billing portal. Cancellation stops future billing, but paid subscription periods are not refunded or prorated.
+
 This billing code is intentionally guarded by configuration: it only has an effect when `OGI_DEPLOYMENT_MODE=cloud` and `OGI_CLOUD_BILLING_ENABLED=true`. Self-hosted deployments should leave billing disabled and should not see any billing or paywall behavior.
 
 ### Telemetry
