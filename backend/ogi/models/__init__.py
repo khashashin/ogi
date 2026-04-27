@@ -14,6 +14,8 @@ from .eventing import (
     LocationAggregate,
     ProjectEvent,
     ProjectEventsResponse,
+    TimelineBucket,
+    TimelineResponse,
     TemporalGeoConventions,
 )
 
@@ -34,5 +36,7 @@ __all__ = [
     "LocationAggregate",
     "ProjectEvent",
     "ProjectEventsResponse",
+    "TimelineBucket",
+    "TimelineResponse",
     "TemporalGeoConventions",
 ]

@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ogi.models import Entity, Edge
@@ -15,6 +16,14 @@ router = APIRouter(prefix="/projects/{project_id}/graph", tags=["graph"])
 
 class GraphData:
     pass
+
+
+def _normalize_dt(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 @router.get("")
@@ -54,6 +63,47 @@ async def get_graph(
         "entities": list(engine.entities.values()),
         "edges": list(engine.edges.values()),
     }
+
+
+@router.get("/window")
+async def get_graph_window(
+    project_id: UUID,
+    from_ts: datetime | None = Query(None, alias="from"),
+    to_ts: datetime | None = Query(None, alias="to"),
+    _role: str = Depends(require_project_viewer),
+    entity_store: EntityStore = Depends(get_entity_store),
+    edge_store: EdgeStore = Depends(get_edge_store),
+) -> dict[str, list[Entity] | list[Edge]]:
+    """Return graph slice constrained to a time window."""
+    from_ts = _normalize_dt(from_ts)
+    to_ts = _normalize_dt(to_ts)
+
+    entities = await entity_store.list_by_project(project_id)
+    edges = await edge_store.list_by_project(project_id)
+
+    window_edges = [
+        edge for edge in edges
+        if (from_ts is None or _normalize_dt(edge.created_at) >= from_ts)
+        and (to_ts is None or _normalize_dt(edge.created_at) <= to_ts)
+    ]
+
+    window_entity_ids = {
+        entity.id for entity in entities
+        if (from_ts is None or _normalize_dt(entity.created_at) >= from_ts)
+        and (to_ts is None or _normalize_dt(entity.created_at) <= to_ts)
+    }
+    for edge in window_edges:
+        window_entity_ids.add(edge.source_id)
+        window_entity_ids.add(edge.target_id)
+
+    window_entities = [entity for entity in entities if entity.id in window_entity_ids]
+    valid_ids = {entity.id for entity in window_entities}
+    window_edges = [
+        edge for edge in window_edges
+        if edge.source_id in valid_ids and edge.target_id in valid_ids
+    ]
+
+    return {"entities": window_entities, "edges": window_edges}
 
 
 @router.get("/neighbors/{entity_id}")

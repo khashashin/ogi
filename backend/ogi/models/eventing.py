@@ -74,3 +74,18 @@ class AuditLogCreate(SQLModel):
     resource_type: str
     resource_id: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class TimelineBucket(SQLModel):
+    bucket_start: datetime
+    bucket_end: datetime
+    count: int = 0
+    event_types: dict[str, int] = Field(default_factory=dict)
+
+
+class TimelineResponse(SQLModel):
+    interval: str
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    total_events: int = 0
+    buckets: list[TimelineBucket] = Field(default_factory=list)

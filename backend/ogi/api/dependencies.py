@@ -24,6 +24,7 @@ from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 from ogi.store.transform_settings_store import TransformSettingsStore
 from ogi.store.audit_log_store import AuditLogStore
 from ogi.store.project_event_store import ProjectEventStore
+from ogi.store.timeline_store import TimelineStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -120,6 +121,12 @@ async def get_project_event_store(
     session: AsyncSession = Depends(get_session),
 ) -> ProjectEventStore:
     return ProjectEventStore(session)
+
+
+async def get_timeline_store(
+    session: AsyncSession = Depends(get_session),
+) -> TimelineStore:
+    return TimelineStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

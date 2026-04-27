@@ -5,6 +5,7 @@ import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
 import type { RegistryIndex, RegistryTransform } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
+import type { TimelineResponse } from "../types/timeline";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -182,8 +183,15 @@ export const api = {
   },
 
   graph: {
-    get: (projectId: string) =>
-      request<GraphData>(`/projects/${projectId}/graph`),
+    get: (projectId: string, refresh = false) =>
+      request<GraphData>(`/projects/${projectId}/graph${refresh ? "?refresh=true" : ""}`),
+    window: (projectId: string, fromTs?: string, toTs?: string) => {
+      const params = new URLSearchParams();
+      if (fromTs) params.set("from", fromTs);
+      if (toTs) params.set("to", toTs);
+      const qs = params.toString();
+      return request<GraphData>(`/projects/${projectId}/graph/window${qs ? `?${qs}` : ""}`);
+    },
     neighbors: (projectId: string, entityId: string) =>
       request<GraphData>(`/projects/${projectId}/graph/neighbors/${entityId}`),
     stats: (projectId: string) =>
@@ -336,6 +344,11 @@ export const api = {
       request<LocationAggregate[]>(`/projects/${projectId}/locations`),
     auditLogs: (projectId: string) =>
       request<AuditLogEntry[]>(`/projects/${projectId}/audit-logs`),
+  },
+
+  timeline: {
+    get: (projectId: string, interval: "minute" | "hour" | "day" | "week" = "day") =>
+      request<TimelineResponse>(`/projects/${projectId}/timeline?interval=${interval}`),
   },
 
   discover: {

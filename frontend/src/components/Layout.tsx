@@ -11,11 +11,12 @@ import { SearchBar } from "./SearchBar";
 import { FilterPanel } from "./FilterPanel";
 import { TableView } from "./TableView";
 import { EventingPanel } from "./EventingPanel";
+import { TimelinePanel } from "./TimelinePanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { useGraphStore } from "../stores/graphStore";
 
-type BottomTab = "transforms" | "analysis" | "events";
+type BottomTab = "transforms" | "analysis" | "events" | "timeline";
 
 export function Layout() {
   useKeyboardShortcuts();
@@ -95,6 +96,16 @@ export function Layout() {
                         >
                           Events
                         </button>
+                        <button
+                          onClick={() => setBottomTab("timeline")}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            bottomTab === "timeline"
+                              ? "text-text border-b-2 border-accent"
+                              : "text-text-muted hover:text-text"
+                          }`}
+                        >
+                          Timeline
+                        </button>
                     </div>
                     {hasAnalysisOverlay && !isViewer && (
                         <button
@@ -112,6 +123,7 @@ export function Layout() {
                     {bottomTab === "transforms" && !isViewer && <TransformPanel />}
                     {bottomTab === "analysis" && !isViewer && <AnalysisPanel />}
                     {bottomTab === "events" && <EventingPanel />}
+                    {bottomTab === "timeline" && <TimelinePanel />}
                   </div>
                 </div>
               </Panel>
