@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Plus, Trash2, Key } from "lucide-react";
 import { api } from "../api/client";
 
@@ -27,12 +27,33 @@ const KNOWN_SERVICES = [
   "abusech",
 ] as const;
 
+const CUSTOM_SERVICE_VALUE = "__custom";
+
+function normalizeServiceName(serviceName: string): string {
+  return serviceName.trim().toLowerCase();
+}
+
 export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeySettingsProps) {
   const [services, setServices] = useState<string[]>([]);
   const [newService, setNewService] = useState("");
+  const [customService, setCustomService] = useState("");
   const [newKey, setNewKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const configuredServices = useMemo(
+    () => new Set(services.map(normalizeServiceName).filter(Boolean)),
+    [services],
+  );
+  const selectedServiceName =
+    newService === CUSTOM_SERVICE_VALUE ? customService : newService;
+  const normalizedNewService = normalizeServiceName(selectedServiceName);
+  const duplicateService = Boolean(
+    normalizedNewService && configuredServices.has(normalizedNewService),
+  );
+  const canAddKey = Boolean(
+    normalizedNewService && newKey.trim() && !duplicateService,
+  );
 
   useEffect(() => {
     if (open) loadKeys();
@@ -40,14 +61,24 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
 
   useEffect(() => {
     if (!open || !initialService) return;
-    setNewService(initialService);
+    const normalized = normalizeServiceName(initialService);
+    if (!normalized) return;
+    if ((KNOWN_SERVICES as readonly string[]).includes(normalized)) {
+      setNewService(normalized);
+      setCustomService("");
+    } else {
+      setNewService(CUSTOM_SERVICE_VALUE);
+      setCustomService(normalized);
+    }
   }, [initialService, open]);
 
   const loadKeys = async () => {
     setLoading(true);
     try {
       const data = await api.apiKeys.list();
-      setServices(data.map((d) => d.service_name));
+      setServices([
+        ...new Set(data.map((d) => normalizeServiceName(d.service_name)).filter(Boolean)),
+      ]);
     } catch {
       setServices([]);
     } finally {
@@ -57,11 +88,16 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newService.trim() || !newKey.trim()) return;
+    if (!normalizedNewService || !newKey.trim()) return;
+    if (duplicateService) {
+      setError(`${normalizedNewService} already has an API key.`);
+      return;
+    }
     setError(null);
     try {
-      await api.apiKeys.save(newService.trim().toLowerCase(), newKey.trim());
+      await api.apiKeys.save(normalizedNewService, newKey.trim());
       setNewService("");
+      setCustomService("");
       setNewKey("");
       await loadKeys();
     } catch (err) {
@@ -103,21 +139,36 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
           <form onSubmit={handleAdd} className="flex gap-2 mb-4">
             <select
               value={newService}
-              onChange={(e) => setNewService(e.target.value)}
+              onChange={(e) => {
+                setNewService(e.target.value);
+                if (e.target.value !== CUSTOM_SERVICE_VALUE) {
+                  setCustomService("");
+                }
+                setError(null);
+              }}
               className="px-2 py-1.5 text-sm bg-bg border border-border rounded text-text w-36"
             >
               <option value="">Service...</option>
-              {KNOWN_SERVICES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-              <option value="__custom">Custom...</option>
+              {KNOWN_SERVICES.map((s) => {
+                const configured = configuredServices.has(s);
+                return (
+                  <option key={s} value={s} disabled={configured}>
+                    {s}
+                    {configured ? " (configured)" : ""}
+                  </option>
+                );
+              })}
+              <option value={CUSTOM_SERVICE_VALUE}>Custom...</option>
             </select>
-            {newService === "__custom" && (
+            {newService === CUSTOM_SERVICE_VALUE && (
               <input
                 type="text"
                 placeholder="Service name"
-                value=""
-                onChange={(e) => setNewService(e.target.value)}
+                value={customService}
+                onChange={(e) => {
+                  setCustomService(e.target.value);
+                  setError(null);
+                }}
                 className="px-2 py-1.5 text-sm bg-bg border border-border rounded text-text w-28"
               />
             )}
@@ -125,16 +176,27 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
               type="password"
               placeholder="API key"
               value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
+              onChange={(e) => {
+                setNewKey(e.target.value);
+                setError(null);
+              }}
               className="flex-1 px-2 py-1.5 text-sm bg-bg border border-border rounded text-text"
             />
             <button
               type="submit"
-              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent-hover"
+              disabled={!canAddKey}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              title={duplicateService ? "API key already configured" : "Add API key"}
             >
               <Plus size={14} />
             </button>
           </form>
+
+          {duplicateService && (
+            <p className="text-xs text-text-muted mb-3">
+              {normalizedNewService} already has an API key. Remove it before adding another.
+            </p>
+          )}
 
           {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
