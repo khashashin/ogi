@@ -12,6 +12,7 @@ import { FilterPanel } from "./FilterPanel";
 import { TableView } from "./TableView";
 import { EventingPanel } from "./EventingPanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { MapView } from "./MapView";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { useGraphStore } from "../stores/graphStore";
@@ -48,7 +49,9 @@ export function Layout() {
           <Group orientation="vertical">
             <Panel defaultSize={70} minSize={30}>
               <div className="relative w-full h-full">
-                {centerView === "graph" ? <GraphCanvas /> : <TableView />}
+                {centerView === "graph" && <GraphCanvas />}
+                {centerView === "table" && <TableView />}
+                {centerView === "map" && <MapView />}
                 <SearchBar />
                 {centerView === "graph" && <FilterPanel mode="overlay" />}
               </div>

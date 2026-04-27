@@ -25,6 +25,7 @@ from ogi.store.transform_settings_store import TransformSettingsStore
 from ogi.store.audit_log_store import AuditLogStore
 from ogi.store.project_event_store import ProjectEventStore
 from ogi.store.timeline_store import TimelineStore
+from ogi.store.map_store import MapStore
 
 if TYPE_CHECKING:
     from redis import Redis as SyncRedis
@@ -127,6 +128,12 @@ async def get_timeline_store(
     session: AsyncSession = Depends(get_session),
 ) -> TimelineStore:
     return TimelineStore(session)
+
+
+async def get_map_store(
+    session: AsyncSession = Depends(get_session),
+) -> MapStore:
+    return MapStore(session)
 
 
 def get_plugin_engine() -> PluginEngine:

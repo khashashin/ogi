@@ -6,6 +6,7 @@ import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsRes
 import type { RegistryIndex, RegistryTransform } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import type { TimelineResponse } from "../types/timeline";
+import type { MapPointsResponse, MapRoutesResponse } from "../types/map";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -349,6 +350,13 @@ export const api = {
   timeline: {
     get: (projectId: string, interval: "minute" | "hour" | "day" | "week" = "day") =>
       request<TimelineResponse>(`/projects/${projectId}/timeline?interval=${interval}`),
+  },
+
+  map: {
+    points: (projectId: string, zoom = 3, cluster = true) =>
+      request<MapPointsResponse>(`/projects/${projectId}/map/points?zoom=${zoom}&cluster=${cluster}`),
+    routes: (projectId: string) =>
+      request<MapRoutesResponse>(`/projects/${projectId}/map/routes`),
   },
 
   discover: {

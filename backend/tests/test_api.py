@@ -1588,3 +1588,58 @@ async def test_graph_window_filters_by_time_range(client: AsyncClient):
     assert resp.status_code == 200
     values = {e["id"] for e in resp.json()["entities"]}
     assert entity_id in values
+
+
+@pytest.mark.asyncio
+async def test_map_points_endpoint_returns_points_and_clusters(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "MapPointsProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    payloads = [
+        {"type": "Location", "value": "loc-a", "properties": {"lat": 40.7128, "lon": -74.0060, "location_label": "NYC"}},
+        {"type": "Location", "value": "loc-b", "properties": {"lat": 40.7131, "lon": -74.0062, "location_label": "NYC"}},
+    ]
+    for payload in payloads:
+        created = await client.post(f"/api/v1/projects/{project_id}/entities", json=payload)
+        assert created.status_code == 201
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/map/points?cluster=true&zoom=12")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["points"]) == 2
+    assert isinstance(data["clusters"], list)
+    if data["clusters"]:
+        assert data["clusters"][0]["count"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_map_routes_endpoint_returns_routes_for_geo_edges(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "MapRoutesProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    a = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Location", "value": "source", "properties": {"lat": 51.5074, "lon": -0.1278}},
+    )
+    b = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Location", "value": "target", "properties": {"lat": 48.8566, "lon": 2.3522}},
+    )
+    assert a.status_code == 201 and b.status_code == 201
+    src_id = a.json()["id"]
+    dst_id = b.json()["id"]
+
+    edge = await client.post(
+        f"/api/v1/projects/{project_id}/edges",
+        json={"source_id": src_id, "target_id": dst_id, "label": "travel"},
+    )
+    assert edge.status_code == 201
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/map/routes")
+    assert resp.status_code == 200
+    routes = resp.json()["routes"]
+    assert len(routes) >= 1
+    assert routes[0]["source_entity_id"] == src_id
+    assert routes[0]["target_entity_id"] == dst_id

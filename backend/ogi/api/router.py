@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from ogi.api import projects, entities, edges, transforms, graph, export, import_, members, plugins, api_keys, discover, registry, websocket, events, timeline
+from ogi.api import projects, entities, edges, transforms, graph, export, import_, members, plugins, api_keys, discover, registry, websocket, events, timeline, map
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(projects.router)
@@ -17,4 +17,5 @@ api_router.include_router(discover.router)
 api_router.include_router(registry.router)
 api_router.include_router(events.router)
 api_router.include_router(timeline.router)
+api_router.include_router(map.router)
 api_router.include_router(websocket.router)
