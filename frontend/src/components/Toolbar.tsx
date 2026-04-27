@@ -40,6 +40,10 @@ import { api } from "../api/client";
 import type { TransformInfo } from "../types/transform";
 import { toast } from "sonner";
 import { useTransformJobStore } from "../stores/transformJobStore";
+import {
+  OPEN_PROFILE_EVENT,
+  openBillingCooldownDialog,
+} from "../lib/billingCooldownDialog";
 
 export function Toolbar() {
   const { currentProject } = useProjectStore();
@@ -153,6 +157,12 @@ export function Toolbar() {
       .catch(() => setAllTransforms([]));
   }, [showBulkTransforms, allTransforms.length]);
 
+  useEffect(() => {
+    const handler = () => setShowProfile(true);
+    window.addEventListener(OPEN_PROFILE_EVENT, handler);
+    return () => window.removeEventListener(OPEN_PROFILE_EVENT, handler);
+  }, []);
+
   const handleBulkDelete = async () => {
     if (!currentProject || selectedEntities.length === 0) return;
     if (
@@ -221,6 +231,7 @@ export function Toolbar() {
       setShowBulkTransforms(false);
       setShowBulkActions(false);
     } catch (err) {
+      if (openBillingCooldownDialog(err)) return;
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Bulk transform failed: ${msg}`);
     } finally {

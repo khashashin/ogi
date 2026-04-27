@@ -10,6 +10,7 @@ import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 import { TransformSettingsDialog } from "./TransformSettingsDialog";
 import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
+import { openBillingCooldownDialog } from "../lib/billingCooldownDialog";
 
 function hasVisibleSettings(transform: TransformInfo): boolean {
   return transform.settings.some(
@@ -45,6 +46,7 @@ export function TransformPanel() {
       const run = await api.transforms.run(name, entity.id, currentProject.id);
       submitJob(run);
     } catch (e) {
+      if (openBillingCooldownDialog(e)) return;
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Transform failed: ${msg}`);
     }

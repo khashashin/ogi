@@ -9,6 +9,7 @@ import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
+import { openBillingCooldownDialog } from "../lib/billingCooldownDialog";
 
 export function EntityInspector() {
   const {
@@ -141,6 +142,7 @@ export function EntityInspector() {
         toast.error(`${transformName}: ${run.error}`);
       }
     } catch (e) {
+      if (openBillingCooldownDialog(e)) return;
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Transform failed: ${msg}`);
     } finally {
