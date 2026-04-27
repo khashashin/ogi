@@ -35,7 +35,7 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
   const [error, setError] = useState<string | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
-  const [billingAction, setBillingAction] = useState<"checkout" | "portal" | null>(null);
+  const [billingAction, setBillingAction] = useState<"checkout" | "portal" | "cancel" | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -122,12 +122,35 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
     }
   };
 
+  const handleCancelSubscription = async () => {
+    if (!billingStatus?.subscribed || billingStatus.cancel_at_period_end) return;
+    const confirmed = window.confirm(
+      "Cancel your Supporter subscription? You will keep Supporter access until the end of the current billing period.",
+    );
+    if (!confirmed) return;
+    setBillingError(null);
+    setBillingAction("cancel");
+    try {
+      const status = await api.billing.cancelSubscription();
+      setBillingStatus(status.billing_enabled ? status : null);
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBillingAction(null);
+    }
+  };
+
   const formatMoney = (status: BillingStatus) =>
     new Intl.NumberFormat(undefined, {
       style: "currency",
       currency: status.currency || "usd",
       maximumFractionDigits: 2,
     }).format(status.amount_cents / 100);
+
+  const formatDate = (value: string | null) =>
+    value
+      ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value))
+      : null;
 
   const cooldownMinutes = billingStatus
     ? Math.max(1, Math.ceil(billingStatus.free_transform_cooldown_seconds / 60))
@@ -139,6 +162,8 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
   const initials = currentDisplayName
     ? currentDisplayName.slice(0, 2).toUpperCase()
     : userEmail.slice(0, 2).toUpperCase();
+  const primaryBillingAction = billingStatus?.subscribed ? "portal" : "checkout";
+  const currentPeriodEnd = formatDate(billingStatus?.current_period_end ?? null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -216,21 +241,42 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
                         {billingStatus?.subscribed ? "Supporter" : "Cloud Free"}
                       </p>
                       {billingStatus && (
-                        <button
-                          onClick={handleBillingAction}
-                          disabled={
-                            billingAction !== null ||
-                            (!billingStatus.subscribed && !billingStatus.checkout_enabled)
-                          }
-                          className="px-2 py-1 text-[11px] bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 flex items-center gap-1"
-                        >
-                          {billingAction && <Loader2 size={11} className="animate-spin" />}
-                          {billingStatus.subscribed ? "Manage" : "Upgrade"}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={handleBillingAction}
+                            disabled={
+                              billingAction !== null ||
+                              (!billingStatus.subscribed && !billingStatus.checkout_enabled)
+                            }
+                            className="px-2 py-1 text-[11px] bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {billingAction === primaryBillingAction && (
+                              <Loader2 size={11} className="animate-spin" />
+                            )}
+                            {billingStatus.subscribed ? "Manage" : "Upgrade"}
+                          </button>
+                          {billingStatus.subscribed && !billingStatus.cancel_at_period_end && (
+                            <button
+                              onClick={handleCancelSubscription}
+                              disabled={billingAction !== null}
+                              className="px-2 py-1 text-[11px] bg-surface border border-border text-text rounded hover:bg-surface-hover disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {billingAction === "cancel" && (
+                                <Loader2 size={11} className="animate-spin" />
+                              )}
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                     {billingLoading ? (
                       <p>Loading billing status...</p>
+                    ) : billingStatus?.subscribed && billingStatus.cancel_at_period_end ? (
+                      <p>
+                        Your {billingStatus.plan_name} plan remains active
+                        {currentPeriodEnd ? ` until ${currentPeriodEnd}` : ""}. Renewal is cancelled.
+                      </p>
                     ) : billingStatus?.subscribed ? (
                       <p>
                         Your {billingStatus.plan_name} plan is active.

@@ -70,6 +70,8 @@ interface BillingStatus {
   currency: string;
   free_transform_cooldown_seconds: number;
   paid_transform_cooldown_seconds: number;
+  cancel_at_period_end: boolean;
+  current_period_end: string | null;
   last_transform_run_at: string | null;
   next_allowed_transform_at: string | null;
   retry_after_seconds: number;
@@ -257,6 +259,8 @@ export const api = {
       request<{ url: string }>("/billing/checkout-session", { method: "POST" }),
     customerPortal: () =>
       request<{ url: string }>("/billing/customer-portal", { method: "POST" }),
+    cancelSubscription: () =>
+      request<BillingStatus>("/billing/subscription/cancel", { method: "POST" }),
   },
 
   telemetry: {
