@@ -2410,6 +2410,40 @@ async def test_error_envelope_for_500_internal_in_debug_mode(
 
 
 @pytest.mark.asyncio
+async def test_api_key_service_names_are_normalized_and_upserted(client: AsyncClient):
+    from ogi.api.auth import _ANON_USER
+    from ogi.models.api_key import ApiKey
+    from ogi.store.api_key_store import ApiKeyStore
+
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": " OpenAI ", "key": "sk-old"},
+    )
+    assert resp.status_code == 201
+    assert resp.json() == {"service_name": "openai"}
+
+    resp = await client.post(
+        "/api/v1/settings/api-keys",
+        json={"service_name": "openai", "key": "sk-new"},
+    )
+    assert resp.status_code == 201
+
+    resp = await client.get("/api/v1/settings/api-keys")
+    assert resp.status_code == 200
+    assert resp.json() == [{"service_name": "openai"}]
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        result = await session.execute(
+            select(ApiKey).where(ApiKey.user_id == _ANON_USER.id)
+        )
+        rows = list(result.scalars().all())
+        assert len(rows) == 1
+        assert rows[0].service_name == "openai"
+        assert await ApiKeyStore(session).get_key(_ANON_USER.id, " OpenAI ") == "sk-new"
+
+
+@pytest.mark.asyncio
 async def test_audit_log_create_and_list(client: AsyncClient):
     resp = await client.post("/api/v1/projects", json={"name": "AuditProject"})
     assert resp.status_code == 201
