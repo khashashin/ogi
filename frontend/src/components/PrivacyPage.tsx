@@ -35,6 +35,11 @@ export function PrivacyPage() {
                 <strong className="text-text">Project data:</strong> graphs, entities, and other
                 content you create within the service
               </li>
+              <li>
+                <strong className="text-text">Billing data:</strong> subscription status, Stripe
+                customer and subscription identifiers, billing email, and payment-related metadata
+                needed to operate the hosted cloud Supporter subscription
+              </li>
             </ul>
           </section>
 
@@ -94,7 +99,31 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">5. Cookies</h2>
+            <h2 className="text-base font-medium text-text mb-2">5. Payments and Billing</h2>
+            <p>
+              Payments for the hosted cloud Supporter subscription are processed by Stripe. We do not
+              store full card numbers, card security codes, or bank account details. Stripe may
+              process billing contact details, payment method details, invoices, tax information,
+              subscription status, and related transaction records. We store only the Stripe customer
+              and subscription identifiers and the subscription status needed to provide Supporter
+              access in the hosted cloud service.
+            </p>
+            <p className="mt-2">
+              Please refer to{" "}
+              <a
+                href="https://stripe.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Stripe's Privacy Policy
+              </a>{" "}
+              for details on how Stripe handles payment and billing data.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-medium text-text mb-2">6. Cookies</h2>
             <p>
               We use cookies and similar technologies for authentication session management and
               analytics. Essential cookies are required for the service to function properly.
@@ -103,16 +132,18 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">6. Data Retention</h2>
+            <h2 className="text-base font-medium text-text mb-2">7. Data Retention</h2>
             <p>
               We retain your account information and project data for as long as your account is
               active. If you delete your account, we will remove your personal data within a
-              reasonable timeframe. Anonymized analytics data may be retained indefinitely.
+              reasonable timeframe. Billing records may be retained as required for accounting,
+              tax, fraud prevention, dispute handling, and legal compliance. Anonymized analytics
+              data may be retained indefinitely.
             </p>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">7. Third-Party Services</h2>
+            <h2 className="text-base font-medium text-text mb-2">8. Third-Party Services</h2>
             <p>We use the following third-party services that may process your data:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>
@@ -123,11 +154,15 @@ export function PrivacyPage() {
                 <strong className="text-text">Google Analytics</strong> — usage tracking and
                 analytics
               </li>
+              <li>
+                <strong className="text-text">Stripe</strong> — payment processing, subscription
+                billing, invoices, refunds, and the billing portal for the hosted cloud service
+              </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">8. Your Rights</h2>
+            <h2 className="text-base font-medium text-text mb-2">9. Your Rights</h2>
             <p>You have the right to:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>Access your personal data</li>
@@ -139,7 +174,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">9. Contact</h2>
+            <h2 className="text-base font-medium text-text mb-2">10. Contact</h2>
             <p>
               If you have questions about this Privacy Policy or wish to exercise your rights, please
               open an issue on our{" "}
@@ -156,7 +191,7 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">10. Changes to This Policy</h2>
+            <h2 className="text-base font-medium text-text mb-2">11. Changes to This Policy</h2>
             <p>
               We may update this Privacy Policy from time to time. Continued use of the service after
               changes constitutes acceptance of the revised policy. We encourage you to review this

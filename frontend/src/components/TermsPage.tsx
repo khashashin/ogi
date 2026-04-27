@@ -59,7 +59,35 @@ export function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">5. Disclaimers</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              5. Cloud Supporter Subscription, Cancellation, and Refunds
+            </h2>
+            <p>
+              The hosted cloud version of OpenGraph Intel may offer an optional Supporter
+              subscription. This subscription helps cover the operating costs of the hosted service
+              and may remove or reduce usage restrictions such as cooldowns between transformer
+              runs. The Supporter subscription applies only to the hosted cloud service and does not
+              limit your rights to self-host OpenGraph Intel under its open source license.
+            </p>
+            <p className="mt-2">
+              Supporter subscriptions are billed monthly through Stripe at the price shown during
+              checkout, currently USD 3 per month unless otherwise stated. Subscriptions renew
+              automatically until cancelled. You can cancel through the Stripe billing portal or by
+              contacting the project maintainer. Cancellation stops future billing; Supporter access
+              may continue until the end of the paid billing period unless the subscription is
+              cancelled immediately or refunded.
+            </p>
+            <p className="mt-2">
+              Refunds are available on request for the most recent monthly charge within 14 days of
+              payment. Approved refunds are returned to the original payment method through Stripe,
+              and processing time depends on Stripe, the card network, and the issuing bank. Refunds
+              may be refused for abuse, fraud, chargebacks, or accounts suspended for violating these
+              Terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-medium text-text mb-2">6. Disclaimers</h2>
             <p>
               The service is provided "as is" and "as available" without warranties of any kind,
               whether express or implied, including but not limited to implied warranties of
@@ -69,7 +97,7 @@ export function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">6. Limitation of Liability</h2>
+            <h2 className="text-base font-medium text-text mb-2">7. Limitation of Liability</h2>
             <p>
               To the maximum extent permitted by law, OpenGraph Intel and its contributors shall not be liable
               for any indirect, incidental, special, consequential, or punitive damages, or any loss
@@ -79,7 +107,7 @@ export function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">7. Termination</h2>
+            <h2 className="text-base font-medium text-text mb-2">8. Termination</h2>
             <p>
               We reserve the right to suspend or terminate your access to the service at any time,
               with or without cause and with or without notice. Upon termination, your right to use
@@ -88,7 +116,7 @@ export function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">8. Governing Law</h2>
+            <h2 className="text-base font-medium text-text mb-2">9. Governing Law</h2>
             <p>
               These terms shall be governed by and construed in accordance with applicable law. Any
               disputes arising under these terms shall be resolved in the appropriate courts of the
@@ -97,7 +125,7 @@ export function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">9. Changes to Terms</h2>
+            <h2 className="text-base font-medium text-text mb-2">10. Changes to Terms</h2>
             <p>
               We may update these terms from time to time. Continued use of the service after changes
               constitutes acceptance of the revised terms. We encourage you to review these terms
