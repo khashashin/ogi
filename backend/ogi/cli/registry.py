@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REGISTRY_REPO = "opengraphintel/ogi-transforms"
 DEFAULT_CACHE_TTL = timedelta(hours=1)
+DEFAULT_POPULARITY_CACHE_TTL = timedelta(minutes=10)
+
+_SLUG_RE = re.compile(r"\*\*Slug:\*\*\s*`([^`]+)`")
 
 
 class PopularityData(TypedDict, total=False):
@@ -29,6 +33,12 @@ class PopularityData(TypedDict, total=False):
     commits_last_90_days: int
     discussion_url: str
     computed_score: int
+
+
+class DynamicPopularityData(TypedDict, total=False):
+    thumbs_up: int
+    thumbs_down: int
+    discussion_url: str
 
 
 class RegistryTransform(TypedDict, total=False):
@@ -84,6 +94,9 @@ class RegistryClient:
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._index: RegistryIndex | None = None
+        self._popularity_cache_ttl = DEFAULT_POPULARITY_CACHE_TTL
+        self._dynamic_popularity: dict[str, DynamicPopularityData] = {}
+        self._dynamic_popularity_at: float = 0.0
 
     @property
     def _index_url(self) -> str:
@@ -160,6 +173,67 @@ class RegistryClient:
         """Return in-memory index without fetching."""
         return self._index
 
+    async def get_dynamic_popularity(
+        self,
+        slugs: set[str],
+        force: bool = False,
+    ) -> dict[str, DynamicPopularityData]:
+        """Return per-slug dynamic popularity from GitHub Discussions with TTL cache."""
+        now = time.time()
+        if (
+            not force
+            and self._dynamic_popularity
+            and (now - self._dynamic_popularity_at) < self._popularity_cache_ttl.total_seconds()
+        ):
+            return self._dynamic_popularity
+
+        try:
+            popularity = await self._fetch_discussions_popularity(slugs)
+            self._dynamic_popularity = popularity
+            self._dynamic_popularity_at = now
+            return popularity
+        except Exception as exc:
+            logger.warning("Failed to fetch dynamic popularity data: %s", exc)
+            if self._dynamic_popularity:
+                return self._dynamic_popularity
+            return {}
+
+    async def apply_dynamic_popularity(
+        self,
+        index: RegistryIndex,
+        force: bool = False,
+    ) -> RegistryIndex:
+        """Return a copy of index with dynamic thumbs/discussion_url and recomputed score."""
+        transforms = index.get("transforms", [])
+        slugs = {t.get("slug", "") for t in transforms if t.get("slug")}
+        dynamic = await self.get_dynamic_popularity(slugs, force=force)
+
+        merged_transforms: list[RegistryTransform] = []
+        for transform in transforms:
+            merged_transform: RegistryTransform = dict(transform)
+            static_pop = transform.get("popularity", {})
+            merged_pop: PopularityData = dict(static_pop) if static_pop else {}
+
+            slug = transform.get("slug", "")
+            override = dynamic.get(slug, {})
+            if override:
+                merged_pop["thumbs_up"] = int(override.get("thumbs_up", 0))
+                merged_pop["thumbs_down"] = int(override.get("thumbs_down", 0))
+                merged_pop["discussion_url"] = str(override.get("discussion_url", ""))
+
+            thumbs_up = int(merged_pop.get("thumbs_up", 0))
+            thumbs_down = int(merged_pop.get("thumbs_down", 0))
+            contributors = int(merged_pop.get("total_contributors", 0))
+            recent_commits = int(merged_pop.get("commits_last_90_days", 0))
+            merged_pop["computed_score"] = (thumbs_up * 2) + (contributors * 3) + recent_commits - thumbs_down
+
+            merged_transform["popularity"] = merged_pop
+            merged_transforms.append(merged_transform)
+
+        payload: RegistryIndex = dict(index)
+        payload["transforms"] = merged_transforms
+        return payload
+
     def search(
         self,
         query: str,
@@ -170,31 +244,128 @@ class RegistryClient:
         if self._index is None:
             return []
 
+        return self.search_in_index(self._index, query, category=category, tier=tier)
+
+    def search_in_index(
+        self,
+        index: RegistryIndex,
+        query: str,
+        category: str | None = None,
+        tier: str | None = None,
+    ) -> list[RegistryTransform]:
+        """Filter a provided index by query string, category, and/or tier."""
         results: list[RegistryTransform] = []
         q = query.lower()
-        # index.json is a dict with a 'transforms' key containing the list
-        transforms = self._index.get("transforms", [])
-        for t in transforms:
-            if category and t.get("category", "") != category:
+        transforms = index.get("transforms", [])
+        for transform in transforms:
+            if category and transform.get("category", "") != category:
                 continue
-            if tier and t.get("verification_tier", "") != tier:
+            if tier and transform.get("verification_tier", "") != tier:
                 continue
 
             searchable = " ".join([
-                t.get("slug", ""),
-                t.get("name", ""),
-                t.get("display_name", ""),
-                t.get("description", ""),
-                " ".join(t.get("tags", [])),
-                t.get("category", ""),
-                t.get("author", ""),
+                transform.get("slug", ""),
+                transform.get("name", ""),
+                transform.get("display_name", ""),
+                transform.get("description", ""),
+                " ".join(transform.get("tags", [])),
+                transform.get("category", ""),
+                transform.get("author", ""),
             ]).lower()
 
             if q and q not in searchable:
                 continue
-            results.append(t)
+            results.append(transform)
 
         return results
+
+    async def _fetch_discussions_popularity(
+        self,
+        slugs: set[str],
+    ) -> dict[str, DynamicPopularityData]:
+        owner, name = self.repo.split("/", 1)
+        query = """
+        query($owner: String!, $name: String!, $after: String) {
+          repository(owner: $owner, name: $name) {
+            discussions(first: 100, after: $after) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                title
+                url
+                body
+                reactionGroups {
+                  content
+                  users { totalCount }
+                }
+              }
+            }
+          }
+        }
+        """
+        headers = {"Content-Type": "application/json"}
+        if settings.github_token:
+            headers["Authorization"] = f"Bearer {settings.github_token}"
+
+        popularity: dict[str, DynamicPopularityData] = {}
+        after: str | None = None
+        async with httpx.AsyncClient(timeout=30) as client:
+            while True:
+                variables: dict[str, str | None] = {"owner": owner, "name": name, "after": after}
+                resp = await client.post(
+                    "https://api.github.com/graphql",
+                    headers=headers,
+                    json={"query": query, "variables": variables},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("errors"):
+                    raise RuntimeError(f"GitHub GraphQL errors: {data['errors']}")
+
+                discussions = (
+                    data.get("data", {})
+                    .get("repository", {})
+                    .get("discussions", {})
+                )
+                nodes = discussions.get("nodes", [])
+                for node in nodes:
+                    slug = self._extract_discussion_slug(node.get("body", ""), slugs)
+                    if not slug:
+                        continue
+
+                    thumbs_up = 0
+                    thumbs_down = 0
+                    for group in node.get("reactionGroups", []):
+                        content = group.get("content", "")
+                        count = int(group.get("users", {}).get("totalCount", 0))
+                        if content == "THUMBS_UP":
+                            thumbs_up = count
+                        elif content == "THUMBS_DOWN":
+                            thumbs_down = count
+
+                    popularity[slug] = DynamicPopularityData(
+                        thumbs_up=thumbs_up,
+                        thumbs_down=thumbs_down,
+                        discussion_url=node.get("url", ""),
+                    )
+
+                page_info = discussions.get("pageInfo", {})
+                if not page_info.get("hasNextPage"):
+                    break
+                after = page_info.get("endCursor")
+                if not after:
+                    break
+
+        return popularity
+
+    @staticmethod
+    def _extract_discussion_slug(body: str, slugs: set[str]) -> str | None:
+        match = _SLUG_RE.search(body or "")
+        if not match:
+            return None
+        slug = match.group(1).strip()
+        if slug in slugs:
+            return slug
+        return None
 
     def get_transform(self, slug: str) -> RegistryTransform | None:
         """Look up a single transform by slug."""

@@ -8,6 +8,14 @@ from .plugin import PluginInfo
 from .api_key import ApiKey
 from .user_plugin_preference import UserPluginPreference
 from .transform_settings import GlobalTransformSetting, UserTransformSetting
+from .eventing import (
+    AuditLog,
+    AuditLogCreate,
+    LocationAggregate,
+    ProjectEvent,
+    ProjectEventsResponse,
+    TemporalGeoConventions,
+)
 
 __all__ = [
     "Entity", "EntityCreate", "EntityUpdate", "EntityType", "ENTITY_TYPE_META",
@@ -21,4 +29,10 @@ __all__ = [
     "UserPluginPreference",
     "GlobalTransformSetting",
     "UserTransformSetting",
+    "AuditLog",
+    "AuditLogCreate",
+    "LocationAggregate",
+    "ProjectEvent",
+    "ProjectEventsResponse",
+    "TemporalGeoConventions",
 ]
