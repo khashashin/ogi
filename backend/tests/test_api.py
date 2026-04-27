@@ -73,8 +73,40 @@ async def test_settings_capabilities_reports_cloud_export_disabled_without_supab
     resp = await client.get("/api/v1/settings/capabilities")
     assert resp.status_code == 200
     assert resp.json()["cloud_export_enabled"] is False
+    assert resp.json()["cloud_billing_enabled"] is False
+    assert resp.json()["stripe_checkout_enabled"] is False
     assert resp.json()["telemetry_enabled"] is False
     assert resp.json()["telemetry_level"] == "full"
+
+
+@pytest.mark.asyncio
+async def test_billing_status_disabled_by_default(client: AsyncClient):
+    resp = await client.get("/api/v1/billing/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["billing_enabled"] is False
+    assert body["checkout_enabled"] is False
+    assert body["subscribed"] is False
+    assert body["retry_after_seconds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_requires_stripe_secret_when_enabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", True)
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "")
+
+    resp = await client.post("/api/v1/billing/webhook", json={"type": "checkout.session.completed"})
+    assert_error_envelope(
+        resp,
+        503,
+        code="HTTP_503",
+        message_contains="Stripe webhook secret is not configured",
+    )
 
 
 @pytest.mark.asyncio
@@ -1450,6 +1482,73 @@ async def test_run_transform_returns_503_when_enqueue_fails(
         json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
     )
     assert_error_envelope(resp, 503, code="HTTP_503", message_contains="Failed to enqueue transform job")
+
+
+@pytest.mark.asyncio
+async def test_cloud_billing_limits_free_transform_runs_and_allows_supporters(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+    from ogi.config import settings
+    from ogi.db.database import async_session_maker
+    from ogi.store.billing_store import BillingStore
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", True)
+    monkeypatch.setattr(settings, "free_transform_cooldown_seconds", 1800)
+    monkeypatch.setattr(settings, "paid_transform_cooldown_seconds", 0)
+
+    resp = await client.post("/api/v1/projects", json={"name": "CloudCooldown"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "example.com"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    first = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert first.status_code == 200
+
+    status = await client.get("/api/v1/billing/status")
+    assert status.status_code == 200
+    assert status.json()["billing_enabled"] is True
+    assert status.json()["retry_after_seconds"] > 0
+
+    second = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert_error_envelope(second, 429, code="HTTP_429", message_contains="Free cloud accounts")
+    assert int(second.headers["Retry-After"]) > 0
+
+    assert async_session_maker is not None
+    async with async_session_maker() as session:
+        await BillingStore(session).upsert_subscription(
+            user_id=UUID("00000000-0000-0000-0000-000000000000"),
+            stripe_customer_id="cus_test",
+            stripe_subscription_id="sub_test",
+            status="active",
+            price_id="price_test",
+            amount_cents=300,
+            currency="usd",
+        )
+
+    supporter = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert supporter.status_code == 200
 
 
 @pytest.mark.asyncio
