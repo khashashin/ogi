@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     # Deployment mode
     deployment_mode: str = os.environ.get("OGI_DEPLOYMENT_MODE", "self-hosted")  # "cloud" | "self-hosted"
 
+    # Cloud billing / paywall
+    cloud_billing_enabled: bool = False
+    free_transform_cooldown_seconds: int = 1800
+    paid_transform_cooldown_seconds: int = 0
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_supporter_price_id: str = ""
+    stripe_supporter_amount_cents: int = 300
+    stripe_supporter_currency: str = "usd"
+    billing_success_url: str = ""
+    billing_cancel_url: str = ""
+    billing_portal_return_url: str = ""
+
     # Transform Hub / Registry
     registry_repo: str = "opengraphintel/ogi-transforms"
     registry_cache_ttl: int = 3600  # seconds
@@ -156,6 +169,18 @@ class Settings(BaseSettings):
         if raw is None:
             return self.telemetry_enabled
         return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+    @property
+    def effective_cloud_billing_enabled(self) -> bool:
+        return self.deployment_mode.strip().lower() == "cloud" and self.cloud_billing_enabled
+
+    @property
+    def stripe_checkout_enabled(self) -> bool:
+        return bool(
+            self.effective_cloud_billing_enabled
+            and self.stripe_secret_key
+            and self.stripe_supporter_price_id
+        )
 
     # Redis / RQ job queue
     redis_url: str = "redis://localhost:6379/0"

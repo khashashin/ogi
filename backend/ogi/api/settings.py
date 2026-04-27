@@ -12,6 +12,8 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 class CapabilitiesResponse(BaseModel):
     cloud_export_enabled: bool
     deployment_mode: str
+    cloud_billing_enabled: bool
+    stripe_checkout_enabled: bool
     telemetry_enabled: bool
     telemetry_level: str
     telemetry_admin_enabled: bool
@@ -30,6 +32,8 @@ async def get_capabilities(
     return CapabilitiesResponse(
         cloud_export_enabled=bool(settings.supabase_url and settings.supabase_service_role_key),
         deployment_mode=settings.deployment_mode,
+        cloud_billing_enabled=settings.effective_cloud_billing_enabled,
+        stripe_checkout_enabled=settings.stripe_checkout_enabled,
         telemetry_enabled=settings.effective_telemetry_enabled,
         telemetry_level=settings.normalized_telemetry_level,
         telemetry_admin_enabled=telemetry_admin_enabled,

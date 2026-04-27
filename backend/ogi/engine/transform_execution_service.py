@@ -16,6 +16,7 @@ from ogi.api.dependencies import (
     get_rq_queue,
     get_transform_engine,
 )
+from ogi.billing import enforce_transform_run_policy
 from ogi.config import settings
 from ogi.models import AuditLogCreate, Entity, TransformJobMessage, TransformRun, TransformStatus
 from ogi.models.edge import EdgeCreate
@@ -300,6 +301,11 @@ class TransformExecutionService:
                         injected_services.append(service_name)
             if getattr(setting, "required", False) and not merged_settings.get(setting_name):
                 raise HTTPException(status_code=400, detail=f"Missing required setting '{setting_name}'")
+
+        await enforce_transform_run_policy(
+            session=session,
+            user_id=user_id,
+        )
 
         return PreparedTransform(
             transform_name=transform_name,

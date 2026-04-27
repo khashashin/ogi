@@ -8,6 +8,7 @@ from .plugin import PluginInfo
 from .api_key import ApiKey
 from .user_plugin_preference import UserPluginPreference
 from .transform_settings import GlobalTransformSetting, UserTransformSetting
+from .billing import CloudSubscription, CloudTransformUsage
 from .telemetry import (
     TelemetryDailyMetric,
     TelemetryIngestPayload,
@@ -78,6 +79,8 @@ __all__ = [
     "UserPluginPreference",
     "GlobalTransformSetting",
     "UserTransformSetting",
+    "CloudSubscription",
+    "CloudTransformUsage",
     "TelemetryDailyMetric",
     "TelemetryIngestPayload",
     "TelemetryInstallation",
