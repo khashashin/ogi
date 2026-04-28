@@ -5,6 +5,10 @@ import { Loader2 } from "lucide-react";
 import { Seo } from "./Seo";
 
 type AuthMode = "signin" | "signup" | "forgot";
+type AuthFeedback =
+  | { mode: AuthMode; type: "error"; message: string }
+  | { mode: AuthMode; type: "signup-success" }
+  | { mode: AuthMode; type: "reset-sent" };
 
 interface AuthPageProps {
   mode: AuthMode;
@@ -15,23 +19,22 @@ export function AuthPage({ mode }: AuthPageProps) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [feedback, setFeedback] = useState<AuthFeedback | null>(null);
+  const currentFeedback = feedback?.mode === mode ? feedback : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setFeedback(null);
     setBusy(true);
 
     if (mode === "forgot") {
       const err = await resetPassword(email);
       setBusy(false);
       if (err) {
-        setError(err);
+        setFeedback({ mode, type: "error", message: err });
       } else {
-        setResetSent(true);
+        setFeedback({ mode, type: "reset-sent" });
       }
       return;
     }
@@ -42,9 +45,9 @@ export function AuthPage({ mode }: AuthPageProps) {
         : await signUp(email, password);
     setBusy(false);
     if (err) {
-      setError(err);
+      setFeedback({ mode, type: "error", message: err });
     } else if (mode === "signup") {
-      setSignupSuccess(true);
+      setFeedback({ mode, type: "signup-success" });
     } else {
       navigate("/projects");
     }
@@ -81,11 +84,11 @@ export function AuthPage({ mode }: AuthPageProps) {
           <h1 className="text-lg font-semibold text-text mb-1">OpenGraph Intel</h1>
           <p className="text-xs text-text-muted mb-6">{title}</p>
 
-          {signupSuccess ? (
+          {currentFeedback?.type === "signup-success" ? (
             <div className="text-sm text-green-400">
               Check your email to confirm your account, then sign in.
             </div>
-          ) : resetSent ? (
+          ) : currentFeedback?.type === "reset-sent" ? (
             <div className="text-sm text-green-400">
               Check your email for a password reset link.
             </div>
@@ -110,8 +113,8 @@ export function AuthPage({ mode }: AuthPageProps) {
                   className="px-3 py-2 text-sm bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
                 />
               )}
-              {error && (
-                <p className="text-xs text-danger">{error}</p>
+              {currentFeedback?.type === "error" && (
+                <p className="text-xs text-danger">{currentFeedback.message}</p>
               )}
               {mode === "signup" && (
                 <p className="text-[11px] text-text-muted text-center">
