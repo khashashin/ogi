@@ -1643,3 +1643,54 @@ async def test_map_routes_endpoint_returns_routes_for_geo_edges(client: AsyncCli
     assert len(routes) >= 1
     assert routes[0]["source_entity_id"] == src_id
     assert routes[0]["target_entity_id"] == dst_id
+
+
+@pytest.mark.asyncio
+async def test_location_suggest_returns_cached_results(client: AsyncClient):
+    from ogi.db.database import get_session
+    from ogi.models import GeocodeCache
+
+    resp = await client.post("/api/v1/projects", json={"name": "LocationSuggestProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    async for session in get_session():
+        session.add(
+            GeocodeCache(
+                query="zurich, switzerland",
+                lat=47.3769,
+                lon=8.5417,
+                display_name="Zurich, Switzerland",
+                confidence=0.8,
+                source="cache",
+            )
+        )
+        await session.commit()
+        break
+
+    resp = await client.get(f"/api/v1/projects/{project_id}/locations/suggest?q=zur&limit=5")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["rate_limited"] is False
+    assert data["suggestions"]
+    assert "Zurich" in data["suggestions"][0]["display_name"]
+
+
+@pytest.mark.asyncio
+async def test_location_suggest_rate_limit_feedback(client: AsyncClient):
+    from ogi.store.location_search_store import LocationSearchStore
+    import time as _time
+
+    resp = await client.post("/api/v1/projects", json={"name": "LocationSuggestRateProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    LocationSearchStore._cooldown_until = _time.time() + 30
+    try:
+        resp = await client.get(f"/api/v1/projects/{project_id}/locations/suggest?q=london&limit=5")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["rate_limited"] is True
+        assert (data["retry_after_seconds"] or 0) > 0
+    finally:
+        LocationSearchStore._cooldown_until = 0.0

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   User, Globe, Server, Mail, Phone, Building2, Link, AtSign,
@@ -11,6 +11,7 @@ import { api } from "../api/client";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useIsViewer } from "../hooks/useIsViewer";
+import type { LocationSuggestion } from "../types/location";
 
 const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
   user: User,
@@ -39,9 +40,15 @@ export function EntityPalette() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<EntityType | null>(null);
   const [value, setValue] = useState("");
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestHint, setSuggestHint] = useState<string>("");
+  const [selectedSuggestion, setSelectedSuggestion] = useState<LocationSuggestion | null>(null);
+  const suggestionTimer = useRef<number | null>(null);
   const { currentProject } = useProjectStore();
   const { addEntity } = useGraphStore();
   const isViewer = useIsViewer();
+  const isLocationMode = adding === EntityType.Location;
 
   const groupedTypes = useMemo(() => {
     const groups: Record<string, EntityTypeMeta[]> = {};
@@ -56,17 +63,81 @@ export function EntityPalette() {
   const handleAdd = async () => {
     if (!adding || !value.trim() || !currentProject) return;
     try {
+      const trimmed = value.trim();
+      const properties =
+        adding === EntityType.Location && selectedSuggestion && selectedSuggestion.display_name === trimmed
+          ? {
+              lat: selectedSuggestion.lat,
+              lon: selectedSuggestion.lon,
+              location_label: selectedSuggestion.display_name,
+              geo_confidence: 0.6,
+            }
+          : undefined;
       const entity = await api.entities.create(currentProject.id, {
         type: adding,
-        value: value.trim(),
+        value: trimmed,
+        properties,
       });
       addEntity(currentProject.id, entity);
       setAdding(null);
       setValue("");
+      setLocationSuggestions([]);
+      setSelectedSuggestion(null);
+      setSuggestHint("");
     } catch (e) {
       console.error("Failed to add entity:", e);
     }
   };
+
+  useEffect(() => {
+    if (!isLocationMode || !currentProject) {
+      setLocationSuggestions([]);
+      setLoadingSuggestions(false);
+      setSuggestHint("");
+      return;
+    }
+    if (suggestionTimer.current !== null) {
+      window.clearTimeout(suggestionTimer.current);
+      suggestionTimer.current = null;
+    }
+
+    const q = value.trim();
+    if (q.length < 3) {
+      setLocationSuggestions([]);
+      setLoadingSuggestions(false);
+      setSuggestHint(q.length === 0 ? "" : "Type at least 3 characters for suggestions.");
+      return;
+    }
+
+    setLoadingSuggestions(true);
+    setSuggestHint("");
+    suggestionTimer.current = window.setTimeout(async () => {
+      try {
+        const resp = await api.locations.suggest(currentProject.id, q, 5);
+        setLocationSuggestions(resp.suggestions ?? []);
+        if (resp.rate_limited) {
+          const retry = resp.retry_after_seconds ?? 60;
+          setSuggestHint(`Location search is rate-limited. Try again in ~${retry}s.`);
+        } else if ((resp.suggestions ?? []).length === 0) {
+          setSuggestHint("No matches found.");
+        } else {
+          setSuggestHint("");
+        }
+      } catch {
+        setSuggestHint("Location suggestions unavailable right now.");
+        setLocationSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => {
+      if (suggestionTimer.current !== null) {
+        window.clearTimeout(suggestionTimer.current);
+        suggestionTimer.current = null;
+      }
+    };
+  }, [isLocationMode, value, currentProject]);
 
   return (
     <div className="flex flex-col h-full">
@@ -89,13 +160,44 @@ export function EntityPalette() {
           <p className="text-xs text-text-muted mb-1.5">Add {adding}</p>
           <input
             type="text"
-            placeholder="Enter value..."
+            placeholder={isLocationMode ? "Search location..." : "Enter value..."}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setSelectedSuggestion(null);
+            }}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             autoFocus
             className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded text-text placeholder:text-text-muted focus:outline-none focus:border-accent mb-2"
           />
+          {isLocationMode && (
+            <div className="mb-2 rounded border border-border bg-bg/60">
+              {loadingSuggestions && (
+                <p className="px-2 py-1 text-[11px] text-text-muted">Searching...</p>
+              )}
+              {!loadingSuggestions && suggestHint && (
+                <p className="px-2 py-1 text-[11px] text-warning">{suggestHint}</p>
+              )}
+              {!loadingSuggestions && locationSuggestions.length > 0 && (
+                <div className="max-h-36 overflow-y-auto">
+                  {locationSuggestions.map((item) => (
+                    <button
+                      key={`${item.display_name}-${item.lat}-${item.lon}`}
+                      onClick={() => {
+                        setValue(item.display_name);
+                        setSelectedSuggestion(item);
+                        setLocationSuggestions([]);
+                        setSuggestHint("Coordinates will be attached when you add this entity.");
+                      }}
+                      className="w-full border-t border-border px-2 py-1 text-left text-[11px] text-text hover:bg-surface-hover first:border-t-0"
+                    >
+                      {item.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex gap-1.5">
             <button
               onClick={handleAdd}
@@ -104,7 +206,13 @@ export function EntityPalette() {
               Add
             </button>
             <button
-              onClick={() => { setAdding(null); setValue(""); }}
+              onClick={() => {
+                setAdding(null);
+                setValue("");
+                setLocationSuggestions([]);
+                setSelectedSuggestion(null);
+                setSuggestHint("");
+              }}
               className="flex-1 px-2 py-1 text-xs bg-surface border border-border text-text-muted rounded hover:bg-surface-hover"
             >
               Cancel

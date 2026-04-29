@@ -22,10 +22,25 @@ App runs at `http://localhost:5173`.
 
 ```bash
 pnpm dev      # Start Vite dev server
-pnpm build    # Type-check and production build
+pnpm build    # Type-check, production build, generate sitemap.xml + robots.txt
 pnpm test     # Run Vitest suite
 pnpm lint     # Run ESLint
 pnpm preview  # Preview production build
+```
+
+### SEO Sitemap
+
+- `pnpm build` now auto-generates:
+  - `dist/sitemap.xml`
+  - `dist/robots.txt`
+- Canonical base URL is read from:
+  - `OGI_SITE_URL` (preferred), or
+  - `SITE_URL`, or defaults to `https://ogi.khas.app`
+
+Example:
+
+```bash
+OGI_SITE_URL=https://yourdomain.com pnpm build
 ```
 
 ## Environment and Runtime Config

@@ -7,6 +7,7 @@ import type { RegistryIndex, RegistryTransform } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import type { TimelineResponse } from "../types/timeline";
 import type { MapPointsResponse, MapRoutesResponse } from "../types/map";
+import type { LocationSuggestResponse } from "../types/location";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -357,6 +358,13 @@ export const api = {
       request<MapPointsResponse>(`/projects/${projectId}/map/points?zoom=${zoom}&cluster=${cluster}`),
     routes: (projectId: string) =>
       request<MapRoutesResponse>(`/projects/${projectId}/map/routes`),
+  },
+
+  locations: {
+    suggest: (projectId: string, q: string, limit = 5) =>
+      request<LocationSuggestResponse>(
+        `/projects/${projectId}/locations/suggest?q=${encodeURIComponent(q)}&limit=${limit}`
+      ),
   },
 
   discover: {
