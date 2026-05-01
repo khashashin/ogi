@@ -26,7 +26,6 @@ class DomainToURLs(BaseTransform):
             async with httpx.AsyncClient(
                 timeout=10.0,
                 follow_redirects=True,
-                verify=False,
             ) as client:
                 response = await client.get(robots_url)
 

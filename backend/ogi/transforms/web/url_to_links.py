@@ -37,7 +37,6 @@ class URLToLinks(BaseTransform):
             async with httpx.AsyncClient(
                 timeout=10.0,
                 follow_redirects=True,
-                verify=False,
                 headers={"User-Agent": "Mozilla/5.0"},
             ) as client:
                 response = await client.get(source_url)
@@ -105,4 +104,3 @@ class URLToLinks(BaseTransform):
 
         messages.append(f"Extracted {len(discovered_urls)} outbound link(s)")
         return TransformResult(entities=entities, edges=edges, messages=messages)
-

@@ -163,7 +163,8 @@ class PluginEngine:
         ``transform_engine`` is expected to have a ``register(transform)`` method.
         """
         from ogi.engine.transform_engine import TransformEngine
-        assert isinstance(transform_engine, TransformEngine)
+        if not isinstance(transform_engine, TransformEngine):
+            raise TypeError("transform_engine must be a TransformEngine instance")
 
         for plugin_info in self.discover():
             if not plugin_info.enabled:

@@ -35,7 +35,6 @@ class URLToHeaders(BaseTransform):
             async with httpx.AsyncClient(
                 timeout=10.0,
                 follow_redirects=True,
-                verify=False,
             ) as client:
                 response = await client.head(url)
 

@@ -92,6 +92,7 @@ class SandboxRunner:
         self.timeout = timeout
         self.memory_mb = memory_mb
         self._docker_available: bool | None = None
+        self._docker_path: str | None = None
 
     def is_available(self) -> bool:
         """Check if Docker is installed and accessible."""
@@ -103,9 +104,11 @@ class SandboxRunner:
             return False
         try:
             result = subprocess.run(
-                ["docker", "info"], capture_output=True, timeout=10
+                [docker, "info"], capture_output=True, timeout=10
             )
             self._docker_available = result.returncode == 0
+            if self._docker_available:
+                self._docker_path = docker
         except Exception:
             self._docker_available = False
         return self._docker_available
@@ -141,6 +144,8 @@ class SandboxRunner:
         """
         if not self.is_available():
             raise RuntimeError("Docker is not available for sandboxed execution")
+        if self._docker_path is None:
+            raise RuntimeError("Docker path is unavailable for sandboxed execution")
 
         effective_timeout = timeout or self.timeout
         perms = permissions or TransformPermissions(
@@ -161,7 +166,7 @@ class SandboxRunner:
 
             # Build docker run command
             cmd: list[str] = [
-                "docker", "run",
+                self._docker_path, "run",
                 "--rm",
                 f"--memory={self.memory_mb}m",
                 "--cpus=1",

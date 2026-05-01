@@ -83,14 +83,18 @@ async def get_edge_store(session: AsyncSession = Depends(get_session)) -> EdgeSt
     return EdgeStore(session)
 
 
+def _require_initialized(value: object | None, name: str) -> object:
+    if value is None:
+        raise RuntimeError(f"{name} has not been initialized")
+    return value
+
+
 def get_transform_engine() -> TransformEngine:
-    assert _transform_engine is not None
-    return _transform_engine
+    return _require_initialized(_transform_engine, "Transform engine")  # type: ignore[return-value]
 
 
 def get_entity_registry() -> EntityRegistry:
-    assert _entity_registry is not None
-    return _entity_registry
+    return _require_initialized(_entity_registry, "Entity registry")  # type: ignore[return-value]
 
 
 async def get_transform_run_store(session: AsyncSession = Depends(get_session)) -> TransformRunStore:
@@ -144,8 +148,7 @@ async def get_location_search_store(
 
 
 def get_plugin_engine() -> PluginEngine:
-    assert _plugin_engine is not None
-    return _plugin_engine
+    return _require_initialized(_plugin_engine, "Plugin engine")  # type: ignore[return-value]
 
 
 def init_registry_client(client: RegistryClient) -> None:
@@ -159,13 +162,11 @@ def init_transform_installer(installer: TransformInstaller) -> None:
 
 
 def get_registry_client() -> RegistryClient:
-    assert _registry_client is not None
-    return _registry_client
+    return _require_initialized(_registry_client, "Registry client")  # type: ignore[return-value]
 
 
 def get_transform_installer() -> TransformInstaller:
-    assert _transform_installer is not None
-    return _transform_installer
+    return _require_initialized(_transform_installer, "Transform installer")  # type: ignore[return-value]
 
 
 def get_graph_engine(project_id: UUID) -> GraphEngine:
