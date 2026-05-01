@@ -57,10 +57,11 @@ async def init_db() -> None:
             }
         )
 
-    # Ensure baseline schema exists for both SQLite and PostgreSQL.
-    # This is intentionally idempotent and fills missing tables in existing DBs.
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+    # SQLite remains lightweight and self-bootstrapping for tests/local mode.
+    # PostgreSQL schema evolution is handled by Alembic during startup/deploy.
+    if settings.use_sqlite:
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
 
     async_session_maker = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False

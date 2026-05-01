@@ -5,6 +5,8 @@ import pytest
 
 from ogi.models import Entity, EntityType
 from ogi.store.location_search_store import LocationGeocodeResult, LocationSearchStore
+from ogi.store.timezone_store import TimezoneResolution, TimezoneStore
+from ogi.store.weather_store import WeatherStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
@@ -14,6 +16,8 @@ from ogi.transforms.hash.hash_lookup import HashLookup
 from ogi.transforms.ip.ip_to_asn import IPToASN
 from ogi.transforms.ip.ip_to_geolocation import IPToGeolocation
 from ogi.transforms.location.location_to_geocode import LocationToGeocode
+from ogi.transforms.location.location_to_timezone import LocationToTimezone
+from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
 from ogi.transforms.web.url_to_headers import URLToHeaders
@@ -461,3 +465,152 @@ async def test_location_to_geocode_with_mocked_store(monkeypatch: pytest.MonkeyP
     assert out.properties["country"] == "USA"
     assert any(msg == "Confidence: 0.84." for msg in result.messages)
     assert any(msg == "Used upstream geocoder." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_timezone_known_coordinate_mapping(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToTimezone()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.3769, "lon": 8.5417},
+    )
+
+    def fake_resolve(self, lat: float, lon: float, observed_at=None):
+        assert lat == pytest.approx(47.3769)
+        assert lon == pytest.approx(8.5417)
+        return TimezoneResolution(
+            timezone="Europe/Zurich",
+            utc_offset="+01:00",
+            dst_active=False,
+            cache_hit=False,
+        )
+
+    monkeypatch.setattr(TimezoneStore, "resolve", fake_resolve)
+
+    result = await transform.run(entity, TransformConfig())
+    assert len(result.entities) == 1
+    out = result.entities[0]
+    assert out.properties["timezone"] == "Europe/Zurich"
+    assert out.properties["utc_offset"] == "+01:00"
+    assert out.properties["dst_active"] is False
+    assert any(msg == "Timezone: Europe/Zurich." for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_location_to_timezone_missing_coordinate_behavior(monkeypatch: pytest.MonkeyPatch):
+    transform = LocationToTimezone()
+    entity = Entity(type=EntityType.LOCATION, value="Unknown place", project_id=uuid4())
+
+    class _SessionCtx:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return _FakeSession()
+
+    async def fake_normalize(self, query: str):
+        assert query == "Unknown place"
+        return LocationGeocodeResult(query=query, source="nominatim")
+
+    monkeypatch.setattr("ogi.transforms.location.location_to_timezone.get_session", lambda: _SessionCtx(), raising=False)
+    monkeypatch.setattr(LocationToTimezone, "_get_session", staticmethod(lambda: _SessionCtx()))
+    monkeypatch.setattr(LocationSearchStore, "normalize", fake_normalize)
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities == []
+    assert result.messages == ["Timezone lookup skipped: missing valid coordinates."]
+
+
+@pytest.mark.asyncio
+async def test_weather_store_parses_current_weather(monkeypatch: pytest.MonkeyPatch):
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(
+            get_response=_FakeResponse(
+                json_data={
+                    "weather": [{"description": "light rain"}],
+                    "main": {"temp": 12.3},
+                    "wind": {"speed": 5.0},
+                    "visibility": 9000,
+                    "dt": 1741356000,
+                }
+            )
+        )
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(47.37, 8.54, None, "ow-test")
+    assert snapshot.condition == "light rain"
+    assert snapshot.temp_c == pytest.approx(12.3)
+    assert snapshot.wind_kph == pytest.approx(18.0)
+    assert snapshot.visibility_km == pytest.approx(9.0)
+    assert snapshot.source_timestamp is not None
+
+
+@pytest.mark.asyncio
+async def test_weather_store_parses_historical_weather(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timezone
+
+    WeatherStore._cache.clear()
+    store = WeatherStore()
+    observed = datetime(2026, 3, 7, 12, 0, tzinfo=timezone.utc)
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(
+            get_response=_FakeResponse(
+                json_data={
+                    "data": [
+                        {
+                            "dt": 1741348800,
+                            "temp": 7.8,
+                            "wind_speed": 3.0,
+                            "visibility": 7000,
+                            "weather": [{"main": "Clouds"}],
+                        }
+                    ]
+                }
+            )
+        )
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    snapshot = await store.get_snapshot(46.95, 7.44, observed, "ow-test")
+    assert snapshot.condition == "Clouds"
+    assert snapshot.temp_c == pytest.approx(7.8)
+    assert snapshot.wind_kph == pytest.approx(10.8)
+    assert snapshot.visibility_km == pytest.approx(7.0)
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_provider_error_fallback(monkeypatch: pytest.MonkeyPatch):
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(
+        type=EntityType.LOCATION,
+        value="Zurich",
+        project_id=uuid4(),
+        properties={"lat": 47.37, "lon": 8.54},
+    )
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=_FakeResponse(status_code=429, json_data={}))
+
+    monkeypatch.setattr("ogi.store.weather_store.httpx.AsyncClient", fake_client)
+    result = await transform.run(entity, TransformConfig(settings={"openweather_api_key": "ow-test"}))
+    assert result.entities == []
+    assert result.messages == ["OpenWeather rate limit exceeded."]
+
+
+@pytest.mark.asyncio
+async def test_location_to_weather_snapshot_missing_coordinate_behavior():
+    WeatherStore._cache.clear()
+    transform = LocationToWeatherSnapshot()
+    entity = Entity(type=EntityType.LOCATION, value="Unknown", project_id=uuid4())
+    result = await transform.run(entity, TransformConfig(settings={"openweather_api_key": "ow-test"}))
+    assert result.entities == []
+    assert result.messages == ["Weather lookup skipped: missing valid coordinates."]

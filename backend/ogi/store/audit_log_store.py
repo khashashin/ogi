@@ -42,3 +42,13 @@ class AuditLogStore:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_by_action(self, action: str, limit: int = 5000) -> list[AuditLog]:
+        stmt = (
+            select(AuditLog)
+            .where(AuditLog.action == action)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

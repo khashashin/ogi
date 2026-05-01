@@ -23,6 +23,7 @@ from ogi.store.api_key_store import ApiKeyStore
 from ogi.store.user_plugin_preference_store import UserPluginPreferenceStore
 from ogi.store.transform_settings_store import TransformSettingsStore
 from ogi.store.audit_log_store import AuditLogStore
+from ogi.store.system_audit_log_store import SystemAuditLogStore
 from ogi.store.project_event_store import ProjectEventStore
 from ogi.store.timeline_store import TimelineStore
 from ogi.store.map_store import MapStore
@@ -121,6 +122,12 @@ async def get_audit_log_store(
     session: AsyncSession = Depends(get_session),
 ) -> AuditLogStore:
     return AuditLogStore(session)
+
+
+async def get_system_audit_log_store(
+    session: AsyncSession = Depends(get_session),
+) -> SystemAuditLogStore:
+    return SystemAuditLogStore(session)
 
 
 async def get_project_event_store(

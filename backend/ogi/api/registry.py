@@ -8,13 +8,15 @@ from ogi.api.auth import get_current_user, require_admin_user
 from ogi.api.dependencies import (
     get_plugin_engine,
     get_registry_client,
+    get_system_audit_log_store,
     get_transform_engine,
     get_transform_installer,
 )
 from ogi.cli.registry import RegistryClient, RegistryTransform
 from ogi.cli.installer import TransformInstaller, InstallError
 from ogi.config import settings
-from ogi.models import UserProfile
+from ogi.models import SystemAuditLogCreate, UserProfile
+from ogi.store.system_audit_log_store import SystemAuditLogStore
 
 router = APIRouter(prefix="/registry", tags=["registry"])
 
@@ -126,6 +128,7 @@ async def install_transform(
     slug: str,
     current_user: UserProfile = Depends(get_current_user),
     admin_user: UserProfile = Depends(require_admin_user),
+    audit_store: SystemAuditLogStore = Depends(get_system_audit_log_store),
 ) -> InstallResult:
     """Download and install a transform from the registry."""
     registry = get_registry_client()
@@ -152,6 +155,20 @@ async def install_transform(
 
     meta = registry.get_transform(slug)
     version = meta.get("version", "") if meta else ""
+    await audit_store.create(
+        current_user.id,
+        SystemAuditLogCreate(
+            action="plugin.install",
+            resource_type="plugin",
+            resource_id=slug,
+            details={
+                "plugin_name": slug,
+                "version": version,
+                "verification_tier": meta.get("verification_tier", "community") if meta else "community",
+                "api_key_services": [entry.get("service", "") for entry in meta.get("api_keys_required", [])] if meta else [],
+            },
+        ),
+    )
     loaded_count = 0
     load_warning = ""
     try:
@@ -176,6 +193,7 @@ async def remove_transform(
     slug: str,
     current_user: UserProfile = Depends(get_current_user),
     admin_user: UserProfile = Depends(require_admin_user),
+    audit_store: SystemAuditLogStore = Depends(get_system_audit_log_store),
 ) -> dict[str, str]:
     """Uninstall a transform."""
     installer = get_transform_installer()
@@ -183,6 +201,15 @@ async def remove_transform(
         installer.remove(slug)
     except InstallError as exc:
         raise HTTPException(400, str(exc))
+    await audit_store.create(
+        current_user.id,
+        SystemAuditLogCreate(
+            action="plugin.remove",
+            resource_type="plugin",
+            resource_id=slug,
+            details={"plugin_name": slug},
+        ),
+    )
     return {"status": "removed", "slug": slug}
 
 
@@ -191,6 +218,7 @@ async def update_transform(
     slug: str,
     current_user: UserProfile = Depends(get_current_user),
     admin_user: UserProfile = Depends(require_admin_user),
+    audit_store: SystemAuditLogStore = Depends(get_system_audit_log_store),
 ) -> InstallResult:
     """Update a single transform to the latest version."""
     registry = get_registry_client()
@@ -214,6 +242,20 @@ async def update_transform(
 
     meta = registry.get_transform(slug)
     version = meta.get("version", "") if meta else ""
+    await audit_store.create(
+        current_user.id,
+        SystemAuditLogCreate(
+            action="plugin.update",
+            resource_type="plugin",
+            resource_id=slug,
+            details={
+                "plugin_name": slug,
+                "version": version,
+                "verification_tier": meta.get("verification_tier", "community") if meta else "community",
+                "api_key_services": [entry.get("service", "") for entry in meta.get("api_keys_required", [])] if meta else [],
+            },
+        ),
+    )
     return InstallResult(
         slug=slug,
         version=version,

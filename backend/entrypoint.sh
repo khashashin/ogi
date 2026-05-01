@@ -13,6 +13,9 @@ BOOT_REQUIREMENTS_FILE="${OGI_BOOT_REQUIREMENTS_FILE:-/app/plugins/requirements.
 BOOT_LOCK_FILE="${OGI_BOOT_LOCK_FILE:-/app/plugins/ogi-lock.json}"
 BOOT_REQUIREMENTS_STRICT="${OGI_BOOT_REQUIREMENTS_STRICT:-false}"
 BOOT_REQUIREMENTS_CACHE_DIR="${OGI_BOOT_REQUIREMENTS_CACHE_DIR:-/tmp/ogi-boot}"
+RUN_DB_MIGRATIONS="${OGI_RUN_DB_MIGRATIONS:-false}"
+DB_MIGRATION_RETRIES="${OGI_DB_MIGRATION_RETRIES:-30}"
+DB_MIGRATION_DELAY_SECONDS="${OGI_DB_MIGRATION_DELAY_SECONDS:-2}"
 
 if is_true "$BOOT_REQUIREMENTS_ENABLE"; then
   # Backward-compatibility: if requirements.txt is missing but lock metadata has
@@ -68,6 +71,23 @@ PY
     fi
     echo "No boot requirements file found at $BOOT_REQUIREMENTS_FILE (continuing)"
   fi
+fi
+
+if is_true "$RUN_DB_MIGRATIONS"; then
+  echo "Running database migrations"
+  i=0
+  while :; do
+    if python -m ogi.db.alembic_runner; then
+      break
+    fi
+    i=$((i + 1))
+    if [ "$i" -ge "$DB_MIGRATION_RETRIES" ]; then
+      echo "Database migrations failed after $DB_MIGRATION_RETRIES attempts"
+      exit 1
+    fi
+    echo "Migration attempt $i failed, retrying in ${DB_MIGRATION_DELAY_SECONDS}s"
+    sleep "$DB_MIGRATION_DELAY_SECONDS"
+  done
 fi
 
 exec "$@"

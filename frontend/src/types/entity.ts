@@ -61,6 +61,7 @@ export interface Entity {
   notes: string;
   tags: string[];
   source: string;
+  origin_source: string;
   project_id: string | null;
   created_at: string;
   updated_at: string;
@@ -74,6 +75,7 @@ export interface EntityCreate {
   notes?: string;
   tags?: string[];
   source?: string;
+  origin_source?: string;
 }
 
 export interface EntityUpdate {

@@ -73,6 +73,8 @@ uv run uvicorn ogi.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
+If you run the backend against PostgreSQL (`OGI_USE_SQLITE=false`), startup will automatically apply Alembic migrations before serving requests. Docker deployments do the same in the backend container entrypoint.
+
 ### Frontend
 
 ```bash
@@ -151,12 +153,13 @@ If you use prebuilt images and a plugin needs extra Python libraries, OGI instal
 
 **Environment variables:**
 
-| Variable                       | Default                         | Description                          |
-| ------------------------------ | ------------------------------- | ------------------------------------ |
-| `OGI_BOOT_REQUIREMENTS_ENABLE` | `true`                          | Enable/disable boot-time install     |
-| `OGI_BOOT_REQUIREMENTS_FILE`   | `/app/plugins/requirements.txt` | Path to requirements file            |
-| `OGI_BOOT_LOCK_FILE`           | `/app/plugins/ogi-lock.json`    | Path to lock file                    |
-| `OGI_BOOT_REQUIREMENTS_STRICT` | `false`                         | Fail startup if requirements missing |
+| Variable                          | Default                         | Description                               |
+| --------------------------------- | ------------------------------- | ----------------------------------------- |
+| `OGI_BOOT_REQUIREMENTS_ENABLE`    | `true`                          | Enable/disable boot-time install          |
+| `OGI_BOOT_REQUIREMENTS_FILE`      | `/app/plugins/requirements.txt` | Path to requirements file                 |
+| `OGI_BOOT_LOCK_FILE`              | `/app/plugins/ogi-lock.json`    | Path to lock file                         |
+| `OGI_BOOT_REQUIREMENTS_STRICT`    | `false`                         | Fail startup if requirements missing      |
+| `OGI_BOOT_REQUIREMENTS_CACHE_DIR` | `/tmp/ogi-boot`                 | Temp/cache dir for generated requirements |
 
 </details>
 
@@ -165,6 +168,8 @@ If you use prebuilt images and a plugin needs extra Python libraries, OGI instal
 ## Transform Hub
 
 OpenGraph Intel has a built-in transform marketplace. Browse, install, and manage transforms from the [community registry](https://github.com/opengraphintel/ogi-transforms).
+
+> **Security note:** Plugins that require API keys should be treated as privileged code. If a plugin can access your secrets and make outbound network requests, it can misuse or exfiltrate those secrets. Review trust tier, permissions, and required services before installing or running third-party plugins.
 
 ```bash
 # Search for transforms
@@ -194,6 +199,8 @@ uv run ogi transform install shodan-host-lookup
 ### Building Your Own Transforms
 
 Want to build your own? See the [contributing guide](https://github.com/opengraphintel/ogi-transforms/blob/main/CONTRIBUTING.md).
+
+If your transform needs external service credentials, declare them in `api_keys_required`. Do not store secrets in transform settings. OGI manages those under `API Keys`, and secret-using plugins are considered privileged code.
 
 Each plugin is a directory with a `plugin.yaml` manifest:
 
@@ -268,21 +275,65 @@ ogi/
 
 ### Configuration
 
-OGI uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) with `.env` file support. All variables are prefixed with `OGI_`.
+OGI uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) with `.env` file support. Runtime/backend variables are prefixed with `OGI_`.
+
+List-style settings accept either:
+
+- JSON arrays, for example `["plugins","../plugins"]`
+- comma-separated strings, for example `plugins,../plugins`
 
 <details>
 <summary><strong>Key environment variables</strong></summary>
 
-| Variable              | Description                               | Default                                      |
-| --------------------- | ----------------------------------------- | -------------------------------------------- |
-| `OGI_DATABASE_URL`    | PostgreSQL connection string              | `postgresql://postgres:postgres@db:5432/ogi` |
-| `OGI_USE_SQLITE`      | Use SQLite instead of PostgreSQL          | `false`                                      |
-| `OGI_DATABASE_PATH`   | SQLite database file path                 | `ogi.db`                                     |
-| `OGI_PLUGIN_DIRS`     | Plugin search directories                 | `["plugins"]`                                |
-| `OGI_CORS_ORIGINS`    | Allowed CORS origins                      | `["http://localhost:5173"]`                  |
-| `SUPABASE_URL`        | Supabase project URL                      | -                                            |
-| `SUPABASE_ANON_KEY`   | Supabase anon/public key                  | -                                            |
-| `SUPABASE_JWT_SECRET` | JWT secret for auth (omit for local mode) | -                                            |
+| Variable                                        | Description                                          | Default                                             |
+| ----------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| `OGI_APP_NAME`                                  | Application name                                     | `OGI`                                               |
+| `OGI_HOST`                                      | Backend bind host                                    | `0.0.0.0`                                           |
+| `OGI_PORT`                                      | Backend port                                         | `8000`                                              |
+| `OGI_CORS_ORIGINS`                              | Allowed frontend origins                             | `http://localhost:5173,http://localhost:3000`       |
+| `OGI_USE_SQLITE`                                | Use SQLite instead of PostgreSQL                     | `true`                                              |
+| `OGI_DB_PATH`                                   | SQLite database file path                            | `ogi.db`                                            |
+| `OGI_DATABASE_URL`                              | PostgreSQL connection string                         | `postgresql://postgres:postgres@localhost:5432/ogi` |
+| `OGI_REDIS_URL`                                 | Redis connection string for RQ/jobs                  | `redis://localhost:6379/0`                          |
+| `OGI_RQ_QUEUE_NAME`                             | Queue name for transform jobs                        | `transforms`                                        |
+| `OGI_TRANSFORM_TIMEOUT`                         | Per-transform job timeout in seconds                 | `300`                                               |
+| `OGI_AUTO_RUN_MIGRATIONS`                       | Auto-run Alembic on local non-SQLite app startup     | `true`                                              |
+| `OGI_RUN_DB_MIGRATIONS`                         | Run DB migrations in container entrypoint            | `false`                                             |
+| `OGI_DB_MIGRATION_RETRIES`                      | Entry-point migration retry count                    | `30`                                                |
+| `OGI_DB_MIGRATION_DELAY_SECONDS`                | Delay between entry-point migration retries          | `2`                                                 |
+| `OGI_PLUGIN_DIRS`                               | Plugin search directories                            | `plugins,../plugins`                                |
+| `OGI_DEPLOYMENT_MODE`                           | Deployment mode (`self-hosted` or `cloud`)           | `self-hosted`                                       |
+| `OGI_REGISTRY_REPO`                             | Transform registry GitHub repo                       | `opengraphintel/ogi-transforms`                     |
+| `OGI_REGISTRY_CACHE_TTL`                        | Registry cache TTL in seconds                        | `3600`                                              |
+| `OGI_GITHUB_TOKEN`                              | Optional GitHub token for registry/API rate limits   | unset                                               |
+| `OGI_SUPABASE_URL`                              | Supabase project URL                                 | unset                                               |
+| `OGI_SUPABASE_ANON_KEY`                         | Supabase anon/public key                             | unset                                               |
+| `OGI_SUPABASE_SERVICE_ROLE_KEY`                 | Supabase service-role key                            | unset                                               |
+| `OGI_SUPABASE_JWT_SECRET`                       | Supabase JWT secret                                  | unset                                               |
+| `OGI_SUPABASE_REDIRECT_URL`                     | Redirect URL used by frontend auth flows             | unset                                               |
+| `OGI_ADMIN_EMAILS`                              | Admin users for registry/plugin management           | unset                                               |
+| `OGI_API_KEY_ENCRYPTION_KEY`                    | Fernet key for encrypted API key storage             | unset but strongly recommended                      |
+| `OGI_API_KEY_INJECTION_ALLOW_COMMUNITY_PLUGINS` | Allow community plugins to receive stored API keys   | `true`                                              |
+| `OGI_API_KEY_INJECTION_TRUSTED_TIERS_ONLY`      | Restrict stored key injection to trusted tiers only  | `false`                                             |
+| `OGI_API_KEY_INJECTION_ALLOWED_TIERS`           | Tiers allowed when trusted-only mode is enabled      | `official,verified`                                 |
+| `OGI_API_KEY_SERVICE_ALLOWLIST`                 | Optional allowed services for stored key injection   | empty                                               |
+| `OGI_API_KEY_SERVICE_BLOCKLIST`                 | Optional blocked services for stored key injection   | empty                                               |
+| `OGI_EXPOSE_ERROR_DETAILS`                      | Include internal details in 500 responses            | `false`                                             |
+| `OGI_SANDBOX_ENABLED`                           | Enable sandbox execution mode                        | `false`                                             |
+| `OGI_SANDBOX_TIMEOUT`                           | Sandbox timeout in seconds                           | `30`                                                |
+| `OGI_SANDBOX_MEMORY_MB`                         | Sandbox memory limit in MB                           | `256`                                               |
+| `OGI_SANDBOX_ALLOWED_TIERS`                     | Allowed tiers in cloud sandbox mode                  | `official,verified`                                 |
+| `OGI_BOOT_REQUIREMENTS_ENABLE`                  | Enable boot-time plugin dependency install           | `true`                                              |
+| `OGI_BOOT_REQUIREMENTS_FILE`                    | Boot requirements file path                          | `/app/plugins/requirements.txt`                     |
+| `OGI_BOOT_LOCK_FILE`                            | Boot lock file path                                  | `/app/plugins/ogi-lock.json`                        |
+| `OGI_BOOT_REQUIREMENTS_STRICT`                  | Fail startup if plugin requirements are missing      | `false`                                             |
+| `OGI_BOOT_REQUIREMENTS_CACHE_DIR`               | Temp/cache directory for boot requirement generation | `/tmp/ogi-boot`                                     |
+| `OGI_FRONTEND_PORT`                             | Local Docker frontend port mapping                   | `3000`                                              |
+| `OGI_IMAGE_TAG`                                 | Prod image tag for compose/Coolify-style deploys     | `latest`                                            |
+| `OGI_BACKEND_IMAGE`                             | Optional backend image override                      | `ghcr.io/khashashin/ogi-backend`                    |
+| `OGI_WORKER_IMAGE`                              | Optional worker image override                       | `ghcr.io/khashashin/ogi-worker`                     |
+| `OGI_FRONTEND_IMAGE`                            | Optional frontend image override                     | `ghcr.io/khashashin/ogi-frontend`                   |
+| `OGI_CLI_BEARER_TOKEN`                          | Optional CLI bearer token for auth-enabled backends  | unset                                               |
 
 See [`.env.example`](.env.example) for the full list.
 

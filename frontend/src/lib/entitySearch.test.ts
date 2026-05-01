@@ -14,6 +14,7 @@ function makeEntity(overrides: Partial<Entity> = {}): Entity {
     notes: "investigation note",
     tags: ["important", "whois"],
     source: "whois_lookup",
+    origin_source: "manual",
     project_id: "p-1",
     created_at: "2026-03-03T10:00:00Z",
     updated_at: "2026-03-03T10:00:00Z",
@@ -61,4 +62,3 @@ describe("matchesEntitySearch", () => {
     expect(matchesEntitySearch(entity, "nonexistent")).toBe(false);
   });
 });
-

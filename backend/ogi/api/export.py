@@ -110,12 +110,15 @@ async def export_csv(
         # Entities CSV
         entity_buf = io.StringIO()
         writer = csv.writer(entity_buf)
-        writer.writerow(["id", "type", "value", "properties", "weight", "notes", "tags", "source", "created_at"])
+        writer.writerow([
+            "id", "type", "value", "properties", "weight", "notes", "tags",
+            "source", "origin_source", "created_at",
+        ])
         for e in entities:
             writer.writerow([
                 str(e.id), e.type.value, e.value,
                 json.dumps(e.properties), e.weight, e.notes,
-                ",".join(e.tags), e.source, e.created_at.isoformat(),
+                ",".join(e.tags), e.source, e.origin_source, e.created_at.isoformat(),
             ])
         zf.writestr("entities.csv", entity_buf.getvalue())
 
@@ -171,6 +174,7 @@ async def export_graphml(
         ("value", "string", "node"),
         ("weight", "int", "node"),
         ("source_field", "string", "node"),
+        ("origin_source_field", "string", "node"),
         ("label", "string", "edge"),
         ("edge_weight", "int", "edge"),
     ]:
@@ -191,6 +195,7 @@ async def export_graphml(
             ("value", entity.value),
             ("weight", str(entity.weight)),
             ("source_field", entity.source),
+            ("origin_source_field", entity.origin_source),
         ]:
             data = SubElement(node, "data", key=key)
             data.text = val

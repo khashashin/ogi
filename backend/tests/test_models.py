@@ -16,6 +16,7 @@ def test_entity_creation():
     assert entity.icon == "globe"  # auto-assigned from meta
     assert entity.weight == 1
     assert entity.source == "manual"
+    assert entity.origin_source == "manual"
 
 
 def test_entity_create_schema():
@@ -23,6 +24,7 @@ def test_entity_create_schema():
     assert data.type == EntityType.IP_ADDRESS
     assert data.value == "1.2.3.4"
     assert data.properties == {}
+    assert data.origin_source is None
 
 
 def test_edge_creation():

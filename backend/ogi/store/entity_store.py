@@ -30,6 +30,7 @@ class EntityStore:
         existing = await self.find_by_type_and_value(project_id, data.type, data.value)
         if existing is not None:
             return existing
+        origin_source = (data.origin_source or data.source or "manual").strip() or "manual"
 
         entity = Entity(
             type=data.type,
@@ -39,6 +40,7 @@ class EntityStore:
             notes=data.notes,
             tags=data.tags,
             source=data.source,
+            origin_source=origin_source,
             project_id=project_id,
         )
         self.session.add(entity)
@@ -62,6 +64,9 @@ class EntityStore:
             if entity.source:
                 existing.source = entity.source
 
+            if not existing.origin_source.strip():
+                existing.origin_source = self._origin_source(existing, fallback=entity.source)
+
             if entity.icon:
                 existing.icon = entity.icon
 
@@ -73,8 +78,9 @@ class EntityStore:
             await self.session.commit()
             await self.session.refresh(existing)
             return existing
-            
+
         entity.project_id = project_id
+        entity.origin_source = (entity.origin_source or entity.source or "manual").strip() or "manual"
         # Ensure datetimes are proper objects (not strings from JSON deserialization)
         now = datetime.now(timezone.utc)
         entity.created_at = now
@@ -114,7 +120,15 @@ class EntityStore:
         entity = await self.get(entity_id)
         if not entity:
             return False
-            
+
         await self.session.delete(entity)
         await self.session.commit()
         return True
+
+    @staticmethod
+    def _origin_source(entity: Entity, fallback: str) -> str:
+        if entity.origin_source.strip():
+            return entity.origin_source.strip()
+        if entity.source.strip():
+            return entity.source.strip()
+        return fallback.strip() or "manual"

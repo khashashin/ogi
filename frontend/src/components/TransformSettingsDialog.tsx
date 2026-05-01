@@ -27,6 +27,17 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
   }, [open, transform]);
 
   const schema = useMemo(() => data?.settings_schema ?? [], [data]);
+  const visibleSchema = useMemo(
+    () => schema.filter((s) => !(s.field_type === "secret" && s.name.endsWith("_api_key"))),
+    [schema]
+  );
+  const managedApiKeyServices = useMemo(
+    () =>
+      schema
+        .filter((s) => s.field_type === "secret" && s.name.endsWith("_api_key"))
+        .map((s) => s.name.replace(/_api_key$/, "")),
+    [schema]
+  );
 
   const saveUser = async () => {
     if (!transform) return;
@@ -69,10 +80,17 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
           </button>
         </div>
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
-          {schema.length === 0 && (
+          {visibleSchema.length === 0 && (
             <p className="text-xs text-text-muted">This transform has no configurable settings.</p>
           )}
-          {schema.map((s) => {
+          {managedApiKeyServices.length > 0 && (
+            <div className="rounded border border-border bg-bg px-3 py-2">
+              <p className="text-xs text-text-muted">
+                API keys for {managedApiKeyServices.join(", ")} are managed in <span className="text-text">API Keys</span>.
+              </p>
+            </div>
+          )}
+          {visibleSchema.map((s) => {
             const value = values[s.name] ?? "";
             return (
               <div key={s.name} className="space-y-1">
@@ -129,4 +147,3 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
     </div>
   );
 }
-

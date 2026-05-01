@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS entities (
     notes TEXT NOT NULL DEFAULT '',
     tags TEXT NOT NULL DEFAULT '[]',
     source TEXT NOT NULL DEFAULT 'manual',
+    origin_source TEXT NOT NULL DEFAULT 'manual',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -69,6 +70,16 @@ CREATE TABLE IF NOT EXISTS project_bookmarks (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS system_audit_logs (
+    id TEXT PRIMARY KEY,
+    actor_user_id TEXT,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
 CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
 CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
@@ -88,6 +99,11 @@ async def run_sqlite_migrations(db: aiosqlite.Connection) -> None:
         pass
     try:
         await db.execute("ALTER TABLE projects ADD COLUMN is_public INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        await db.execute("ALTER TABLE entities ADD COLUMN origin_source TEXT NOT NULL DEFAULT 'manual'")
+        await db.execute("UPDATE entities SET origin_source = source WHERE origin_source IS NULL OR origin_source = ''")
     except Exception:
         pass
     await db.commit()
@@ -132,6 +148,7 @@ CREATE TABLE IF NOT EXISTS entities (
     notes TEXT NOT NULL DEFAULT '',
     tags JSONB NOT NULL DEFAULT '[]',
     source TEXT NOT NULL DEFAULT 'manual',
+    origin_source TEXT NOT NULL DEFAULT 'manual',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -187,6 +204,16 @@ CREATE TABLE IF NOT EXISTS project_bookmarks (
     PRIMARY KEY (user_id, project_id)
 );
 
+CREATE TABLE IF NOT EXISTS system_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    details JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_entities_project ON entities(project_id);
 CREATE INDEX IF NOT EXISTS idx_entities_type_value ON entities(project_id, type, value);
 CREATE INDEX IF NOT EXISTS idx_edges_project ON edges(project_id);
@@ -211,6 +238,11 @@ async def run_pg_migrations(pool: "asyncpg.Pool") -> None:  # type: ignore[name-
             pass
         try:
             await conn.execute("ALTER TABLE projects ADD COLUMN owner_id UUID REFERENCES profiles(id) ON DELETE SET NULL")
+        except Exception:
+            pass
+        try:
+            await conn.execute("ALTER TABLE entities ADD COLUMN origin_source TEXT NOT NULL DEFAULT 'manual'")
+            await conn.execute("UPDATE entities SET origin_source = source WHERE origin_source IS NULL OR origin_source = ''")
         except Exception:
             pass
 
