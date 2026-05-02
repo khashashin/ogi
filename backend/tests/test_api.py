@@ -1088,7 +1088,7 @@ async def test_transform_settings_user_defaults_are_applied_on_run(
 
     resp = await client.post(
         f"/api/v1/projects/{pid}/entities",
-        json={"type": "Organization", "value": "Example Org", "properties": {"website": "example.com"}},
+        json={"type": "Domain", "value": "example.com", "properties": {}},
     )
     assert resp.status_code == 201
     eid = resp.json()["id"]
@@ -1101,19 +1101,19 @@ async def test_transform_settings_user_defaults_are_applied_on_run(
     assert resp.status_code == 201
 
     resp = await client.put(
-        "/api/v1/transforms/organization_to_team_members/settings/user",
-        json={"settings": {"openai_model": "gpt-4.1-mini", "max_members": "42"}},
+        "/api/v1/transforms/website_to_people/settings/user",
+        json={"settings": {"openai_model": "gpt-4.1-mini", "max_people": "42"}},
     )
     assert resp.status_code == 200
 
     resp = await client.post(
-        "/api/v1/transforms/organization_to_team_members/run",
+        "/api/v1/transforms/website_to_people/run",
         json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
     )
     assert resp.status_code == 200
     settings = captured_config.get("settings", {})
     assert settings.get("openai_model") == "gpt-4.1-mini"
-    assert settings.get("max_members") == "42"
+    assert settings.get("max_people") == "42"
     assert settings.get("openai_api_key") == "sk-test"
 
 
@@ -1198,7 +1198,7 @@ async def test_run_transform_blocks_stored_api_key_injection_for_community_plugi
         api_keys_required=[{"service": "openai", "description": "OpenAI", "env_var": "OPENAI_API_KEY"}],
     )
     plugin_engine = transforms_api.get_plugin_engine()
-    monkeypatch.setattr(plugin_engine, "get_plugin_for_transform", lambda transform_name: "mock-community-plugin" if transform_name == "organization_to_team_members" else None)
+    monkeypatch.setattr(plugin_engine, "get_plugin_for_transform", lambda transform_name: "mock-community-plugin" if transform_name == "website_to_people" else None)
     monkeypatch.setattr(plugin_engine, "get_plugin", lambda name: plugin_info if name == "mock-community-plugin" else None)
     monkeypatch.setattr(settings, "api_key_injection_allow_community_plugins", False)
 
@@ -1214,13 +1214,13 @@ async def test_run_transform_blocks_stored_api_key_injection_for_community_plugi
 
     resp = await client.post(
         f"/api/v1/projects/{pid}/entities",
-        json={"type": "Organization", "value": "Example Org"},
+        json={"type": "Domain", "value": "example.org"},
     )
     assert resp.status_code == 201
     eid = resp.json()["id"]
 
     resp = await client.post(
-        "/api/v1/transforms/organization_to_team_members/run",
+        "/api/v1/transforms/website_to_people/run",
         json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
     )
     assert_error_envelope(
@@ -1257,13 +1257,13 @@ async def test_run_transform_blocks_stored_api_key_injection_for_blocked_service
 
     resp = await client.post(
         f"/api/v1/projects/{pid}/entities",
-        json={"type": "Organization", "value": "Example Org"},
+        json={"type": "Domain", "value": "example.org"},
     )
     assert resp.status_code == 201
     eid = resp.json()["id"]
 
     resp = await client.post(
-        "/api/v1/transforms/organization_to_team_members/run",
+        "/api/v1/transforms/website_to_people/run",
         json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
     )
     assert_error_envelope(
@@ -1300,7 +1300,7 @@ async def test_plugin_api_key_usage_report_aggregates_last_use(
         json={
             "action": "transform.api_key_injected",
             "resource_type": "transform",
-            "resource_id": "organization_to_team_members",
+            "resource_id": "website_to_people",
             "details": {
                 "plugin_name": "mock-community-plugin",
                 "service_name": "openai",

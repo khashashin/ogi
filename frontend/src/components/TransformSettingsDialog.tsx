@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import type { TransformInfo, TransformSettingsResponse } from "../types/transform";
 import { api } from "../api/client";
@@ -8,6 +8,37 @@ interface TransformSettingsDialogProps {
   open: boolean;
   transform: TransformInfo | null;
   onClose: () => void;
+}
+
+function isDateTimeSetting(name: string): boolean {
+  return name.endsWith("_datetime");
+}
+
+function toDateTimeLocalValue(value: string): string {
+  if (!value) {
+    return "";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  if (!value) {
+    return "";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toISOString();
 }
 
 export function TransformSettingsDialog({ open, transform, onClose }: TransformSettingsDialogProps) {
@@ -29,13 +60,6 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
   const schema = useMemo(() => data?.settings_schema ?? [], [data]);
   const visibleSchema = useMemo(
     () => schema.filter((s) => !(s.field_type === "secret" && s.name.endsWith("_api_key"))),
-    [schema]
-  );
-  const managedApiKeyServices = useMemo(
-    () =>
-      schema
-        .filter((s) => s.field_type === "secret" && s.name.endsWith("_api_key"))
-        .map((s) => s.name.replace(/_api_key$/, "")),
     [schema]
   );
 
@@ -83,13 +107,6 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
           {visibleSchema.length === 0 && (
             <p className="text-xs text-text-muted">This transform has no configurable settings.</p>
           )}
-          {managedApiKeyServices.length > 0 && (
-            <div className="rounded border border-border bg-bg px-3 py-2">
-              <p className="text-xs text-text-muted">
-                API keys for {managedApiKeyServices.join(", ")} are managed in <span className="text-text">API Keys</span>.
-              </p>
-            </div>
-          )}
           {visibleSchema.map((s) => {
             const value = values[s.name] ?? "";
             return (
@@ -112,6 +129,30 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
                       </option>
                     ))}
                   </select>
+                ) : isDateTimeSetting(s.name) ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(value)}
+                      onChange={(e) =>
+                        setValues((v) => ({
+                          ...v,
+                          [s.name]: fromDateTimeLocalValue(e.target.value),
+                        }))
+                      }
+                      className="flex-1 px-2 py-1.5 text-sm bg-bg border border-border rounded text-text"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setValues((v) => ({ ...v, [s.name]: "" }))}
+                      disabled={!value}
+                      className="inline-flex items-center gap-1 rounded border border-border px-2 py-1.5 text-xs text-text-muted hover:text-text hover:bg-surface-hover disabled:opacity-50"
+                      title="Clear date/time"
+                    >
+                      <RotateCcw size={12} />
+                      Reset
+                    </button>
+                  </div>
                 ) : (
                   <input
                     type={s.field_type === "secret" ? "password" : "text"}
@@ -120,6 +161,11 @@ export function TransformSettingsDialog({ open, transform, onClose }: TransformS
                     placeholder={s.default || "(default)"}
                     className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded text-text"
                   />
+                )}
+                {isDateTimeSetting(s.name) && (
+                  <p className="text-[10px] text-text-muted">
+                    Uses your local timezone in the picker and saves UTC ISO-8601 to the backend.
+                  </p>
                 )}
               </div>
             );

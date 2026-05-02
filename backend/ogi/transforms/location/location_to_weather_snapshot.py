@@ -22,6 +22,13 @@ class LocationToWeatherSnapshot(BaseTransform):
             required=True,
             field_type="secret",
         ),
+        TransformSetting(
+            name="target_datetime",
+            display_name="Target Date/Time",
+            description="Optional ISO-8601 timestamp to fetch weather for a specific moment. Overrides observed_at.",
+            required=False,
+            field_type="string",
+        ),
     ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
@@ -31,11 +38,17 @@ class LocationToWeatherSnapshot(BaseTransform):
         if lat is None or lon is None:
             return TransformResult(messages=["Weather lookup skipped: missing valid coordinates."])
 
+        target_datetime_raw = config.settings.get("target_datetime", "")
+        target_datetime = self._parse_datetime(target_datetime_raw)
+        if target_datetime_raw.strip() and target_datetime is None:
+            return TransformResult(messages=["Weather lookup skipped: invalid target_datetime. Use ISO-8601 format."])
+
         observed_at = self._parse_datetime(props.get("observed_at"))
+        lookup_time = target_datetime or observed_at
         snapshot = await WeatherStore().get_snapshot(
             lat=lat,
             lon=lon,
-            observed_at=observed_at,
+            observed_at=lookup_time,
             api_key=config.settings.get("openweather_api_key", "").strip(),
         )
         if snapshot.error:
@@ -61,6 +74,10 @@ class LocationToWeatherSnapshot(BaseTransform):
             f"Weather snapshot: {summary}." if summary else "Weather snapshot added.",
             "Used weather cache." if snapshot.cache_hit else "Used weather provider.",
         ]
+        if target_datetime is not None:
+            messages.append(f"Requested timestamp: {target_datetime.isoformat()}.")
+        elif observed_at is not None:
+            messages.append(f"Observed timestamp: {observed_at.isoformat()}.")
         if snapshot.source_timestamp:
             messages.append(f"Source timestamp: {snapshot.source_timestamp}.")
 

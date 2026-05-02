@@ -10,7 +10,7 @@ readme = "README.md"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.134.0",
+    "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
@@ -26,10 +26,11 @@ dependencies = [
     "sqlmodel>=0.0.37",
     "alembic>=1.18.4",
     "typer>=0.24.1",
-    "cryptography>=46.0.0",
-    "rq>=2.3.0",
-    "redis>=6.0.0",
+    "cryptography>=46.0.5",
+    "rq>=2.7.0",
+    "redis>=7.3.0",
     "timezonefinder>=8.2.1",
+    "astral>=3.2",
 ]
 
 [project.scripts]
@@ -37,15 +38,14 @@ ogi = "ogi.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "httpx>=0.28.1",
-    "ruff>=0.14.0",
-    "mypy>=1.18.2",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.5",
+    "mypy>=1.19.1",
 ]
 web_extract = [
-    "iocsearcher>=1.0.0",
-    "playwright>=1.55.0",
+    "iocsearcher>=2.7.2",
+    "playwright>=1.58.0",
 ]
 
 [tool.setuptools.packages.find]

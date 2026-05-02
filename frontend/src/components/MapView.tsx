@@ -11,12 +11,14 @@ import type { MapCluster, MapPoint, MapRoute } from "../types/map";
 const POINT_SOURCE_ID = "ogi-points";
 const CLUSTER_SOURCE_ID = "ogi-clusters";
 const ROUTE_SOURCE_ID = "ogi-routes";
-const BASE_LAYER_OSM = "basemap-osm";
-const BASE_LAYER_HOT = "basemap-hot";
-const BASE_LAYER_CARTO = "basemap-carto";
+const BASE_LAYER_DARK = "basemap-dark";
+const BASE_LAYER_DARK_GRAY = "basemap-dark-gray";
+const BASE_LAYER_DARK_MINIMAL = "basemap-dark-minimal";
+const BASE_LAYER_LIGHT = "basemap-light";
+const BASE_LAYER_LIGHT_DETAIL = "basemap-light-detail";
 const BASE_LAYER_SAT = "basemap-sat";
 
-type Basemap = "osm" | "hot" | "carto" | "sat";
+type Basemap = "dark" | "darkGray" | "darkMinimal" | "light" | "lightDetail" | "sat";
 
 export function MapView() {
   const { currentProject } = useProjectStore();
@@ -26,7 +28,7 @@ export function MapView() {
   const [routes, setRoutes] = useState<MapRoute[]>([]);
   const [zoom, setZoom] = useState(4);
   const [cluster, setCluster] = useState(true);
-  const [basemap, setBasemap] = useState<Basemap>("osm");
+  const [basemap, setBasemap] = useState<Basemap>("dark");
   const [showPoints, setShowPoints] = useState(true);
   const [showRoutes, setShowRoutes] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -77,23 +79,46 @@ export function MapView() {
       style: {
         version: 8,
         sources: {
-          "base-osm": {
+          "base-dark": {
             type: "raster",
-            tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+            tiles: [
+              "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+              "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+            ],
+            tileSize: 256,
+            attribution: "&copy; OpenStreetMap Contributors, &copy; CARTO",
+          },
+          "base-dark-gray": {
+            type: "raster",
+            tiles: [
+              "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            ],
+            tileSize: 256,
+            attribution: "Tiles &copy; Esri",
+          },
+          "base-dark-minimal": {
+            type: "raster",
+            tiles: [
+              "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+              "https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+            ],
+            tileSize: 256,
+            attribution: "&copy; OpenStreetMap Contributors, &copy; CARTO",
+          },
+          "base-light": {
+            type: "raster",
+            tiles: [
+              "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            ],
             tileSize: 256,
             attribution: "&copy; OpenStreetMap Contributors",
           },
-          "base-hot": {
+          "base-light-detail": {
             type: "raster",
             tiles: ["https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"],
             tileSize: 256,
             attribution: "&copy; OpenStreetMap Contributors, Humanitarian OpenStreetMap Team",
-          },
-          "base-carto": {
-            type: "raster",
-            tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap Contributors, &copy; CARTO",
           },
           "base-sat": {
             type: "raster",
@@ -103,9 +128,11 @@ export function MapView() {
           },
         },
         layers: [
-          { id: BASE_LAYER_OSM, type: "raster", source: "base-osm" },
-          { id: BASE_LAYER_HOT, type: "raster", source: "base-hot", layout: { visibility: "none" } },
-          { id: BASE_LAYER_CARTO, type: "raster", source: "base-carto", layout: { visibility: "none" } },
+          { id: BASE_LAYER_DARK, type: "raster", source: "base-dark" },
+          { id: BASE_LAYER_DARK_GRAY, type: "raster", source: "base-dark-gray", layout: { visibility: "none" } },
+          { id: BASE_LAYER_DARK_MINIMAL, type: "raster", source: "base-dark-minimal", layout: { visibility: "none" } },
+          { id: BASE_LAYER_LIGHT, type: "raster", source: "base-light", layout: { visibility: "none" } },
+          { id: BASE_LAYER_LIGHT_DETAIL, type: "raster", source: "base-light-detail", layout: { visibility: "none" } },
           { id: BASE_LAYER_SAT, type: "raster", source: "base-sat", layout: { visibility: "none" } },
         ],
       },
@@ -276,9 +303,11 @@ export function MapView() {
       }
     };
 
-    setVis(BASE_LAYER_OSM, basemap === "osm");
-    setVis(BASE_LAYER_HOT, basemap === "hot");
-    setVis(BASE_LAYER_CARTO, basemap === "carto");
+    setVis(BASE_LAYER_DARK, basemap === "dark");
+    setVis(BASE_LAYER_DARK_GRAY, basemap === "darkGray");
+    setVis(BASE_LAYER_DARK_MINIMAL, basemap === "darkMinimal");
+    setVis(BASE_LAYER_LIGHT, basemap === "light");
+    setVis(BASE_LAYER_LIGHT_DETAIL, basemap === "lightDetail");
     setVis(BASE_LAYER_SAT, basemap === "sat");
     setVis("ogi-points-layer", showPoints);
     setVis("ogi-routes-layer", showRoutes);
@@ -323,9 +352,11 @@ export function MapView() {
               onChange={(e) => setBasemap(e.target.value as Basemap)}
               className="rounded border border-border bg-surface px-2 py-1 text-xs text-text"
             >
-              <option value="osm">OSM Standard</option>
-              <option value="hot">OSM Humanitarian</option>
-              <option value="carto">CARTO Light</option>
+              <option value="dark">CARTO Dark</option>
+              <option value="darkGray">Esri Dark Gray</option>
+              <option value="darkMinimal">CARTO Dark Minimal</option>
+              <option value="light">OSM Standard</option>
+              <option value="lightDetail">OSM Humanitarian</option>
               <option value="sat">Satellite (Esri)</option>
             </select>
           </label>
