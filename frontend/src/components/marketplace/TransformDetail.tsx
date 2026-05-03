@@ -10,8 +10,11 @@ interface TransformDetailProps {
   enabled: boolean;
   canManage: boolean;
   installing: boolean;
+  updateAvailable: boolean;
+  updating: boolean;
   toggling: boolean;
   onInstall: () => void;
+  onUpdate: () => void;
   onEnable: () => void;
   onDisable: () => void;
   onBack: () => void;
@@ -23,8 +26,11 @@ export function TransformDetail({
   enabled,
   canManage,
   installing,
+  updateAvailable,
+  updating,
   toggling,
   onInstall,
+  onUpdate,
   onEnable,
   onDisable,
   onBack,
@@ -65,8 +71,11 @@ export function TransformDetail({
           canManage={canManage}
           bundled={transform.bundled}
           installing={installing}
+          updateAvailable={updateAvailable}
+          updating={updating}
           toggling={toggling}
           onInstall={onInstall}
+          onUpdate={onUpdate}
           onEnable={onEnable}
           onDisable={onDisable}
         />

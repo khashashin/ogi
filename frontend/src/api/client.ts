@@ -3,7 +3,7 @@ import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../type
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
 import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
-import type { RegistryIndex, RegistryTransform, PluginInfo, PluginApiKeyUsageReportItem } from "../types/registry";
+import type { RegistryIndex, RegistryTransform, PluginInfo, PluginApiKeyUsageReportItem, UpdateCheckItem } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import type { TimelineResponse } from "../types/timeline";
 import type { MapPointsResponse, MapRoutesResponse } from "../types/map";
@@ -366,6 +366,7 @@ export const api = {
 
   registry: {
     index: () => request<RegistryIndex>("/registry/index"),
+    checkUpdates: () => request<UpdateCheckItem[]>("/registry/check-updates"),
     search: (q?: string, category?: string, tier?: string) => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);

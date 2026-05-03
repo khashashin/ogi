@@ -1,20 +1,19 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Maximize2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon } from "lucide-react";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Download, Undo2, Redo2, Keyboard, User, Lock, Unlock, Users, ChevronRight, Table, Network, Map as MapIcon } from "lucide-react";
 import { ExportImportDialog } from "./ExportImportDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { TransformHub } from "./marketplace/TransformHub";
 import { ShareDialog } from "./ShareDialog";
-import forceAtlas2 from "graphology-layout-forceatlas2";
-import { circular } from "graphology-layout";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useUndoStore } from "../stores/undoStore";
 import { useAuthStore } from "../stores/authStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
+import { applyGraphLayout, GRAPH_LAYOUT_OPTIONS, type GraphLayoutPreset } from "../lib/graphLayouts";
 
 export function Toolbar() {
   const { currentProject, updateProject } = useProjectStore();
@@ -27,6 +26,7 @@ export function Toolbar() {
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [selectedLayout, setSelectedLayout] = useState<GraphLayoutPreset>("force");
   const { user, authEnabled } = useAuthStore();
   const isViewer = useIsViewer();
 
@@ -39,23 +39,12 @@ export function Toolbar() {
     }
   };
 
-  const runForceLayout = () => {
+  const applySelectedLayout = () => {
     if (graph.order < 2) return;
-    forceAtlas2.assign(graph, {
-      iterations: 200,
-      settings: {
-        gravity: 1,
-        scalingRatio: 2,
-        barnesHutOptimize: graph.order > 50,
-      },
-    });
+    applyGraphLayout(selectedLayout, graph, entities);
     if (currentProject) persistPositions(currentProject.id);
-  };
-
-  const runCircularLayout = () => {
-    if (graph.order < 2) return;
-    circular.assign(graph);
-    if (currentProject) persistPositions(currentProject.id);
+    getSigmaRef()?.refresh();
+    getSigmaRef()?.getCamera().animatedReset({ duration: 300 });
   };
 
   // Listen for keyboard shortcut toggle
@@ -147,20 +136,28 @@ export function Toolbar() {
           <div className="w-px h-4 bg-border" />
 
           {/* Layout controls */}
-          <button
-            onClick={runForceLayout}
-            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-            title="Force-directed layout"
-          >
-            <LayoutGrid size={14} />
-          </button>
-          <button
-            onClick={runCircularLayout}
-            className="p-1.5 text-text-muted hover:text-text hover:bg-surface-hover rounded"
-            title="Circular layout"
-          >
-            <Maximize2 size={14} />
-          </button>
+          <div className="flex items-center gap-1 rounded border border-border bg-bg px-1 py-0.5">
+            <LayoutGrid size={12} className="text-text-muted" />
+            <select
+              value={selectedLayout}
+              onChange={(e) => setSelectedLayout(e.target.value as GraphLayoutPreset)}
+              className="bg-transparent text-[11px] text-text focus:outline-none"
+              title="Choose layout preset"
+            >
+              {GRAPH_LAYOUT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id} className="bg-surface text-text">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={applySelectedLayout}
+              className="p-1 text-text-muted hover:text-text hover:bg-surface-hover rounded"
+              title={GRAPH_LAYOUT_OPTIONS.find((option) => option.id === selectedLayout)?.description ?? "Apply layout"}
+            >
+              <Wand2 size={12} />
+            </button>
+          </div>
 
           <div className="w-px h-4 bg-border" />
         </>

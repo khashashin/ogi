@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -148,9 +149,9 @@ class MapStore:
         display_name: str = "",
     ) -> GeocodeCache:
         normalized = query.strip().lower()
-        existing = await self._get_cache(normalized)
         now = datetime.now(timezone.utc)
-        if existing:
+
+        async def save_existing(existing: GeocodeCache) -> GeocodeCache:
             existing.lat = float(lat)
             existing.lon = float(lon)
             existing.confidence = float(confidence)
@@ -163,6 +164,10 @@ class MapStore:
             await self.session.refresh(existing)
             return existing
 
+        existing = await self._get_cache(normalized)
+        if existing:
+            return await save_existing(existing)
+
         row = GeocodeCache(
             query=normalized,
             lat=float(lat),
@@ -172,9 +177,17 @@ class MapStore:
             display_name=display_name,
         )
         self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
+        try:
+            await self.session.commit()
+            await self.session.refresh(row)
+            return row
+        except IntegrityError:
+            # Another request may have inserted the same normalized query first.
+            await self.session.rollback()
+            existing = await self._get_cache(normalized)
+            if existing is None:
+                raise
+            return await save_existing(existing)
 
     async def _geocode_and_cache(self, query: str) -> GeocodeCache | None:
         try:

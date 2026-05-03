@@ -25,6 +25,9 @@ class LocationGeocodeResult(BaseModel):
     rate_limited: bool = False
     retry_after_seconds: int | None = None
     cache_hit: bool = False
+    road: str | None = None
+    county: str | None = None
+    address_hierarchy: dict[str, str] = {}
 
 
 class LocationSearchStore:
@@ -34,6 +37,7 @@ class LocationSearchStore:
     _cooldown_until: float = 0.0
     _memory_cache: dict[str, tuple[float, list[LocationSuggestion]]] = {}
     _memory_ttl_seconds: int = 300
+    _reverse_memory_cache: dict[str, tuple[float, LocationGeocodeResult]] = {}
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -173,6 +177,58 @@ class LocationSearchStore:
 
         return LocationSuggestResponse(query=q, suggestions=suggestions[:limit], source="nominatim")
 
+    async def reverse_geocode(self, lat: float, lon: float) -> LocationGeocodeResult:
+        rounded_lat = round(lat, 4)
+        rounded_lon = round(lon, 4)
+        cache_key = self._reverse_cache_key(rounded_lat, rounded_lon)
+        now = time.time()
+
+        mem_hit = self._reverse_memory_cache.get(cache_key)
+        if mem_hit and (now - mem_hit[0]) < self._memory_ttl_seconds:
+            return mem_hit[1].model_copy(update={"cache_hit": True, "source": "cache"})
+
+        if now < self._cooldown_until:
+            retry = max(1, int(self._cooldown_until - now))
+            return LocationGeocodeResult(
+                query=cache_key,
+                lat=lat,
+                lon=lon,
+                source="rate-limit",
+                rate_limited=True,
+                retry_after_seconds=retry,
+            )
+
+        if now < self._next_upstream_at:
+            retry = max(1, int(self._next_upstream_at - now))
+            return LocationGeocodeResult(
+                query=cache_key,
+                lat=lat,
+                lon=lon,
+                source="throttle",
+                rate_limited=True,
+                retry_after_seconds=retry,
+            )
+
+        upstream = await self._fetch_nominatim_reverse(lat, lon)
+        if upstream is None:
+            self._cooldown_until = time.time() + 60
+            return LocationGeocodeResult(
+                query=cache_key,
+                lat=lat,
+                lon=lon,
+                source="rate-limit",
+                rate_limited=True,
+                retry_after_seconds=60,
+            )
+
+        self._next_upstream_at = time.time() + 1.0
+        if upstream.lat is None or upstream.lon is None:
+            upstream.lat = lat
+            upstream.lon = lon
+
+        self._reverse_memory_cache[cache_key] = (time.time(), upstream)
+        return upstream
+
     async def _get_cache_exact(self, normalized_query: str) -> GeocodeCache | None:
         stmt = select(GeocodeCache).where(GeocodeCache.query == normalized_query)
         return (await self.session.execute(stmt)).scalar_one_or_none()
@@ -273,6 +329,29 @@ class LocationSearchStore:
                 continue
         return suggestions
 
+    async def _fetch_nominatim_reverse(self, lat: float, lon: float) -> LocationGeocodeResult | None:
+        params = {
+            "lat": f"{lat:.6f}",
+            "lon": f"{lon:.6f}",
+            "format": "jsonv2",
+            "addressdetails": "1",
+        }
+        headers = {"User-Agent": "OGI-LocationReverseGeocoder/1.0"}
+        try:
+            async with httpx.AsyncClient(timeout=6) as client:
+                resp = await client.get("https://nominatim.openstreetmap.org/reverse", params=params, headers=headers)
+            if resp.status_code == 429:
+                return None
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception:
+            return LocationGeocodeResult(query=self._reverse_cache_key(lat, lon), lat=lat, lon=lon, source="nominatim")
+
+        if not isinstance(payload, dict):
+            return LocationGeocodeResult(query=self._reverse_cache_key(lat, lon), lat=lat, lon=lon, source="nominatim")
+
+        return self._parse_nominatim_result(self._reverse_cache_key(lat, lon), payload)
+
     def _parse_nominatim_result(self, query: str, item: dict) -> LocationGeocodeResult:
         address = item.get("address")
         address = address if isinstance(address, dict) else {}
@@ -294,6 +373,19 @@ class LocationSearchStore:
             or self._clean_text(address.get("hamlet"))
         )
         postcode = self._clean_text(address.get("postcode"))
+        road = (
+            self._clean_text(address.get("road"))
+            or self._clean_text(address.get("pedestrian"))
+            or self._clean_text(address.get("footway"))
+            or self._clean_text(address.get("residential"))
+            or self._clean_text(address.get("path"))
+        )
+        county = self._clean_text(address.get("county"))
+        address_hierarchy = {
+            key: cleaned
+            for key, value in address.items()
+            if (cleaned := self._clean_text(value)) is not None
+        }
 
         return LocationGeocodeResult(
             query=query,
@@ -306,6 +398,9 @@ class LocationSearchStore:
             region=region,
             city=city,
             postcode=postcode,
+            road=road,
+            county=county,
+            address_hierarchy=address_hierarchy,
         )
 
     @staticmethod
@@ -334,3 +429,7 @@ class LocationSearchStore:
         if any(address.get(key) for key in ("city", "town", "village", "municipality", "state", "region")):
             score += 0.07
         return round(min(score, 0.95), 2)
+
+    @staticmethod
+    def _reverse_cache_key(lat: float, lon: float) -> str:
+        return f"rev:{round(lat, 4):.4f}:{round(lon, 4):.4f}"

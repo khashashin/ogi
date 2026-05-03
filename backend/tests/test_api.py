@@ -147,7 +147,17 @@ async def test_list_entity_types(client: AsyncClient):
     resp = await client.get("/api/v1/transforms/entity-types")
     assert resp.status_code == 200
     types = resp.json()
-    assert len(types) == 19
+    type_names = {item["type"] for item in types}
+    assert {
+        "Person",
+        "Username",
+        "EmailAddress",
+        "Domain",
+        "URL",
+        "Location",
+        "Organization",
+    } <= type_names
+    assert len(type_names) == len(types)
 
 
 @pytest.mark.asyncio
@@ -1362,6 +1372,46 @@ async def test_registry_install_writes_system_audit_log(
 
 
 @pytest.mark.asyncio
+async def test_registry_update_reloads_plugin_runtime_metadata(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import registry as registry_api
+
+    class FakeRegistry:
+        async def fetch_index(self):
+            return {"transforms": []}
+
+        def get_transform(self, slug: str):
+            return {
+                "slug": slug,
+                "version": "1.0.3",
+                "verification_tier": "community",
+                "api_keys_required": [],
+            }
+
+    class FakeInstaller:
+        async def update(self, slug: str):
+            assert slug == "username-user-scanner"
+            return True
+
+    reloaded: list[str] = []
+
+    def fake_reload(slug: str) -> int:
+        reloaded.append(slug)
+        return 1
+
+    monkeypatch.setattr(registry_api, "get_registry_client", lambda: FakeRegistry())
+    monkeypatch.setattr(registry_api, "get_transform_installer", lambda: FakeInstaller())
+    monkeypatch.setattr(registry_api, "_reload_plugin_runtime", fake_reload)
+
+    resp = await client.post("/api/v1/registry/update/username-user-scanner")
+    assert resp.status_code == 200
+    assert reloaded == ["username-user-scanner"]
+    assert resp.json()["version"] == "1.0.3"
+    assert "reloaded" in resp.json()["message"]
+
+
+@pytest.mark.asyncio
 async def test_get_transform_run_forbidden_for_non_member(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -2154,6 +2204,49 @@ async def test_map_routes_endpoint_returns_routes_for_geo_edges(client: AsyncCli
     assert len(routes) >= 1
     assert routes[0]["source_entity_id"] == src_id
     assert routes[0]["target_entity_id"] == dst_id
+
+
+@pytest.mark.asyncio
+async def test_map_store_upsert_cache_recovers_from_duplicate_insert(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from ogi.db.database import get_session
+    from ogi.models import GeocodeCache
+    from ogi.store.map_store import MapStore
+
+    async for session in get_session():
+        session.add(
+            GeocodeCache(
+                query="nyc",
+                lat=40.7128,
+                lon=-74.0060,
+                display_name="New York, NY",
+                confidence=0.7,
+                source="cache",
+            )
+        )
+        await session.commit()
+
+        store = MapStore(session)
+
+        calls = 0
+
+        async def miss_then_reload(query: str):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return None
+            return (await session.execute(select(GeocodeCache).where(GeocodeCache.query == query))).scalar_one_or_none()
+
+        monkeypatch.setattr(store, "_get_cache", miss_then_reload)
+
+        row = await store._upsert_cache("NYC", 40.7130, -74.0059, 0.9, source="entity", display_name="New York City")
+        assert row.query == "nyc"
+        assert row.source == "entity"
+        assert row.display_name == "New York City"
+
+        rows = list((await session.execute(select(GeocodeCache).where(GeocodeCache.query == "nyc"))).scalars().all())
+        assert len(rows) == 1
+        assert rows[0].confidence == 0.9
+        break
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import type {
   RegistryIndex,
   PluginInfo,
   PluginApiKeyUsageReportItem,
+  UpdateCheckItem,
 } from "../types/registry";
 
 interface RegistryState {
@@ -12,12 +13,14 @@ interface RegistryState {
   index: RegistryIndex | null;
   installedPlugins: PluginInfo[];
   pluginApiKeyUsageReport: PluginApiKeyUsageReportItem[];
+  availableUpdates: UpdateCheckItem[];
   searchResults: RegistryTransform[];
   canManage: boolean;
 
   // UI state
   loading: boolean;
   installing: string | null;
+  updating: string | null;
   toggling: string | null;
   error: string | null;
   searchQuery: string;
@@ -29,8 +32,10 @@ interface RegistryState {
   fetchIndex: () => Promise<void>;
   fetchInstalledPlugins: () => Promise<void>;
   fetchPluginApiKeyUsageReport: () => Promise<void>;
+  fetchAvailableUpdates: () => Promise<void>;
   searchTransforms: (query: string, category?: string, tier?: string) => Promise<void>;
   installTransform: (transform: RegistryTransform) => Promise<void>;
+  updateTransform: (slug: string) => Promise<void>;
   enablePlugin: (name: string) => Promise<void>;
   disablePlugin: (name: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
@@ -44,10 +49,12 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
   index: null,
   installedPlugins: [],
   pluginApiKeyUsageReport: [],
+  availableUpdates: [],
   searchResults: [],
   canManage: false,
   loading: false,
   installing: null,
+  updating: null,
   toggling: null,
   error: null,
   searchQuery: "",
@@ -87,6 +94,19 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
     }
   },
 
+  fetchAvailableUpdates: async () => {
+    if (!get().canManage) {
+      set({ availableUpdates: [] });
+      return;
+    }
+    try {
+      const updates = await api.registry.checkUpdates();
+      set({ availableUpdates: updates });
+    } catch {
+      set({ availableUpdates: [] });
+    }
+  },
+
   searchTransforms: async (query: string, category?: string, tier?: string) => {
     set({ loading: true, error: null, searchQuery: query });
     try {
@@ -108,11 +128,31 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       // Refresh installed list and search results
       await get().fetchInstalledPlugins();
       await get().fetchPluginApiKeyUsageReport();
+      await get().fetchAvailableUpdates();
       const { searchQuery, selectedCategory, selectedTier } = get();
       await get().searchTransforms(searchQuery, selectedCategory ?? undefined, selectedTier ?? undefined);
       set({ installing: null });
     } catch (err) {
       set({ error: (err as Error).message, installing: null });
+    }
+  },
+
+  updateTransform: async (slug: string) => {
+    if (!get().canManage) {
+      set({ error: "Only admins can update transforms." });
+      return;
+    }
+    set({ updating: slug, error: null });
+    try {
+      await api.registry.update(slug);
+      await get().fetchInstalledPlugins();
+      await get().fetchPluginApiKeyUsageReport();
+      await get().fetchAvailableUpdates();
+      const { searchQuery, selectedCategory, selectedTier } = get();
+      await get().searchTransforms(searchQuery, selectedCategory ?? undefined, selectedTier ?? undefined);
+      set({ updating: null });
+    } catch (err) {
+      set({ error: (err as Error).message, updating: null });
     }
   },
 
@@ -122,6 +162,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       await api.plugins.enable(name);
       await get().fetchInstalledPlugins();
       await get().fetchPluginApiKeyUsageReport();
+      await get().fetchAvailableUpdates();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });
@@ -134,6 +175,7 @@ export const useRegistryStore = create<RegistryState>((set, get) => ({
       await api.plugins.disable(name);
       await get().fetchInstalledPlugins();
       await get().fetchPluginApiKeyUsageReport();
+      await get().fetchAvailableUpdates();
       set({ toggling: null });
     } catch (err) {
       set({ error: (err as Error).message, toggling: null });

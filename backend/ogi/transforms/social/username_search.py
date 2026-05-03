@@ -16,7 +16,7 @@ class UsernameSearch(BaseTransform):
     name = "username_search"
     display_name = "Username Search"
     description = "Checks popular platforms for username existence"
-    input_types = [EntityType.SOCIAL_MEDIA, EntityType.PERSON]
+    input_types = [EntityType.SOCIAL_MEDIA, EntityType.USERNAME]
     output_types = [EntityType.SOCIAL_MEDIA, EntityType.URL]
     category = "Social Media"
 

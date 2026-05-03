@@ -129,11 +129,13 @@ class TransformEngine:
         from ogi.transforms.email.domain_to_emails import DomainToEmails
         from ogi.transforms.cert.domain_to_certs import DomainToCerts
         from ogi.transforms.cert.cert_transparency import CertTransparency
+        from ogi.transforms.person.person_to_usernames import PersonToUsernames
         from ogi.transforms.social.username_search import UsernameSearch
         from ogi.transforms.hash.hash_lookup import HashLookup
         from ogi.transforms.web.website_to_people import WebsiteToPeople
         from ogi.transforms.location.location_to_geocode import LocationToGeocode
         from ogi.transforms.location.location_to_nearby_asns import LocationToNearbyASNs
+        from ogi.transforms.location.location_to_reverse_geocode import LocationToReverseGeocode
         from ogi.transforms.location.location_to_timezone import LocationToTimezone
         from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
         from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
@@ -144,10 +146,12 @@ class TransformEngine:
             URLToHeaders, URLToLinks, URLToContent, ContentToIOCs, DomainToURLs,
             EmailToDomain, DomainToEmails,
             DomainToCerts, CertTransparency,
+            PersonToUsernames,
             UsernameSearch, HashLookup,
             WebsiteToPeople,
             LocationToGeocode,
             LocationToNearbyASNs,
+            LocationToReverseGeocode,
             LocationToTimezone,
             LocationToSunTimes,
             LocationToWeatherSnapshot,
