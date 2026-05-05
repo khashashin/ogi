@@ -66,6 +66,7 @@ class _FakeHTTPClient:
     def __init__(self, *, get_response=None, head_response=None):
         self._get_response = get_response
         self._head_response = head_response
+        self.requests: list[tuple[str, str, dict]] = []
 
     async def __aenter__(self):
         return self
@@ -76,6 +77,12 @@ class _FakeHTTPClient:
     async def get(self, url: str, **kwargs):
         if callable(self._get_response):
             return self._get_response(url)
+        return self._get_response
+
+    async def request(self, method: str, url: str, **kwargs):
+        self.requests.append((method, url, kwargs))
+        if callable(self._get_response):
+            return self._get_response(url, **kwargs)
         return self._get_response
 
     async def head(self, url: str, **kwargs):
@@ -470,23 +477,125 @@ async def test_username_search_with_mocked_http(monkeypatch: pytest.MonkeyPatch)
     transform = UsernameSearch()
     entity = Entity(type=EntityType.USERNAME, value="alice")
 
-    def fake_head(url: str):
+    async def fake_sites(*, max_sites: int):
+        return (
+            [
+                {
+                    "name": "GitHub",
+                    "cat": "developer",
+                    "uri_check": "https://github.com/{account}",
+                    "uri_pretty": "https://github.com/{account}",
+                    "e_code": 200,
+                    "e_string": "",
+                },
+                {
+                    "name": "Reddit",
+                    "cat": "community",
+                    "uri_check": "https://www.reddit.com/user/{account}",
+                    "uri_pretty": "https://www.reddit.com/user/{account}",
+                    "e_code": 200,
+                    "e_string": "",
+                },
+            ],
+            "test",
+        )
+
+    def fake_get(url: str, **kwargs):
         if "github.com" in url:
-            return _FakeResponse(status_code=200)
-        return _FakeResponse(status_code=404)
+            return _FakeResponse(status_code=200, text="alice developer profile")
+        return _FakeResponse(status_code=404, text="not found")
 
     def fake_client(*args, **kwargs):
-        return _FakeHTTPClient(head_response=fake_head)
-
-    async def no_sleep(_seconds: float):
-        return None
+        return _FakeHTTPClient(get_response=fake_get)
 
     monkeypatch.setattr("ogi.transforms.social.username_search.httpx.AsyncClient", fake_client)
-    monkeypatch.setattr("ogi.transforms.social.username_search.asyncio.sleep", no_sleep)
+    monkeypatch.setattr(transform, "_get_candidate_sites", fake_sites)
     result = await transform.run(entity, TransformConfig())
     assert any(e.type == EntityType.SOCIAL_MEDIA for e in result.entities)
     assert any(e.type == EntityType.URL for e in result.entities)
     assert any("GitHub" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_username_search_skips_generic_short_username():
+    transform = UsernameSearch()
+    entity = Entity(type=EntityType.USERNAME, value="adm")
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities == []
+    assert any("below minimum username length" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_username_search_requires_username_in_body(monkeypatch: pytest.MonkeyPatch):
+    transform = UsernameSearch()
+    entity = Entity(type=EntityType.USERNAME, value="alice")
+
+    async def fake_sites(*, max_sites: int):
+        return (
+            [
+                {
+                    "name": "GitHub",
+                    "cat": "developer",
+                    "uri_check": "https://github.com/{account}",
+                    "uri_pretty": "https://github.com/{account}",
+                    "e_code": 200,
+                    "e_string": "",
+                }
+            ],
+            "test",
+        )
+
+    def fake_get(url: str, **kwargs):
+        return _FakeResponse(status_code=200, text="developer profile page")
+
+    def fake_client(*args, **kwargs):
+        return _FakeHTTPClient(get_response=fake_get)
+
+    monkeypatch.setattr("ogi.transforms.social.username_search.httpx.AsyncClient", fake_client)
+    monkeypatch.setattr(transform, "_get_candidate_sites", fake_sites)
+
+    result = await transform.run(entity, TransformConfig())
+    assert result.entities == []
+    assert any("No matching accounts found" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_username_search_uses_post_for_sites_with_post_body(monkeypatch: pytest.MonkeyPatch):
+    transform = UsernameSearch()
+    entity = Entity(type=EntityType.USERNAME, value="alice")
+
+    async def fake_sites(*, max_sites: int):
+        return (
+            [
+                {
+                    "name": "ExampleSite",
+                    "cat": "community",
+                    "uri_check": "https://example.com/check/{account}",
+                    "uri_pretty": "https://example.com/u/{account}",
+                    "e_code": 200,
+                    "e_string": "",
+                    "post_body": "username=alice",
+                }
+            ],
+            "test",
+        )
+
+    client = _FakeHTTPClient(get_response=_FakeResponse(status_code=200, text="alice profile"))
+
+    def fake_client(*args, **kwargs):
+        return client
+
+    monkeypatch.setattr("ogi.transforms.social.username_search.httpx.AsyncClient", fake_client)
+    monkeypatch.setattr(transform, "_get_candidate_sites", fake_sites)
+
+    result = await transform.run(entity, TransformConfig())
+
+    assert result.entities
+    assert client.requests
+    method, _url, kwargs = client.requests[0]
+    assert method == "POST"
+    assert kwargs["data"] == "username=alice"
 
 
 @pytest.mark.asyncio
