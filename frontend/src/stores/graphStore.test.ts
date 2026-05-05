@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { EntityType, type Entity } from "../types/entity";
 import { DEFAULT_FILTER_STATE, useGraphStore } from "./graphStore";
+import type { Edge } from "../types/edge";
 
 function makeEntity(id: string, overrides: Partial<Entity> = {}): Entity {
   return {
@@ -19,6 +20,21 @@ function makeEntity(id: string, overrides: Partial<Entity> = {}): Entity {
     created_at: "2026-03-03T10:00:00Z",
     updated_at: "2026-03-03T10:00:00Z",
     ...overrides,
+  };
+}
+
+function makeEdge(id: string, sourceId: string, targetId: string): Edge {
+  return {
+    id,
+    source_id: sourceId,
+    target_id: targetId,
+    label: "related",
+    weight: 1,
+    properties: {},
+    bidirectional: false,
+    source_transform: "manual",
+    project_id: "p-1",
+    created_at: "2026-03-03T10:00:00Z",
   };
 }
 
@@ -118,5 +134,113 @@ describe("graphStore filters", () => {
     const state = useGraphStore.getState();
     expect(state.hiddenNodeIds.size).toBe(0);
     expect(state.filterState).toEqual(DEFAULT_FILTER_STATE);
+  });
+
+  it("keeps manually hidden nodes hidden across filter changes", () => {
+    const domain = makeEntity("e-domain", { type: EntityType.Domain });
+    const ip = makeEntity("e-ip", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [domain.id, domain],
+        [ip.id, ip],
+      ]),
+    });
+
+    useGraphStore.getState().hideNode("p-1", domain.id);
+    useGraphStore.getState().setFilterState("p-1", { types: [EntityType.IPAddress] });
+
+    const state = useGraphStore.getState();
+    expect(state.manualHiddenNodeIds.has(domain.id)).toBe(true);
+    expect(state.hiddenNodeIds.has(domain.id)).toBe(true);
+    expect(state.hiddenNodeIds.has(ip.id)).toBe(false);
+  });
+
+  it("can unhide nodes and edges without deleting them", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b", { type: EntityType.IPAddress });
+    const edge = makeEdge("edge-1", a.id, b.id);
+    useGraphStore.setState({
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+      ]),
+      edges: new Map([[edge.id, edge]]),
+    });
+
+    useGraphStore.getState().hideNode("p-1", a.id);
+    useGraphStore.getState().hideEdge("p-1", edge.id);
+    expect(useGraphStore.getState().hiddenNodeIds.has(a.id)).toBe(true);
+    expect(useGraphStore.getState().hiddenEdgeIds.has(edge.id)).toBe(true);
+
+    useGraphStore.getState().unhideNode("p-1", a.id);
+    useGraphStore.getState().unhideEdge("p-1", edge.id);
+
+    const state = useGraphStore.getState();
+    expect(state.entities.has(a.id)).toBe(true);
+    expect(state.edges.has(edge.id)).toBe(true);
+    expect(state.hiddenNodeIds.has(a.id)).toBe(false);
+    expect(state.hiddenEdgeIds.has(edge.id)).toBe(false);
+  });
+
+  it("pins selected nodes and can clear all pins", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+      ]),
+      selectedNodeId: a.id,
+      selectedNodeIds: new Set([a.id, b.id]),
+    });
+
+    useGraphStore.getState().pinSelected("p-1");
+    expect(useGraphStore.getState().pinnedNodeIds.has(a.id)).toBe(true);
+    expect(useGraphStore.getState().pinnedNodeIds.has(b.id)).toBe(true);
+
+    useGraphStore.getState().unpinAll("p-1");
+    expect(useGraphStore.getState().pinnedNodeIds.size).toBe(0);
+  });
+
+  it("pins only visible nodes when locking current positions", () => {
+    const visible = makeEntity("e-visible");
+    const hidden = makeEntity("e-hidden", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [visible.id, visible],
+        [hidden.id, hidden],
+      ]),
+      hiddenNodeIds: new Set([hidden.id]),
+    });
+
+    useGraphStore.getState().pinVisible("p-1");
+
+    const state = useGraphStore.getState();
+    expect(state.pinnedNodeIds.has(visible.id)).toBe(true);
+    expect(state.pinnedNodeIds.has(hidden.id)).toBe(false);
+  });
+
+  it("persists pins in local storage and reloads them by project", () => {
+    const a = makeEntity("e-a");
+    const b = makeEntity("e-b", { type: EntityType.IPAddress });
+    useGraphStore.setState({
+      entities: new Map([
+        [a.id, a],
+        [b.id, b],
+      ]),
+      selectedNodeIds: new Set([a.id]),
+    });
+
+    useGraphStore.getState().pinSelected("p-1");
+    expect(JSON.parse(localStorage.getItem("ogi-pinned-p-1") || "{}")).toEqual({
+      entityIds: [a.id],
+    });
+
+    useGraphStore.setState({ pinnedNodeIds: new Set() });
+    const persisted = JSON.parse(localStorage.getItem("ogi-pinned-p-1") || "{}");
+    useGraphStore.setState({ pinnedNodeIds: new Set(persisted.entityIds) });
+
+    expect(useGraphStore.getState().pinnedNodeIds.has(a.id)).toBe(true);
+    expect(useGraphStore.getState().pinnedNodeIds.has(b.id)).toBe(false);
   });
 });

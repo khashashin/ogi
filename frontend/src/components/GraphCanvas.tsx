@@ -1,16 +1,34 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import Sigma from "sigma";
-import forceAtlas2 from "graphology-layout-forceatlas2";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
+import { applyGraphLayout } from "../lib/graphLayouts";
 
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const { graph, selectNode, selectEdge, selectedNodeId, selectedEdgeId, hiddenNodeIds, nodeOverlay, persistPositions } = useGraphStore();
+    const {
+    graph,
+    entities,
+    pinnedNodeIds,
+    selectNode,
+      selectNodes,
+    clearSelection,
+    selectEdge,
+    selectedNodeId,
+    selectedNodeIds,
+    selectedEdgeId,
+    hiddenNodeIds,
+    hiddenEdgeIds,
+    nodeOverlay,
+      persistPositions,
+    } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; x: number; y: number }>(null);
+  const selectionStateRef = useRef<null | { startX: number; startY: number; mode: "replace" | "add" | "toggle" }>(null);
+  const suppressStageClickRef = useRef(false);
 
   // Drag state refs (avoid re-renders during drag)
   const dragStateRef = useRef<{
@@ -19,7 +37,8 @@ export function GraphCanvas() {
     startX: number;
     startY: number;
     hasMoved: boolean;
-  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false });
+    groupOffsets: Map<string, { x: number; y: number }>;
+  }>({ dragging: false, draggedNode: null, startX: 0, startY: 0, hasMoved: false, groupOffsets: new Map() });
 
   const initSigma = useCallback(() => {
     if (!containerRef.current) return;
@@ -45,11 +64,13 @@ export function GraphCanvas() {
     });
 
     // --- Node click ---
-    renderer.on("clickNode", ({ node }) => {
+    renderer.on("clickNode", ({ node, event }) => {
       const ds = dragStateRef.current;
       // Don't fire click if we just finished dragging
       if (ds.hasMoved) return;
-      selectNode(node);
+      const mouseEvent = event.original as MouseEvent;
+      const additive = mouseEvent.ctrlKey || mouseEvent.metaKey || mouseEvent.shiftKey;
+      selectNode(node, additive ? "toggle" : "replace");
     });
 
     // --- Edge click ---
@@ -68,7 +89,11 @@ export function GraphCanvas() {
     });
 
     renderer.on("clickStage", () => {
-      selectNode(null);
+      if (suppressStageClickRef.current) {
+        suppressStageClickRef.current = false;
+        return;
+      }
+      clearSelection();
     });
 
     // --- Node dragging ---
@@ -84,6 +109,22 @@ export function GraphCanvas() {
       ds.hasMoved = false;
       ds.startX = event.x;
       ds.startY = event.y;
+      ds.groupOffsets = new Map();
+
+      const dragGroup =
+        selectedNodeIds.size > 1 && selectedNodeIds.has(node) ? [...selectedNodeIds] : [node];
+      const draggedNodeAttrs = graph.getNodeAttributes(node) as { x?: number; y?: number };
+      const draggedX = Number(draggedNodeAttrs.x) || 0;
+      const draggedY = Number(draggedNodeAttrs.y) || 0;
+
+      for (const groupNodeId of dragGroup) {
+        if (!graph.hasNode(groupNodeId)) continue;
+        const attrs = graph.getNodeAttributes(groupNodeId) as { x?: number; y?: number };
+        ds.groupOffsets.set(groupNodeId, {
+          x: (Number(attrs.x) || 0) - draggedX,
+          y: (Number(attrs.y) || 0) - draggedY,
+        });
+      }
 
       // Disable camera on drag
       renderer.getCamera().disable();
@@ -102,8 +143,16 @@ export function GraphCanvas() {
 
       // Convert viewport coords to graph coords
       const pos = renderer.viewportToGraph(event);
-      graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
-      graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
+      if (ds.groupOffsets.size > 0) {
+        for (const [groupNodeId, offset] of ds.groupOffsets.entries()) {
+          if (!graph.hasNode(groupNodeId)) continue;
+          graph.setNodeAttribute(groupNodeId, "x", pos.x + offset.x);
+          graph.setNodeAttribute(groupNodeId, "y", pos.y + offset.y);
+        }
+      } else {
+        graph.setNodeAttribute(ds.draggedNode, "x", pos.x);
+        graph.setNodeAttribute(ds.draggedNode, "y", pos.y);
+      }
     });
 
     renderer.getMouseCaptor().on("mouseup", () => {
@@ -114,6 +163,7 @@ export function GraphCanvas() {
       }
       ds.dragging = false;
       ds.draggedNode = null;
+      ds.groupOffsets = new Map();
 
       // Re-enable camera
       renderer.getCamera().enable();
@@ -154,16 +204,12 @@ export function GraphCanvas() {
 
     // Run ForceAtlas2 layout if there are enough nodes
     if (graph.order > 1) {
-      forceAtlas2.assign(graph, {
-        iterations: 100,
-        settings: {
-          gravity: 1,
-          scalingRatio: 2,
-          barnesHutOptimize: graph.order > 50,
-        },
+      applyGraphLayout("force", graph, entities, {
+        pinnedNodeIds,
+        target: "unpinned",
       });
     }
-  }, [graph, selectNode, selectEdge, currentProject, persistPositions]);
+  }, [graph, entities, pinnedNodeIds, selectedNodeIds, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
 
   useEffect(() => {
     initSigma();
@@ -184,6 +230,14 @@ export function GraphCanvas() {
     renderer.setSetting("nodeReducer", (node, data) => {
       if (hiddenNodeIds.has(node)) {
         return { ...data, hidden: true, label: "" };
+      }
+
+      if (pinnedNodeIds.has(node)) {
+        data = {
+          ...data,
+          zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 1),
+          highlighted: true,
+        };
       }
 
       // 1. Overlay takes priority when active
@@ -211,11 +265,15 @@ export function GraphCanvas() {
       }
 
       // 2. Selection highlight
-      if (selectedNodeId) {
-        if (node === selectedNodeId) {
-          return { ...data, highlighted: true, size: (data.size ?? 8) + 3 };
+      if (selectedNodeIds.size > 0) {
+        if (selectedNodeIds.has(node)) {
+          return { ...data, highlighted: true, size: (data.size ?? 8) + 3, zIndex: 2 };
         }
-        const isNeighbor = graph.hasNode(selectedNodeId) && graph.areNeighbors(node, selectedNodeId);
+        const isNeighbor =
+          selectedNodeIds.size === 1 &&
+          selectedNodeId &&
+          graph.hasNode(selectedNodeId) &&
+          graph.areNeighbors(node, selectedNodeId);
         return {
           ...data,
           color: isNeighbor ? data.color : `${data.color}44`,
@@ -229,7 +287,7 @@ export function GraphCanvas() {
     renderer.setSetting("edgeReducer", (edge, data) => {
       const src = graph.source(edge);
       const tgt = graph.target(edge);
-      if (hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
+      if (hiddenEdgeIds.has(edge) || hiddenNodeIds.has(src) || hiddenNodeIds.has(tgt)) {
         return { ...data, hidden: true };
       }
 
@@ -251,8 +309,9 @@ export function GraphCanvas() {
         };
       }
 
-      if (selectedNodeId && !nodeOverlay) {
-        if (src !== selectedNodeId && tgt !== selectedNodeId) {
+      if (selectedNodeIds.size > 0 && !nodeOverlay) {
+        const connectedToSelection = selectedNodeIds.has(src) || selectedNodeIds.has(tgt);
+        if (!connectedToSelection) {
           return { ...data, hidden: true };
         }
       }
@@ -260,7 +319,7 @@ export function GraphCanvas() {
     });
 
     renderer.refresh();
-  }, [selectedNodeId, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, nodeOverlay, graph]);
+  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, hoveredEdgeId, hiddenNodeIds, hiddenEdgeIds, pinnedNodeIds, nodeOverlay, graph]);
 
   // Expose sigma ref for zoom controls and context menu
   useEffect(() => {
@@ -268,11 +327,103 @@ export function GraphCanvas() {
     return () => setSigmaRef(null);
   });
 
+  const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || event.button !== 0) return;
+    const isModifier = event.shiftKey || event.ctrlKey || event.metaKey;
+    if (!isModifier) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const startX = event.clientX - rect.left;
+    const startY = event.clientY - rect.top;
+    selectionStateRef.current = {
+      startX,
+      startY,
+      mode: event.ctrlKey || event.metaKey ? "toggle" : "add",
+    };
+    setSelectionBox({ startX, startY, x: startX, y: startY });
+    sigmaRef.current?.getCamera().disable();
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  useEffect(() => {
+    if (!selectionBox || !containerRef.current) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect || !selectionStateRef.current) return;
+      setSelectionBox((current) =>
+        current
+          ? {
+              ...current,
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+            }
+          : current,
+      );
+    };
+
+    const handleUp = () => {
+      const box = selectionBox;
+      const state = selectionStateRef.current;
+      const renderer = sigmaRef.current as Sigma & {
+        graphToViewport: (point: { x: number; y: number }) => { x: number; y: number };
+      };
+      if (box && state && renderer?.graphToViewport) {
+        const minX = Math.min(box.startX, box.x);
+        const maxX = Math.max(box.startX, box.x);
+        const minY = Math.min(box.startY, box.y);
+        const maxY = Math.max(box.startY, box.y);
+        const selected: string[] = [];
+        graph.forEachNode((node, attrs) => {
+          if (hiddenNodeIds.has(node)) return;
+          const viewport = renderer.graphToViewport({
+            x: Number(attrs.x) || 0,
+            y: Number(attrs.y) || 0,
+          });
+          if (!viewport) return;
+          if (viewport.x >= minX && viewport.x <= maxX && viewport.y >= minY && viewport.y <= maxY) {
+            selected.push(node);
+          }
+        });
+        if (selected.length > 0) {
+          suppressStageClickRef.current = true;
+          selectNodes(selected, state.mode);
+        } else if (state.mode === "add") {
+          suppressStageClickRef.current = true;
+          clearSelection();
+        }
+      }
+      selectionStateRef.current = null;
+      setSelectionBox(null);
+      sigmaRef.current?.getCamera().enable();
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [selectionBox, graph, hiddenNodeIds, selectNodes, clearSelection]);
+
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-bg"
+      className="relative w-full h-full bg-bg"
       style={{ minHeight: "400px" }}
-    />
+      onMouseDownCapture={handleMouseDownCapture}
+    >
+      {selectionBox && (
+        <div
+          className="pointer-events-none absolute border border-accent/70 bg-accent/10"
+          style={{
+            left: Math.min(selectionBox.startX, selectionBox.x),
+            top: Math.min(selectionBox.startY, selectionBox.y),
+            width: Math.abs(selectionBox.x - selectionBox.startX),
+            height: Math.abs(selectionBox.y - selectionBox.startY),
+          }}
+        />
+      )}
+    </div>
   );
 }
