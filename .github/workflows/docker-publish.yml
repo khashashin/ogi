@@ -22,10 +22,6 @@ jobs:
             context: ./backend
             dockerfile: ./backend/Dockerfile
             image: ghcr.io/${{ github.repository_owner }}/ogi-backend
-          - service: worker
-            context: ./backend
-            dockerfile: ./backend/Dockerfile
-            image: ghcr.io/${{ github.repository_owner }}/ogi-worker
           - service: frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile

@@ -5,10 +5,74 @@ import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
 import { applyGraphLayout } from "../lib/graphLayouts";
 
+const SELECTED_LABEL_COLOR = "#111827";
+const SELECTED_LABEL_BG = "#f3f4f6";
+const PINNED_LABEL_COLOR = "#dbeafe";
+const PINNED_LABEL_BG = "#1e3a8a";
+
+function drawHighlightedNodeHover(
+  context: CanvasRenderingContext2D,
+  data: {
+    x: number;
+    y: number;
+    size: number;
+    label?: string | null;
+    color?: string;
+    highlightedLabelColor?: string;
+    highlightedLabelBackground?: string;
+  },
+  settings: { labelSize: number; labelFont: string; labelWeight?: string | number },
+) {
+  if (!data.label) return;
+
+  const fontSize = settings.labelSize ?? 12;
+  const fontFamily = settings.labelFont ?? "sans-serif";
+  const fontWeight = settings.labelWeight ?? 600;
+  const label = data.label;
+  const paddingX = 8;
+  const paddingY = 4;
+  const radius = 6;
+  const offsetX = data.size + 8;
+  const textX = data.x + offsetX;
+  const textY = data.y + fontSize / 3;
+
+  context.save();
+  context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  const textWidth = context.measureText(label).width;
+  const boxX = textX - paddingX;
+  const boxY = data.y - fontSize / 2 - paddingY;
+  const boxWidth = textWidth + paddingX * 2;
+  const boxHeight = fontSize + paddingY * 2;
+
+  context.beginPath();
+  context.moveTo(boxX + radius, boxY);
+  context.lineTo(boxX + boxWidth - radius, boxY);
+  context.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + radius);
+  context.lineTo(boxX + boxWidth, boxY + boxHeight - radius);
+  context.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - radius, boxY + boxHeight);
+  context.lineTo(boxX + radius, boxY + boxHeight);
+  context.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+  context.lineTo(boxX, boxY + radius);
+  context.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+  context.closePath();
+
+  context.fillStyle = data.highlightedLabelBackground ?? SELECTED_LABEL_BG;
+  context.shadowColor = "rgba(15, 23, 42, 0.25)";
+  context.shadowBlur = 12;
+  context.shadowOffsetY = 2;
+  context.fill();
+
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
+  context.fillStyle = data.highlightedLabelColor ?? SELECTED_LABEL_COLOR;
+  context.fillText(label, textX, textY);
+  context.restore();
+}
+
 export function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-    const {
+  const {
     graph,
     entities,
     pinnedNodeIds,
@@ -22,13 +86,28 @@ export function GraphCanvas() {
     hiddenNodeIds,
     hiddenEdgeIds,
     nodeOverlay,
-      persistPositions,
-    } = useGraphStore();
+    persistPositions,
+  } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; x: number; y: number }>(null);
   const selectionStateRef = useRef<null | { startX: number; startY: number; mode: "replace" | "add" | "toggle" }>(null);
   const suppressStageClickRef = useRef(false);
+  const pinnedNodeIdsRef = useRef(pinnedNodeIds);
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const currentProjectRef = useRef(currentProject);
+
+  useEffect(() => {
+    pinnedNodeIdsRef.current = pinnedNodeIds;
+  }, [pinnedNodeIds]);
+
+  useEffect(() => {
+    selectedNodeIdsRef.current = selectedNodeIds;
+  }, [selectedNodeIds]);
+
+  useEffect(() => {
+    currentProjectRef.current = currentProject;
+  }, [currentProject]);
 
   // Drag state refs (avoid re-renders during drag)
   const dragStateRef = useRef<{
@@ -52,6 +131,7 @@ export function GraphCanvas() {
     const renderer = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: true,
       defaultEdgeType: "arrow",
+      defaultDrawNodeHover: drawHighlightedNodeHover,
       defaultNodeColor: "#6366f1",
       defaultEdgeColor: "#4b5563",
       labelColor: { color: "#e1e4ed" },
@@ -101,7 +181,8 @@ export function GraphCanvas() {
       // Only drag on left-click (button 0), ignore right-click
       if ((event.original as MouseEvent).button !== 0) return;
 
-      if (currentProject?.role === "viewer") return;
+      if (currentProjectRef.current?.role === "viewer") return;
+      if (pinnedNodeIdsRef.current.has(node)) return;
 
       const ds = dragStateRef.current;
       ds.dragging = true;
@@ -112,7 +193,9 @@ export function GraphCanvas() {
       ds.groupOffsets = new Map();
 
       const dragGroup =
-        selectedNodeIds.size > 1 && selectedNodeIds.has(node) ? [...selectedNodeIds] : [node];
+        selectedNodeIdsRef.current.size > 1 && selectedNodeIdsRef.current.has(node)
+          ? [...selectedNodeIdsRef.current].filter((groupNodeId) => !pinnedNodeIdsRef.current.has(groupNodeId))
+          : [node];
       const draggedNodeAttrs = graph.getNodeAttributes(node) as { x?: number; y?: number };
       const draggedX = Number(draggedNodeAttrs.x) || 0;
       const draggedY = Number(draggedNodeAttrs.y) || 0;
@@ -157,9 +240,9 @@ export function GraphCanvas() {
 
     renderer.getMouseCaptor().on("mouseup", () => {
       const ds = dragStateRef.current;
-      if (ds.dragging && ds.hasMoved && currentProject) {
+      if (ds.dragging && ds.hasMoved && currentProjectRef.current) {
         // Persist new position
-        persistPositions(currentProject.id);
+        persistPositions(currentProjectRef.current.id);
       }
       ds.dragging = false;
       ds.draggedNode = null;
@@ -205,11 +288,11 @@ export function GraphCanvas() {
     // Run ForceAtlas2 layout if there are enough nodes
     if (graph.order > 1) {
       applyGraphLayout("force", graph, entities, {
-        pinnedNodeIds,
+        pinnedNodeIds: pinnedNodeIdsRef.current,
         target: "unpinned",
       });
     }
-  }, [graph, entities, pinnedNodeIds, selectedNodeIds, selectNode, clearSelection, selectEdge, currentProject, persistPositions]);
+  }, [graph, entities, selectNode, clearSelection, selectEdge, persistPositions]);
 
   useEffect(() => {
     initSigma();
@@ -237,6 +320,8 @@ export function GraphCanvas() {
           ...data,
           zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 1),
           highlighted: true,
+          highlightedLabelColor: PINNED_LABEL_COLOR,
+          highlightedLabelBackground: PINNED_LABEL_BG,
         };
       }
 
@@ -245,10 +330,23 @@ export function GraphCanvas() {
         if (nodeOverlay.type === "search") {
           if (nodeOverlay.matchIds.size > 0) {
             if (node === nodeOverlay.focusId) {
-              return { ...data, highlighted: true, zIndex: 2, size: (data.size ?? 8) + 4 };
+              return {
+                ...data,
+                highlighted: true,
+                zIndex: 2,
+                size: (data.size ?? 8) + 4,
+                highlightedLabelColor: SELECTED_LABEL_COLOR,
+                highlightedLabelBackground: SELECTED_LABEL_BG,
+              };
             }
             if (nodeOverlay.matchIds.has(node)) {
-              return { ...data, highlighted: true, zIndex: 1 };
+              return {
+                ...data,
+                highlighted: true,
+                zIndex: 1,
+                highlightedLabelColor: SELECTED_LABEL_COLOR,
+                highlightedLabelBackground: SELECTED_LABEL_BG,
+              };
             }
             return { ...data, color: `${data.color}22`, label: "" };
           }
@@ -267,7 +365,14 @@ export function GraphCanvas() {
       // 2. Selection highlight
       if (selectedNodeIds.size > 0) {
         if (selectedNodeIds.has(node)) {
-          return { ...data, highlighted: true, size: (data.size ?? 8) + 3, zIndex: 2 };
+          return {
+            ...data,
+            highlighted: true,
+            size: (data.size ?? 8) + 3,
+            zIndex: 2,
+            highlightedLabelColor: SELECTED_LABEL_COLOR,
+            highlightedLabelBackground: SELECTED_LABEL_BG,
+          };
         }
         const isNeighbor =
           selectedNodeIds.size === 1 &&

@@ -59,6 +59,7 @@ const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
 };
 
 export function EntityPalette() {
+  const appVersion = __APP_VERSION__;
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<EntityType | null>(null);
   const [value, setValue] = useState("");
@@ -278,6 +279,15 @@ export function EntityPalette() {
             })}
           </div>
         ))}
+      </div>
+
+      <div className="sticky bottom-0 border-t border-border bg-surface/95 px-3 py-2 backdrop-blur-sm">
+        <div className="flex items-center justify-between text-[10px] text-text-muted">
+          <span>OGI</span>
+          <span className="rounded border border-border px-1.5 py-0.5 font-medium" title="Frontend version">
+            v{appVersion}
+          </span>
+        </div>
       </div>
     </div>
   );

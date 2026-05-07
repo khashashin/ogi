@@ -6,6 +6,7 @@ import { EntityInspector } from "./EntityInspector";
 import { TransformPanel } from "./TransformPanel";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { Toolbar } from "./Toolbar";
+import { RightToolbar } from "./RightToolbar";
 import { ContextMenu } from "./ContextMenu";
 import { SearchBar } from "./SearchBar";
 import { FilterPanel } from "./FilterPanel";
@@ -22,7 +23,7 @@ type BottomTab = "transforms" | "analysis" | "events" | "timeline";
 export function Layout() {
   useKeyboardShortcuts();
   const isViewer = useIsViewer();
-  const { centerView, nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
+  const { centerView, entities, edges, selectedNodeIds, nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
   const [bottomTab, setBottomTab] = useState<BottomTab>(isViewer ? "events" : "transforms");
 
   const hasAnalysisOverlay = nodeOverlay?.type.startsWith("analysis");
@@ -110,6 +111,15 @@ export function Layout() {
                           Timeline
                         </button>
                     </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-text-muted">
+                        {entities.size} entities, {edges.size} edges
+                      </span>
+                      {selectedNodeIds.size > 0 && (
+                        <span className="text-[10px] text-accent">
+                          {selectedNodeIds.size} selected
+                        </span>
+                      )}
                     {hasAnalysisOverlay && !isViewer && (
                         <button
                           onClick={() => {
@@ -121,6 +131,7 @@ export function Layout() {
                           Reset View
                         </button>
                     )}
+                    </div>
                   </div>
                   <div className="flex-1 overflow-hidden">
                     {bottomTab === "transforms" && !isViewer && <TransformPanel />}
@@ -142,6 +153,12 @@ export function Layout() {
             <EntityInspector />
           </div>
         </Panel>
+
+        <Separator className="w-px bg-border" />
+
+        <div className="w-10 shrink-0 border-l border-border">
+          <RightToolbar />
+        </div>
       </Group>
 
       <ContextMenu />
