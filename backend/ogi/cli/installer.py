@@ -37,7 +37,11 @@ class TransformInstaller:
         self.ogi_version = ogi_version
 
     def _lock(self) -> LockFile:
-        return read_lockfile(self.plugins_dir)
+        return read_lockfile(
+            self.plugins_dir,
+            registry_repo=self.registry.repo,
+            ogi_version=self.ogi_version,
+        )
 
     def _save_lock(self, lock: LockFile) -> None:
         write_lockfile(self.plugins_dir, lock)
