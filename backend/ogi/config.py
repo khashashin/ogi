@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
+from typing import Any
+from typing_extensions import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -36,7 +38,8 @@ class Settings(BaseSettings):
     # Transform Hub / Registry
     registry_repo: str = "opengraphintel/ogi-transforms"
     registry_cache_ttl: int = 3600  # seconds
-    # TODO: Remove after official launch and the repository is public
+    transform_setting_max_overrides: Annotated[dict[str, float | None], NoDecode] = {}
+    # Optional GitHub token for higher GitHub API limits and private registry access.
     github_token: str | None = os.environ.get("OGI_GITHUB_TOKEN", None)
     api_key_encryption_key: str | None = os.environ.get("OGI_API_KEY_ENCRYPTION_KEY", None)
     admin_emails: str = ""
@@ -68,6 +71,62 @@ class Settings(BaseSettings):
                 return v
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return v
+
+    @field_validator("transform_setting_max_overrides", mode="before")
+    @classmethod
+    def _parse_transform_setting_max_overrides(cls, v: object) -> dict[str, float | None]:
+        if v in (None, "", {}):
+            return {}
+        if isinstance(v, dict):
+            return {
+                str(key).strip(): cls._parse_transform_cap_value(value)
+                for key, value in v.items()
+                if str(key).strip()
+            }
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                return {}
+            if stripped.startswith("{"):
+                import json
+
+                parsed = json.loads(stripped)
+                if not isinstance(parsed, dict):
+                    raise ValueError("transform_setting_max_overrides JSON must be an object")
+                return {
+                    str(key).strip(): cls._parse_transform_cap_value(value)
+                    for key, value in parsed.items()
+                    if str(key).strip()
+                }
+
+            result: dict[str, float | None] = {}
+            for part in stripped.split(","):
+                item = part.strip()
+                if not item:
+                    continue
+                if "=" not in item:
+                    raise ValueError(
+                        "transform_setting_max_overrides must use key=value pairs"
+                    )
+                key, raw = item.split("=", 1)
+                key = key.strip()
+                if not key:
+                    continue
+                result[key] = cls._parse_transform_cap_value(raw.strip())
+            return result
+
+        raise ValueError("Unsupported transform_setting_max_overrides value")
+
+    @staticmethod
+    def _parse_transform_cap_value(value: Any) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "none", "null", "off", "unlimited", "inf", "infinite"}:
+                return None
+            return float(normalized)
+        return float(value)
 
     def get_admin_emails(self) -> list[str]:
         return [

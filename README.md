@@ -128,6 +128,24 @@ docker compose -f docker-compose.prod.yml up -d
 
 Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.2.6`). Defaults to `latest`.
 
+### Configurable transform caps
+
+OGI ships with sensible per-transform max values for things like `max_results`, `max_links`, `max_urls`, and `max_content_chars`, but those caps are now centrally overridable so cloud deployments can enforce them without hardcoding local limits.
+
+Use `OGI_TRANSFORM_SETTING_MAX_OVERRIDES` in `.env`:
+
+```env
+OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=50,max_urls=25,max_links=40,max_content_chars=20000
+```
+
+To remove specific caps in a local-first deployment:
+
+```env
+OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=none,max_urls=none,max_links=none,max_content_chars=none
+```
+
+The override is keyed by transform setting name and applies to built-in transforms and community plugins that use OGI's shared transform base/runtime.
+
 <details>
 <summary><strong>Services overview</strong></summary>
 
@@ -201,6 +219,8 @@ uv run ogi transform install shodan-host-lookup
 Want to build your own? See the [contributing guide](https://github.com/opengraphintel/ogi-transforms/blob/main/CONTRIBUTING.md).
 
 If your transform needs external service credentials, declare them in `api_keys_required`. Do not store secrets in transform settings. OGI manages those under `API Keys`, and secret-using plugins are considered privileged code.
+
+If your transform exposes capped settings such as `max_results` or `max_content_chars`, prefer stable setting names over bespoke one-off names where possible. OGI can centrally override max values with `OGI_TRANSFORM_SETTING_MAX_OVERRIDES`, which helps cloud deployments enforce limits while local users can remove them.
 
 Each plugin is a directory with a `plugin.yaml` manifest:
 

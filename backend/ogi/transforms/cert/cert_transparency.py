@@ -3,8 +3,6 @@ import httpx
 from ogi.models import Entity, EntityType, Edge, TransformResult
 from ogi.transforms.base import BaseTransform, TransformConfig
 
-MAX_RESULTS = 500
-
 
 class CertTransparency(BaseTransform):
     name = "cert_transparency"
@@ -14,11 +12,12 @@ class CertTransparency(BaseTransform):
     output_types = [EntityType.SUBDOMAIN]
     category = "Certificate"
 
-    async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
+    async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         domain = entity.value
         entities: list[Entity] = []
         edges: list[Edge] = []
         messages: list[str] = []
+        max_results = self.get_effective_setting_max("max_results", 500)
 
         url = f"https://crt.sh/?q=%25.{domain}&output=json"
 
@@ -47,13 +46,13 @@ class CertTransparency(BaseTransform):
 
                 seen.add(common_name)
 
-            if len(seen) > MAX_RESULTS:
+            if max_results is not None and len(seen) > int(max_results):
                 messages.append(
-                    f"Found {len(seen)} subdomains, limiting to {MAX_RESULTS}. "
+                    f"Found {len(seen)} subdomains, limiting to {int(max_results)}. "
                     "Consider narrowing your search or rate limiting may apply."
                 )
 
-            for subdomain_value in sorted(seen)[:MAX_RESULTS]:
+            for subdomain_value in sorted(seen)[: int(max_results) if max_results is not None else None]:
                 subdomain_entity = Entity(
                     type=EntityType.SUBDOMAIN,
                     value=subdomain_value,

@@ -90,10 +90,20 @@ class LocationToNearbyASNs(BaseTransform):
         if target_datetime_raw.strip() and target_datetime is None:
             return TransformResult(messages=["Nearby ASN lookup skipped: invalid target_datetime. Use ISO-8601 format."])
 
-        radius_km = self._parse_int(config.settings.get("radius_km"), default=25)
-        radius_km = max(1, min(radius_km, NearbyNetworkStore.MAX_RADIUS_KM))
-        timeout_seconds = self._parse_float(config.settings.get("provider_timeout_seconds"), default=8.0)
-        timeout_seconds = max(1.0, min(timeout_seconds, 20.0))
+        radius_km = self.parse_int_setting(
+            config.settings.get("radius_km"),
+            setting_name="radius_km",
+            default=25,
+            min_value=1,
+            declared_max=NearbyNetworkStore.MAX_RADIUS_KM,
+        )
+        timeout_seconds = self.parse_float_setting(
+            config.settings.get("provider_timeout_seconds"),
+            setting_name="provider_timeout_seconds",
+            default=8.0,
+            min_value=1.0,
+            declared_max=20.0,
+        )
 
         result = await NearbyNetworkStore().get_nearby_networks(
             lat=lat,

@@ -43,7 +43,7 @@ class TransformEngine:
                 output_types=t.output_types,
                 category=t.category,
                 api_key_services=_api_key_services(t),
-                settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
+                settings=[s.model_dump(mode="json") for s in t.effective_settings()],
             )
             for t in self._transforms.values()
         ]
@@ -58,7 +58,7 @@ class TransformEngine:
                 output_types=t.output_types,
                 category=t.category,
                 api_key_services=_api_key_services(t),
-                settings=[s.model_dump(mode="json") for s in getattr(t, "settings", [])],
+                settings=[s.model_dump(mode="json") for s in t.effective_settings()],
             )
             for t in self._transforms.values()
             if t.can_run_on(entity)

@@ -31,8 +31,7 @@ class ContentToIOCs(BaseTransform):
     ]
     category = "Web"
 
-    async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
-        del config
+    async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         text = str(entity.properties.get("content") or entity.value or "").strip()
         entities: list[Entity] = []
         edges: list[Edge] = []

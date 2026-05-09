@@ -2,10 +2,12 @@ import pytest
 import sys
 from types import ModuleType
 
+from ogi.config import settings
 from ogi.models import Entity, EntityType
 from ogi.engine.transform_engine import TransformEngine
 from ogi.models import Project
 from ogi.transforms.base import TransformConfig
+from ogi.transforms.web.url_to_content import URLToContent
 
 
 @pytest.fixture
@@ -167,6 +169,38 @@ def test_get_transform(engine: TransformEngine):
 
 def test_get_nonexistent_transform(engine: TransformEngine):
     assert engine.get_transform("nonexistent") is None
+
+
+def test_transform_setting_max_override_updates_schema_and_runtime(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "transform_setting_max_overrides",
+        {"max_content_chars": 50},
+    )
+
+    effective = URLToContent.effective_settings()
+    max_content_chars = next(
+        setting for setting in effective if setting.name == "max_content_chars"
+    )
+
+    assert max_content_chars.max_value == 50
+    assert URLToContent.parse_int_setting(
+        "500",
+        setting_name="max_content_chars",
+        default=12000,
+        min_value=100,
+        declared_max=200000,
+    ) == 50
+
+
+def test_transform_setting_max_override_can_disable_cap(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "transform_setting_max_overrides",
+        {"max_results": None},
+    )
+
+    assert URLToContent.get_effective_setting_max("max_results", 500) is None
 
 
 @pytest.mark.asyncio
