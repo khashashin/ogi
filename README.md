@@ -427,7 +427,7 @@ This project is licensed under the [GNU Affero General Public License v3.0](LICE
 
 <div align="center">
 
-**[Report Bug](https://github.com/khashashin/ogi/issues) &bull; [Request Feature](https://github.com/khashashin/ogi/issues) &bull; [Discussions](https://github.com/khashashin/ogi/discussions)**
+**[Report Bug](https://github.com/khashashin/ogi/issues) &bull; [Request Feature](https://github.com/khashashin/ogi/issues) &bull; [Discussions](https://github.com/opengraphintel/ogi-transforms/discussions)**
 
 Made with 💜 by the OGI community
 
