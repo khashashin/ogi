@@ -27,7 +27,7 @@ function renderAuth(mode: "signin" | "signup" | "forgot") {
       <MemoryRouter initialEntries={["/login"]}>
         <Routes>
           <Route path="/login" element={<AuthPage mode={mode} />} />
-          <Route path="/" element={<div>HOME</div>} />
+          <Route path="/projects" element={<div>PROJECTS</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -62,7 +62,7 @@ describe("AuthPage", () => {
     document.body.innerHTML = "";
   });
 
-  it("navigates to home after successful sign-in", async () => {
+  it("navigates to projects after successful sign-in", async () => {
     const { container, unmount } = renderAuth("signin");
     const emailInput = container.querySelector("input[type='email']") as HTMLInputElement;
     const passwordInput = container.querySelector("input[type='password']") as HTMLInputElement;
@@ -75,7 +75,7 @@ describe("AuthPage", () => {
     });
 
     expect(authState.signIn).toHaveBeenCalledWith("user@example.com", "secret123");
-    expect(container.textContent).toContain("HOME");
+    expect(container.textContent).toContain("PROJECTS");
     unmount();
   });
 

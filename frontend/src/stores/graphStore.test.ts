@@ -4,6 +4,7 @@ import Graph from "graphology";
 import { EntityType, type Entity } from "../types/entity";
 import { DEFAULT_FILTER_STATE, useGraphStore } from "./graphStore";
 import type { Edge } from "../types/edge";
+import { useUndoStore } from "./undoStore";
 
 function makeEntity(id: string, overrides: Partial<Entity> = {}): Entity {
   return {
@@ -54,6 +55,7 @@ describe("graphStore filters", () => {
   beforeEach(() => {
     localStorage.clear();
     useGraphStore.getState().clearGraph();
+    useUndoStore.getState().clear();
   });
 
   it("hides non-matching entities when type filter is active", () => {
@@ -230,6 +232,34 @@ describe("graphStore filters", () => {
     const state = useGraphStore.getState();
     expect(state.pinnedNodeIds.has(visible.id)).toBe(true);
     expect(state.pinnedNodeIds.has(hidden.id)).toBe(false);
+  });
+
+  it("undoes and redoes manually moved node positions", async () => {
+    const a = makeEntity("e-a");
+    const graph = makeGraph([a]);
+    graph.setNodeAttribute(a.id, "x", 10);
+    graph.setNodeAttribute(a.id, "y", 20);
+
+    useGraphStore.setState({
+      graph,
+      entities: new Map([[a.id, a]]),
+    });
+
+    graph.setNodeAttribute(a.id, "x", 200);
+    graph.setNodeAttribute(a.id, "y", 300);
+    useGraphStore.getState().recordNodeMove(
+      "p-1",
+      { [a.id]: { x: 10, y: 20 } },
+      { [a.id]: { x: 200, y: 300 } },
+    );
+
+    await useGraphStore.getState().performUndo("p-1");
+    expect(graph.getNodeAttribute(a.id, "x")).toBe(10);
+    expect(graph.getNodeAttribute(a.id, "y")).toBe(20);
+
+    await useGraphStore.getState().performRedo("p-1");
+    expect(graph.getNodeAttribute(a.id, "x")).toBe(200);
+    expect(graph.getNodeAttribute(a.id, "y")).toBe(300);
   });
 
   it("persists pins in local storage and reloads them by project", () => {

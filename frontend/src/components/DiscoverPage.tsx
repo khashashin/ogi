@@ -4,6 +4,7 @@ import { Loader2, Search, Heart, User, FolderOpen } from "lucide-react";
 import { api } from "../api/client";
 import type { DiscoverProject } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
+import { Seo } from "./Seo";
 
 export function DiscoverPage() {
   const { user, authEnabled } = useAuthStore();
@@ -55,12 +56,18 @@ export function DiscoverPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg">
+    <>
+      <Seo
+        title="Discover Public Investigations | OpenGraph Intel"
+        description="Explore public OpenGraph Intel projects and browse open graph-based OSINT investigations."
+        path="/discover"
+      />
+      <div className="min-h-screen bg-bg">
       {/* Top bar */}
       <header className="flex items-center h-12 px-4 bg-surface border-b border-border">
         <span className="text-sm font-semibold text-text mr-6">OpenGraph Intel</span>
         <nav className="flex items-center gap-4">
-          <Link to="/" className="text-sm text-text-muted hover:text-text">
+          <Link to="/projects" className="text-sm text-text-muted hover:text-text">
             My Projects
           </Link>
           <span className="text-sm text-accent font-medium">Discover</span>
@@ -156,6 +163,7 @@ export function DiscoverPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

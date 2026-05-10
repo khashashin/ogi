@@ -104,7 +104,7 @@ export function GraphCanvas() {
     hiddenEdgeIds,
     declutterState,
     nodeOverlay,
-    persistPositions,
+    recordNodeMove,
   } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
@@ -302,8 +302,22 @@ export function GraphCanvas() {
     renderer.getMouseCaptor().on("mouseup", () => {
       const ds = dragStateRef.current;
       if (ds.dragging && ds.hasMoved && currentProjectRef.current) {
-        // Persist new position
-        persistPositions(currentProjectRef.current.id);
+        const positionsBefore = Object.fromEntries(ds.initialNodePositions.entries());
+        const positionsAfter = Object.fromEntries(
+          [...ds.initialNodePositions.keys()]
+            .filter((nodeId) => graph.hasNode(nodeId))
+            .map((nodeId) => {
+              const attrs = graph.getNodeAttributes(nodeId) as { x?: number; y?: number };
+              return [
+                nodeId,
+                {
+                  x: Number(attrs.x) || 0,
+                  y: Number(attrs.y) || 0,
+                },
+              ];
+            }),
+        );
+        recordNodeMove(currentProjectRef.current.id, positionsBefore, positionsAfter);
       }
       ds.dragging = false;
       ds.draggedNode = null;
@@ -377,7 +391,7 @@ export function GraphCanvas() {
     selectNode,
     clearSelection,
     selectEdge,
-    persistPositions,
+    recordNodeMove,
   ]);
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import { Layout } from "./components/Layout";
 import { AuthPage } from "./components/AuthPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { LandingPage } from "./components/LandingPage";
 import { MyProjectsPage } from "./components/MyProjectsPage";
 import { DiscoverPage } from "./components/DiscoverPage";
 import { TermsPage } from "./components/TermsPage";
@@ -79,7 +80,7 @@ function App() {
   return (
     <>
       <Routes>
-        {/* Public auth routes */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<AuthPage mode="signin" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />
         <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
@@ -88,9 +89,8 @@ function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
 
-        {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<MyProjectsPage />} />
+          <Route path="/projects" element={<MyProjectsPage />} />
           <Route path="/projects/:projectId" element={<WorkspaceView />} />
         </Route>
       </Routes>
