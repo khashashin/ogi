@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -27,7 +28,7 @@ class IPToASN(BaseTransform):
             reversed_octets = ".".join(reversed(octets))
             query_name = f"{reversed_octets}.origin.asn.cymru.com"
 
-            answers = dns.resolver.resolve(query_name, "TXT")
+            answers = await asyncio.to_thread(dns.resolver.resolve, query_name, "TXT")
 
             for rdata in answers:
                 txt = str(rdata).strip('"')
@@ -67,7 +68,7 @@ class IPToASN(BaseTransform):
                 # Look up the ASN name for the organization
                 try:
                     asn_query = f"AS{as_number}.asn.cymru.com"
-                    asn_answers = dns.resolver.resolve(asn_query, "TXT")
+                    asn_answers = await asyncio.to_thread(dns.resolver.resolve, asn_query, "TXT")
                     for asn_rdata in asn_answers:
                         asn_txt = str(asn_rdata).strip('"')
                         # Format: "AS_NUMBER | country | registry | allocated | org_name"

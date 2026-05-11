@@ -53,6 +53,27 @@ services:
       - OGI_RUN_DB_MIGRATIONS=false
       - OGI_AUTO_RUN_MIGRATIONS=false
 
+  agent-worker:
+    build: ./backend
+    command: ["python", "-m", "ogi.agent.run_worker"]
+    env_file: .env
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./plugins:/app/plugins
+    environment:
+      - OGI_DATABASE_URL=postgresql://postgres:postgres@db:5432/ogi
+      - OGI_USE_SQLITE=false
+      - OGI_REDIS_URL=redis://redis:6379/0
+      - OGI_RUN_DB_MIGRATIONS=false
+      - OGI_AUTO_RUN_MIGRATIONS=false
+
   frontend:
     build:
       context: ./frontend

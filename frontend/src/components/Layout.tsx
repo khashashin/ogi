@@ -14,23 +14,41 @@ import { TableView } from "./TableView";
 import { EventingPanel } from "./EventingPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { MapView } from "./MapView";
+import { InvestigatorPanel } from "./investigator/InvestigatorPanel";
+import { ProjectRealtimeBridge } from "./ProjectRealtimeBridge";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { useGraphStore } from "../stores/graphStore";
 
-type BottomTab = "transforms" | "analysis" | "events" | "timeline";
+type BottomTab =
+  | "transforms"
+  | "analysis"
+  | "events"
+  | "timeline"
+  | "investigator";
 
 export function Layout() {
   useKeyboardShortcuts();
   const isViewer = useIsViewer();
-  const { centerView, entities, edges, selectedNodeIds, nodeOverlay, setNodeOverlay, setAnalysisResults } = useGraphStore();
-  const [bottomTab, setBottomTab] = useState<BottomTab>(isViewer ? "events" : "transforms");
+  const {
+    centerView,
+    entities,
+    edges,
+    selectedNodeIds,
+    nodeOverlay,
+    setNodeOverlay,
+    setAnalysisResults,
+  } = useGraphStore();
+  const [bottomTab, setBottomTab] = useState<BottomTab>(
+    isViewer ? "events" : "transforms",
+  );
 
   const hasAnalysisOverlay = nodeOverlay?.type.startsWith("analysis");
 
   return (
     <div className="flex flex-col h-screen w-screen bg-bg">
       <Toolbar />
+      <ProjectRealtimeBridge />
       <Group orientation="horizontal" className="flex-1">
         {/* Left sidebar: Entity Palette */}
         {!isViewer && (
@@ -48,7 +66,7 @@ export function Layout() {
         {/* Center: Graph + Bottom panel */}
         <Panel defaultSize={80} minSize={30}>
           <Group orientation="vertical">
-            <Panel defaultSize={70} minSize={30}>
+            <Panel defaultSize={65} minSize={30}>
               <div className="relative w-full h-full">
                 {centerView === "graph" && <GraphCanvas />}
                 {centerView === "table" && <TableView />}
@@ -61,55 +79,65 @@ export function Layout() {
             <>
               <Separator className="h-1 bg-border hover:bg-accent transition-colors cursor-row-resize" />
 
-              <Panel defaultSize={30} minSize={15}>
+              <Panel defaultSize={35} minSize={15}>
                 <div className="h-full bg-surface border-t border-border overflow-hidden flex flex-col">
                   {/* Bottom panel tabs */}
                   <div className="flex items-center justify-between border-b border-border pr-2">
                     <div className="flex">
                       {!isViewer && (
                         <>
-                        <button
-                          onClick={() => setBottomTab("transforms")}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            bottomTab === "transforms"
-                              ? "text-text border-b-2 border-accent"
-                              : "text-text-muted hover:text-text"
-                          }`}
-                        >
-                          Transforms
-                        </button>
-                        <button
-                          onClick={() => setBottomTab("analysis")}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            bottomTab === "analysis"
-                              ? "text-text border-b-2 border-accent"
-                              : "text-text-muted hover:text-text"
-                          }`}
-                        >
-                          Analysis
-                        </button>
+                          <button
+                            onClick={() => setBottomTab("transforms")}
+                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                              bottomTab === "transforms"
+                                ? "text-text border-b-2 border-accent"
+                                : "text-text-muted hover:text-text"
+                            }`}
+                          >
+                            Transforms
+                          </button>
+                          <button
+                            onClick={() => setBottomTab("analysis")}
+                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                              bottomTab === "analysis"
+                                ? "text-text border-b-2 border-accent"
+                                : "text-text-muted hover:text-text"
+                            }`}
+                          >
+                            Analysis
+                          </button>
+                          <button
+                            onClick={() => setBottomTab("investigator")}
+                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                              bottomTab === "investigator"
+                                ? "text-text border-b-2 border-accent"
+                                : "text-text-muted hover:text-text"
+                            }`}
+                          >
+                            AI Investigator
+                          </button>
                         </>
                       )}
-                        <button
-                          onClick={() => setBottomTab("events")}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            bottomTab === "events"
-                              ? "text-text border-b-2 border-accent"
-                              : "text-text-muted hover:text-text"
-                          }`}
-                        >
-                          Events
-                        </button>
-                        <button
-                          onClick={() => setBottomTab("timeline")}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            bottomTab === "timeline"
-                              ? "text-text border-b-2 border-accent"
-                              : "text-text-muted hover:text-text"
-                          }`}
-                        >
-                          Timeline
-                        </button>
+                      <button
+                        onClick={() => setBottomTab("events")}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          bottomTab === "events"
+                            ? "text-text border-b-2 border-accent"
+                            : "text-text-muted hover:text-text"
+                        }`}
+                      >
+                        Events
+                      </button>
+                      <button
+                        onClick={() => setBottomTab("timeline")}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          bottomTab === "timeline"
+                            ? "text-text border-b-2 border-accent"
+                            : "text-text-muted hover:text-text"
+                        }`}
+                      >
+                        Timeline
+                      </button>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] text-text-muted">
@@ -120,7 +148,7 @@ export function Layout() {
                           {selectedNodeIds.size} selected
                         </span>
                       )}
-                    {hasAnalysisOverlay && !isViewer && (
+                      {hasAnalysisOverlay && !isViewer && (
                         <button
                           onClick={() => {
                             setNodeOverlay(null);
@@ -130,12 +158,17 @@ export function Layout() {
                         >
                           Reset View
                         </button>
-                    )}
+                      )}
                     </div>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    {bottomTab === "transforms" && !isViewer && <TransformPanel />}
+                    {bottomTab === "transforms" && !isViewer && (
+                      <TransformPanel />
+                    )}
                     {bottomTab === "analysis" && !isViewer && <AnalysisPanel />}
+                    {bottomTab === "investigator" && !isViewer && (
+                      <InvestigatorPanel />
+                    )}
                     {bottomTab === "events" && <EventingPanel />}
                     {bottomTab === "timeline" && <TimelinePanel />}
                   </div>

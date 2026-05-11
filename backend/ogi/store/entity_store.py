@@ -93,8 +93,33 @@ class EntityStore:
     async def get(self, entity_id: UUID) -> Entity | None:
         return await self.session.get(Entity, entity_id)
 
-    async def list_by_project(self, project_id: UUID) -> list[Entity]:
-        stmt = select(Entity).where(Entity.project_id == project_id).order_by(Entity.created_at)
+    async def list_by_project(
+        self,
+        project_id: UUID,
+        type_filter: EntityType | None = None,
+        limit: int | None = None,
+    ) -> list[Entity]:
+        stmt = select(Entity).where(Entity.project_id == project_id)
+        if type_filter is not None:
+            stmt = stmt.where(Entity.type == type_filter)
+        stmt = stmt.order_by(Entity.created_at)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def search(
+        self,
+        project_id: UUID,
+        query: str,
+        type_filter: EntityType | None = None,
+        limit: int = 50,
+    ) -> list[Entity]:
+        pattern = f"%{query.strip()}%"
+        stmt = select(Entity).where(Entity.project_id == project_id)
+        if type_filter is not None:
+            stmt = stmt.where(Entity.type == type_filter)
+        stmt = stmt.where(Entity.value.ilike(pattern)).order_by(Entity.created_at).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

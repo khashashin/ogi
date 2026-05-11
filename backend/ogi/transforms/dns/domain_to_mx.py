@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -19,7 +20,7 @@ class DomainToMX(BaseTransform):
         messages: list[str] = []
 
         try:
-            answers = dns.resolver.resolve(domain, "MX")
+            answers = await asyncio.to_thread(dns.resolver.resolve, domain, "MX")
             for rdata in answers:
                 mx_host = str(rdata.exchange).rstrip(".")
                 priority = rdata.preference

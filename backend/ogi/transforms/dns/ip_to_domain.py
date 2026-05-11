@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 import dns.reversename
 
@@ -20,8 +21,8 @@ class IPToDomain(BaseTransform):
         messages: list[str] = []
 
         try:
-            rev_name = dns.reversename.from_address(ip_addr)
-            answers = dns.resolver.resolve(rev_name, "PTR")
+            rev_name = await asyncio.to_thread(dns.reversename.from_address, ip_addr)
+            answers = await asyncio.to_thread(dns.resolver.resolve, rev_name, "PTR")
             for rdata in answers:
                 domain = str(rdata.target).rstrip(".")
                 domain_entity = Entity(

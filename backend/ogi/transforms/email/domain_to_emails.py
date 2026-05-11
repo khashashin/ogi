@@ -1,3 +1,4 @@
+import asyncio
 import dns.resolver
 
 from ogi.models import Entity, EntityType, Edge, TransformResult
@@ -29,7 +30,7 @@ class DomainToEmails(BaseTransform):
 
         # Check if MX records exist for the domain
         try:
-            mx_records = dns.resolver.resolve(domain, "MX")
+            mx_records = await asyncio.to_thread(dns.resolver.resolve, domain, "MX")
             mx_hosts = [str(rdata.exchange).rstrip(".") for rdata in mx_records]
             messages.append(f"MX records found: {', '.join(mx_hosts)}")
         except dns.resolver.NoAnswer:

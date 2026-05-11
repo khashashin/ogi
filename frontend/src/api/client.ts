@@ -8,6 +8,14 @@ import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "..
 import type { TimelineResponse } from "../types/timeline";
 import type { MapPointsResponse, MapRoutesResponse } from "../types/map";
 import type { LocationSuggestResponse } from "../types/location";
+import type {
+  AgentModelCatalog,
+  AgentRun,
+  AgentSettings,
+  AgentSettingsTestResult,
+  AgentStep,
+  StartAgentRunRequest,
+} from "../types/agent";
 import { supabase } from "../lib/supabase";
 
 interface GraphStats {
@@ -341,6 +349,54 @@ export const api = {
   timeline: {
     get: (projectId: string, interval: "minute" | "hour" | "day" | "week" = "day") =>
       request<TimelineResponse>(`/projects/${projectId}/timeline?interval=${interval}`),
+  },
+
+  agent: {
+    getSettings: (projectId: string) =>
+      request<AgentSettings>(`/projects/${projectId}/agent/settings`),
+    saveSettings: (projectId: string, data: { provider: string; model: string }) =>
+      request<AgentSettings>(`/projects/${projectId}/agent/settings`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    listModels: (projectId: string, provider: string) =>
+      request<AgentModelCatalog>(
+        `/projects/${projectId}/agent/settings/models?provider=${encodeURIComponent(provider)}`
+      ),
+    testSettings: (projectId: string, data: { provider: string; model: string }) =>
+      request<AgentSettingsTestResult>(`/projects/${projectId}/agent/settings/test`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    start: (projectId: string, data: StartAgentRunRequest) =>
+      request<AgentRun>(`/projects/${projectId}/agent/start`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    listRuns: (projectId: string, statuses?: string[]) => {
+      const params = new URLSearchParams();
+      if (statuses && statuses.length > 0) {
+        params.set("statuses", statuses.join(","));
+      }
+      const qs = params.toString();
+      return request<AgentRun[]>(`/projects/${projectId}/agent/runs${qs ? `?${qs}` : ""}`);
+    },
+    getRun: (projectId: string, runId: string) =>
+      request<AgentRun>(`/projects/${projectId}/agent/runs/${runId}`),
+    listSteps: (projectId: string, runId: string) =>
+      request<AgentStep[]>(`/projects/${projectId}/agent/runs/${runId}/steps`),
+    cancel: (projectId: string, runId: string) =>
+      request<AgentRun>(`/projects/${projectId}/agent/runs/${runId}/cancel`, { method: "POST" }),
+    approveStep: (projectId: string, runId: string, stepId: string, note?: string) =>
+      request<AgentStep>(`/projects/${projectId}/agent/runs/${runId}/steps/${stepId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ note }),
+      }),
+    rejectStep: (projectId: string, runId: string, stepId: string, note?: string) =>
+      request<AgentStep>(`/projects/${projectId}/agent/runs/${runId}/steps/${stepId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ note }),
+      }),
   },
 
   map: {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Undo2, Redo2, User, Lock, Unlock, ChevronRight, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
+import { LayoutGrid, Wand2, ZoomIn, ZoomOut, Focus, Undo2, Redo2, User, Lock, Unlock, ChevronRight, House, Table, Network, Map as MapIcon, EyeOff, Eye, Tags, Trash2, Play, RotateCcw } from "lucide-react";
 import { ProfileDialog } from "./ProfileDialog";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { TransformHub } from "./marketplace/TransformHub";
@@ -180,6 +180,15 @@ export function Toolbar() {
       </span>
       {currentProject && (
         <>
+          <ChevronRight size={12} className="text-text-muted" />
+          <Link
+            to="/projects"
+            className="flex items-center justify-center rounded p-1 text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+            title="Projects home"
+            aria-label="Projects home"
+          >
+            <House size={13} />
+          </Link>
           <ChevronRight size={12} className="text-text-muted" />
           <span className="text-sm text-text truncate max-w-48">
             {currentProject.name}
