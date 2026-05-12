@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
@@ -108,7 +108,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.5.3
         with:
           tag_name: v${{ github.event.inputs.version }}
           target_commitish: main

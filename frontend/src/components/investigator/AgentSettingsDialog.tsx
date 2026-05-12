@@ -115,7 +115,7 @@ export function AgentSettingsDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, projectId, provider]);
+  }, [open, projectId, provider, model]);
 
   const providerMeta = useMemo(
     () => PROVIDERS.find((item) => item.id === provider) ?? PROVIDERS[0],

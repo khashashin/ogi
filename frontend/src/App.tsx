@@ -9,6 +9,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LandingPage } from "./components/LandingPage";
 import { MyProjectsPage } from "./components/MyProjectsPage";
 import { DiscoverPage } from "./components/DiscoverPage";
+import { TransformsCatalogPage } from "./components/TransformsCatalogPage";
 import { TermsPage } from "./components/TermsPage";
 import { PrivacyPage } from "./components/PrivacyPage";
 import { CookieConsentBanner } from "./components/CookieConsentBanner";
@@ -86,6 +87,7 @@ function App() {
         <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
+        <Route path="/transforms" element={<TransformsCatalogPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
 
