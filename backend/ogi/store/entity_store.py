@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from ogi.models import Entity, EntityCreate, EntityUpdate, EntityType
 
@@ -149,6 +149,28 @@ class EntityStore:
         await self.session.delete(entity)
         await self.session.commit()
         return True
+
+    async def delete_many(self, project_id: UUID, entity_ids: list[UUID]) -> list[UUID]:
+        if not entity_ids:
+            return []
+
+        stmt = select(Entity.id).where(
+            Entity.project_id == project_id,
+            Entity.id.in_(entity_ids),
+        )
+        result = await self.session.execute(stmt)
+        existing_ids = list(result.scalars().all())
+        if not existing_ids:
+            return []
+
+        await self.session.execute(
+            delete(Entity).where(
+                Entity.project_id == project_id,
+                Entity.id.in_(existing_ids),
+            )
+        )
+        await self.session.commit()
+        return existing_ids
 
     @staticmethod
     def _origin_source(entity: Entity, fallback: str) -> str:

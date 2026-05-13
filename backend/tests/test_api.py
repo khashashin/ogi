@@ -112,6 +112,38 @@ async def test_entity_crud(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_bulk_delete_entities(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "BulkDeleteTest"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    created_ids: list[str] = []
+    for value in ["one.example", "two.example", "three.example"]:
+      created = await client.post(
+          f"/api/v1/projects/{project_id}/entities",
+          json={"type": "Domain", "value": value},
+      )
+      assert created.status_code == 201
+      created_ids.append(created.json()["id"])
+
+    resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities/bulk-delete",
+        json={"entity_ids": created_ids[:2]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted_count"] == 2
+    assert set(body["deleted_entity_ids"]) == set(created_ids[:2])
+
+    remaining = await client.get(f"/api/v1/projects/{project_id}/entities")
+    assert remaining.status_code == 200
+    remaining_ids = {entity["id"] for entity in remaining.json()}
+    assert created_ids[2] in remaining_ids
+    assert created_ids[0] not in remaining_ids
+    assert created_ids[1] not in remaining_ids
+
+
+@pytest.mark.asyncio
 async def test_list_transforms(client: AsyncClient):
     resp = await client.get("/api/v1/transforms")
     assert resp.status_code == 200

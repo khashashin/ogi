@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ogi.models import Entity, EntityCreate, EntityUpdate
 from ogi.api.dependencies import get_entity_store, get_graph_engine
@@ -8,6 +9,15 @@ from ogi.api.auth import require_project_editor, require_project_viewer
 from ogi.store.entity_store import EntityStore
 
 router = APIRouter(prefix="/projects/{project_id}/entities", tags=["entities"])
+
+
+class BulkDeleteEntitiesRequest(BaseModel):
+    entity_ids: list[UUID]
+
+
+class BulkDeleteEntitiesResponse(BaseModel):
+    deleted_entity_ids: list[UUID]
+    deleted_count: int
 
 
 @router.post("", response_model=Entity, status_code=201)
@@ -73,3 +83,20 @@ async def delete_entity(
         raise HTTPException(status_code=404, detail="Entity not found")
     engine = get_graph_engine(project_id)
     engine.remove_entity(entity_id)
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteEntitiesResponse)
+async def bulk_delete_entities(
+    project_id: UUID,
+    data: BulkDeleteEntitiesRequest,
+    _role: str = Depends(require_project_editor),
+    store: EntityStore = Depends(get_entity_store),
+) -> BulkDeleteEntitiesResponse:
+    deleted_ids = await store.delete_many(project_id, data.entity_ids)
+    engine = get_graph_engine(project_id)
+    for entity_id in deleted_ids:
+        engine.remove_entity(entity_id)
+    return BulkDeleteEntitiesResponse(
+        deleted_entity_ids=deleted_ids,
+        deleted_count=len(deleted_ids),
+    )

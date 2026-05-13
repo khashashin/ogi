@@ -4,7 +4,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { getSigmaRef } from "../stores/sigmaRef";
 
 export function useKeyboardShortcuts() {
-  const { selectedNodeId, selectedNodeIds, selectedEdgeId, removeEntity, removeEdge, clearSelection, performUndo, performRedo } =
+  const { selectedNodeId, selectedNodeIds, selectedEdgeId, removeEntities, removeEdge, clearSelection, performUndo, performRedo } =
     useGraphStore();
   const { currentProject } = useProjectStore();
 
@@ -37,9 +37,7 @@ export function useKeyboardShortcuts() {
       if (e.key === "Delete" || e.key === "Backspace") {
         if (currentProject && selectedNodeIds.size > 0) {
           e.preventDefault();
-          for (const nodeId of selectedNodeIds) {
-            removeEntity(currentProject.id, nodeId);
-          }
+          void removeEntities(currentProject.id, [...selectedNodeIds]);
         } else if (currentProject && selectedEdgeId) {
           e.preventDefault();
           removeEdge(currentProject.id, selectedEdgeId);
@@ -78,5 +76,5 @@ export function useKeyboardShortcuts() {
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, currentProject, removeEntity, removeEdge, clearSelection, performUndo, performRedo]);
+  }, [selectedNodeId, selectedNodeIds, selectedEdgeId, currentProject, removeEntities, removeEdge, clearSelection, performUndo, performRedo]);
 }
