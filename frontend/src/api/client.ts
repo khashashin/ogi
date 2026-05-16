@@ -395,6 +395,8 @@ export const api = {
       request<AgentStep[]>(`/projects/${projectId}/agent/runs/${runId}/steps`),
     cancel: (projectId: string, runId: string) =>
       request<AgentRun>(`/projects/${projectId}/agent/runs/${runId}/cancel`, { method: "POST" }),
+    retry: (projectId: string, runId: string) =>
+      request<AgentRun>(`/projects/${projectId}/agent/runs/${runId}/retry`, { method: "POST" }),
     approveStep: (projectId: string, runId: string, stepId: string, note?: string) =>
       request<AgentStep>(`/projects/${projectId}/agent/runs/${runId}/steps/${stepId}/approve`, {
         method: "POST",

@@ -9,6 +9,7 @@ from typing import Awaitable, Callable
 from uuid import UUID
 
 from redis import Redis
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ogi.agent.context import AgentContextBuilder
@@ -22,6 +23,7 @@ from ogi.agent.models import (
     AgentStepType,
     ScopeConfig,
 )
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.store import AgentRunStore, AgentStepStore
 from ogi.agent.tools import ToolContext, ToolRegistry
 from ogi.config import settings
@@ -89,6 +91,7 @@ class OrchestratorIterationResult:
 class AgentOrchestrator:
     READ_ONLY_TOOLS = {"list_entities", "get_entity", "list_transforms", "search_graph"}
     DUPLICATE_READ_REPLAN_LIMIT = 3
+    TOOL_VALIDATION_REPLAN_LIMIT = 3
     KNOWN_GRAPH_ITEM_LIMIT = 500
     TRANSFORM_MEMORY_LIMIT = 24
     EXHAUSTED_FAMILY_RECENT_LOW_YIELD_THRESHOLD = 2
@@ -251,6 +254,17 @@ class AgentOrchestrator:
                 "AI Investigator loop detected: repeated duplicate read-only actions after policy feedback"
             )
 
+    def _register_tool_validation_replan(self, run: AgentRun, message: str) -> None:
+        usage = dict(run.usage or {})
+        count = int(usage.get("tool_validation_replans", 0)) + 1
+        usage["tool_validation_replans"] = count
+        run.usage = usage
+        self._append_policy_feedback(run, message)
+        if count >= self.TOOL_VALIDATION_REPLAN_LIMIT:
+            raise AgentLoopDetectedError(
+                "AI Investigator loop detected: repeated invalid tool or transform selections after policy feedback"
+            )
+
     @staticmethod
     def _edge_signature(edge: dict[str, object]) -> str:
         return "|".join(
@@ -380,6 +394,63 @@ class AgentOrchestrator:
         if usage.get("duplicate_read_replans"):
             usage["duplicate_read_replans"] = 0
             run.usage = usage
+
+    @staticmethod
+    def _reset_tool_validation_replans(run: AgentRun) -> None:
+        usage = dict(run.usage or {})
+        if usage.get("tool_validation_replans"):
+            usage["tool_validation_replans"] = 0
+            run.usage = usage
+
+    async def _replan_after_tool_validation_error(
+        self,
+        session: AsyncSession,
+        run: AgentRun,
+        step: AgentStep,
+        message: str,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        step_store = AgentStepStore(session)
+
+        self._register_tool_validation_replan(run, message)
+        step.status = AgentStepStatus.COMPLETED
+        step.completed_at = now
+        step.llm_output = f"{step.llm_output or ''}\n\n{message}".strip()
+        run.updated_at = now
+        session.add(step)
+        session.add(run)
+        await session.commit()
+        await session.refresh(step)
+        await session.refresh(run)
+
+        result_step = AgentStep(
+            run_id=run.id,
+            step_number=await step_store.next_step_number(run.id),
+            type=AgentStepType.TOOL_RESULT,
+            tool_name=step.tool_name,
+            tool_input=step.tool_input,
+            tool_output={"success": False, "summary": message, "data": {"error": message}},
+            status=AgentStepStatus.COMPLETED,
+            completed_at=datetime.now(timezone.utc),
+        )
+        await step_store.create(result_step)
+        await self._sync_project_memory(session, run)
+        publish_agent_event(
+            self._redis_conn,
+            build_agent_event(event_type="agent_tool_result", run=run, step=result_step, summary=message),
+        )
+
+        next_think = AgentStep(
+            run_id=run.id,
+            step_number=await step_store.next_step_number(run.id),
+            type=AgentStepType.THINK,
+            status=AgentStepStatus.PENDING,
+        )
+        await step_store.create(next_think)
+
+    async def _sync_project_memory(self, session: AsyncSession, run: AgentRun) -> None:
+        steps = await AgentStepStore(session).list_for_run(run.id)
+        await AgentProjectMemoryStore(session).update_from_run(run, steps)
 
     async def recover_stale_state(self) -> tuple[int, int]:
         async with self._session_factory() as session:
@@ -534,6 +605,7 @@ class AgentOrchestrator:
             await session.commit()
             await session.refresh(run)
             await session.refresh(step)
+            await self._sync_project_memory(session, run)
             publish_agent_event(
                 self._redis_conn,
                 build_agent_event(
@@ -562,6 +634,7 @@ class AgentOrchestrator:
         await session.commit()
         await session.refresh(run)
         await session.refresh(step)
+        await self._sync_project_memory(session, run)
 
         event_type = self._event_type_for_step(run, step)
         if event_type is not None:
@@ -590,6 +663,7 @@ class AgentOrchestrator:
         await session.commit()
         await session.refresh(run)
         await session.refresh(step)
+        await self._sync_project_memory(session, run)
         publish_agent_event(
             self._redis_conn,
             build_agent_event(
@@ -662,6 +736,7 @@ class AgentOrchestrator:
         if decision.action_type == "finish":
             self._clear_policy_feedback(run)
             self._reset_duplicate_read_replans(run)
+            self._reset_tool_validation_replans(run)
             session.add(run)
             await session.commit()
             await session.refresh(run)
@@ -717,6 +792,7 @@ class AgentOrchestrator:
 
         self._clear_policy_feedback(run)
         self._reset_duplicate_read_replans(run)
+        self._reset_tool_validation_replans(run)
         run.updated_at = datetime.now(timezone.utc)
         session.add(run)
         await session.commit()
@@ -802,7 +878,18 @@ class AgentOrchestrator:
             scope=ScopeConfig.model_validate(run.scope),
             session=session,
         )
-        result = await self._tool_registry.execute(step.tool_name or "", step.tool_input or {}, ctx)
+        try:
+            result = await self._tool_registry.execute(step.tool_name or "", step.tool_input or {}, ctx)
+        except HTTPException as exc:
+            if exc.status_code in {400, 404}:
+                detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+                message = (
+                    f"Policy feedback: {detail}. Use the exact names and entities returned by prior tool results, "
+                    "choose a different valid action, or finish the investigation."
+                )
+                await self._replan_after_tool_validation_error(session, run, step, message)
+                return
+            raise
         self._record_transform_outcome(run, step, result.data)
 
         step.status = AgentStepStatus.COMPLETED
@@ -829,6 +916,7 @@ class AgentOrchestrator:
             completed_at=datetime.now(timezone.utc),
         )
         await step_store.create(result_step)
+        await self._sync_project_memory(session, run)
         publish_agent_event(
             self._redis_conn,
             build_agent_event(event_type="agent_tool_result", run=run, step=result_step, summary=result.summary),

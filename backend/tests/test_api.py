@@ -21,6 +21,9 @@ os.environ["OGI_SUPABASE_JWT_SECRET"] = ""
 os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7LrD0WBE="
 
 from ogi.main import app
+from ogi.db import database as db_module
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
+from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType
 
 
 def assert_error_envelope(
@@ -205,6 +208,110 @@ async def test_save_transform_settings_returns_allowed_maximum_in_error(client: 
         code="HTTP_400",
         message_contains="Setting 'max_sites' is above maximum 200",
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_project_memory_api_get_and_reset(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "AgentMemoryApi"})
+    assert resp.status_code == 201
+    project_id = UUID(resp.json()["id"])
+
+    empty = await client.get(f"/api/v1/projects/{project_id}/agent/memory")
+    assert empty.status_code == 200
+    assert empty.json()["summary"] == ""
+
+    started = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={
+            "prompt": "Seed project memory",
+            "scope": {"mode": "all", "entity_ids": []},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+        },
+    )
+    assert started.status_code == 201
+    run_id = UUID(started.json()["id"])
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        memory_store = AgentProjectMemoryStore(session)
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        run.status = AgentRunStatus.COMPLETED
+        run.summary = "Seeded memory for API test."
+        session.add(run)
+        await session.commit()
+        await memory_store.update_from_run(run, [])
+
+    populated = await client.get(f"/api/v1/projects/{project_id}/agent/memory")
+    assert populated.status_code == 200
+    assert "Seeded memory for API test." in populated.json()["summary"]
+
+    reset = await client.delete(f"/api/v1/projects/{project_id}/agent/memory")
+    assert reset.status_code == 204
+
+    cleared = await client.get(f"/api/v1/projects/{project_id}/agent/memory")
+    assert cleared.status_code == 200
+    assert cleared.json()["summary"] == ""
+
+
+@pytest.mark.asyncio
+async def test_agent_retry_run_creates_new_run_with_resume_context(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "AgentRetryRun"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    started = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={
+            "prompt": "find additional information about youtube account",
+            "scope": {"mode": "all", "entity_ids": []},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+        },
+    )
+    assert started.status_code == 201
+    source_run_id = started.json()["id"]
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, UUID(source_run_id))
+        assert run is not None
+        run.status = AgentRunStatus.FAILED
+        run.error = "AI Investigator max_steps budget exceeded"
+        run.summary = "Reached the YouTube URL and ran url_to_links."
+        session.add(run)
+        session.add(
+            AgentStep(
+                run_id=run.id,
+                step_number=2,
+                type=AgentStepType.TOOL_CALL,
+                tool_name="run_transform",
+                tool_input={"entity_id": "abc", "transform_name": "url_to_links"},
+                status=AgentStepStatus.COMPLETED,
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.commit()
+
+    retried = await client.post(f"/api/v1/projects/{project_id}/agent/runs/{source_run_id}/retry")
+    assert retried.status_code == 201
+    body = retried.json()
+    assert body["id"] != source_run_id
+    assert body["prompt"] == "find additional information about youtube account"
+
+    fetched = await client.get(f"/api/v1/projects/{project_id}/agent/runs/{body['id']}")
+    assert fetched.status_code == 200
+    run_data = fetched.json()
+    resume_context = run_data["config"]["resume_context"]
+    assert resume_context["source_run_id"] == source_run_id
+    assert resume_context["source_status"] == "failed"
+    assert "YouTube URL" in resume_context["source_summary"]
+    assert any("url_to_links" in item for item in resume_context["attempted_actions"])
+
+    steps = await client.get(f"/api/v1/projects/{project_id}/agent/runs/{body['id']}/steps")
+    assert steps.status_code == 200
+    assert steps.json()[0]["type"] == "think"
 
 
 @pytest.mark.asyncio

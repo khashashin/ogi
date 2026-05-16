@@ -30,6 +30,9 @@ from .eventing import (
 )
 from ogi.agent.models import (
     AgentEventMessage,
+    AgentProjectMemory,
+    AgentProjectMemoryRead,
+    AgentProjectMemoryRunRecord,
     AgentRun,
     AgentRunStatus,
     AgentStep,
@@ -82,6 +85,9 @@ __all__ = [
     "TimelineResponse",
     "TemporalGeoConventions",
     "AgentEventMessage",
+    "AgentProjectMemory",
+    "AgentProjectMemoryRead",
+    "AgentProjectMemoryRunRecord",
     "AgentRun",
     "AgentRunStatus",
     "AgentStep",

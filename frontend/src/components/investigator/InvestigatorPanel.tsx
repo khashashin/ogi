@@ -21,6 +21,7 @@ export function InvestigatorPanel() {
     startRun,
     loadActiveRun,
     cancelRun,
+    retryRun,
     approveStep,
     rejectStep,
     reset,
@@ -70,6 +71,7 @@ export function InvestigatorPanel() {
           run={activeRun}
           disabled={isLoading}
           onCancel={() => void cancelRun(currentProject.id)}
+          onRetry={() => activeRun && void retryRun(currentProject.id, activeRun.id)}
           onRefresh={() => void loadActiveRun(currentProject.id)}
           onOpenSettings={() => setShowSettings(true)}
         />

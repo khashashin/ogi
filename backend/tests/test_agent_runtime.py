@@ -16,15 +16,18 @@ os.environ["OGI_API_KEY_ENCRYPTION_KEY"] = "k0f97udxEhQ4duzTQESsQNmjUG74U7SMiFd7
 
 from ogi.agent.context import AgentContextBuilder
 from ogi.agent.llm_provider import LLMProvider, LlmDecision, ScriptedLLMProvider, TokenUsage
-from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType
+from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType, ScopeConfig
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.orchestrator import AgentOrchestrator
 from ogi.agent.store import AgentStepStore
+from ogi.agent.tools import ToolContext
 from ogi.agent.tool_implementations import build_default_tool_registry
 from ogi.config import settings
 from ogi.db import database as db_module
 from ogi.engine.transform_execution_service import TransformExecutionService
 from ogi.engine.transform_engine import TransformEngine
 from ogi.main import app
+from ogi.store.audit_log_store import AuditLogStore
 
 
 @pytest.fixture
@@ -513,6 +516,7 @@ async def test_agent_context_builder_summarizes_older_steps(client: AsyncClient,
     combined = "\n".join(message["content"] for message in messages)
     assert "Earlier completed steps summary" in combined
     assert "Recent step history" in combined
+    assert "Entity properties are metadata, not standalone graph entities" in combined
 
 
 @pytest.mark.asyncio
@@ -556,6 +560,230 @@ async def test_agent_list_transforms_accepts_entity_value(client: AsyncClient, m
     result_step = next(step for step in steps if step.type == AgentStepType.TOOL_RESULT)
     assert result_step.tool_output is not None
     assert len(result_step.tool_output["data"]["transforms"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_agent_create_entity_tool_creates_linked_entity_and_expands_selected_scope(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    project_id = await _create_project(client, "AgentCreateEntityTool")
+    created_entity = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={
+            "type": "SocialMedia",
+            "value": "acidvegas@YouTube User",
+            "properties": {"profile_url": "https://www.youtube.com/@acidvegas"},
+        },
+    )
+    assert created_entity.status_code == 201
+    source_entity_id = UUID(created_entity.json()["id"])
+
+    start_response = await client.post(
+        f"/api/v1/projects/{project_id}/agent/start",
+        json={
+            "prompt": "Materialize the profile URL as an entity.",
+            "scope": {"mode": "selected", "entity_ids": [str(source_entity_id)]},
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+        },
+    )
+    assert start_response.status_code == 201
+    run_id = UUID(start_response.json()["id"])
+
+    assert db_module.async_session_maker is not None
+    transform_engine = TransformEngine()
+    transform_engine.auto_discover()
+    plugin_engine = transform_engine.load_plugins(settings.plugin_dirs)
+    registry = build_default_tool_registry(
+        transform_engine=transform_engine,
+        plugin_engine=plugin_engine,
+        transform_execution_service=TransformExecutionService(
+            transform_engine_getter=lambda: transform_engine,
+            plugin_engine_getter=lambda: plugin_engine,
+        ),
+    )
+
+    create_tool = registry.get_tool("create_entity")
+    assert create_tool is not None
+    assert create_tool.definition.requires_approval is True
+
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        ctx = ToolContext(
+            project_id=project_id,
+            user_id=run.user_id,
+            run_id=run_id,
+            scope=ScopeConfig.model_validate(run.scope),
+            session=session,
+        )
+
+        result = await registry.execute(
+            "create_entity",
+            {
+                "type": "URL",
+                "value": "https://www.youtube.com/@acidvegas",
+                "reason": "Profile URL discovered in entity properties",
+                "source_property": "profile_url",
+                "link_to_entity_id": str(source_entity_id),
+                "edge_label": "profile_url",
+            },
+            ctx,
+        )
+
+        created_url_id = UUID(result.data["entity"]["id"])
+        refreshed_run = await session.get(AgentRun, run_id)
+        assert refreshed_run is not None
+        assert str(created_url_id) in refreshed_run.scope["entity_ids"]
+
+        created_entity_response = await registry.execute(
+            "get_entity",
+            {"entity_id": str(created_url_id)},
+            ToolContext(
+                project_id=project_id,
+                user_id=run.user_id,
+                run_id=run_id,
+                scope=ScopeConfig.model_validate(refreshed_run.scope),
+                session=session,
+            ),
+        )
+
+        audit_logs = await AuditLogStore(session).list_by_action("agent.entity_created")
+
+    assert result.data["entity"]["type"] == "URL"
+    assert result.data["entity"]["value"] == "https://www.youtube.com/@acidvegas"
+    assert result.data["edge"] is not None
+    assert result.data["edge"]["label"] == "profile_url"
+    assert created_entity_response.data["entity"]["value"] == "https://www.youtube.com/@acidvegas"
+    assert any(
+        log.project_id == project_id and log.resource_id == str(created_url_id)
+        for log in audit_logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_project_memory_updates_and_is_injected_into_future_runs(client: AsyncClient):
+    project_id = await _create_project(client, "AgentProjectMemoryProject")
+    created_entity = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "memory.example"},
+    )
+    assert created_entity.status_code == 201
+
+    first_run_id = await _start_agent_run(client, project_id, prompt="Inspect project memory seed run.")
+    orchestrator = _build_orchestrator(
+        worker_id="worker-project-memory",
+        decisions=[
+            LlmDecision(
+                reasoning="List current entities.",
+                action_type="tool_call",
+                tool_name="list_entities",
+                tool_params={"limit": 10},
+                token_usage=TokenUsage(prompt_tokens=7, completion_tokens=4),
+            ),
+            LlmDecision(
+                reasoning="Finish with a compact summary.",
+                action_type="finish",
+                final_summary="Identified the seed domain memory.example for future investigation context.",
+                token_usage=TokenUsage(prompt_tokens=8, completion_tokens=4),
+            ),
+        ],
+    )
+
+    for _ in range(6):
+        await orchestrator.run_once()
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        memory = await AgentProjectMemoryStore(session).build_read_model(project_id)
+        first_run = await session.get(AgentRun, first_run_id)
+        assert first_run is not None
+        second_run = AgentRun(
+            project_id=project_id,
+            user_id=first_run.user_id,
+            status=AgentRunStatus.PENDING,
+            scope={"mode": "all", "entity_ids": []},
+            prompt="Use prior project memory.",
+            provider="openai",
+            model="gpt-4.1-mini",
+            config={},
+            budget={"max_steps": 10, "max_transforms": 10, "max_runtime_sec": 600},
+            usage={},
+        )
+        session.add(second_run)
+        await session.commit()
+        await session.refresh(second_run)
+        messages = await AgentContextBuilder().build_messages(
+            run=second_run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Identified the seed domain memory.example" in memory.summary
+    assert any(run.prompt == "Inspect project memory seed run." for run in memory.recent_runs)
+    assert "Project memory from prior AI Investigator activity" in combined
+    assert "memory.example" in combined
+
+
+@pytest.mark.asyncio
+async def test_agent_context_builder_adds_goal_focus_for_platform_specific_prompt(client: AsyncClient):
+    project_id = await _create_project(client, "AgentGoalFocusProject")
+    run_id = await _start_agent_run(client, project_id, prompt="find additional information about youtube account")
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        messages = await AgentContextBuilder().build_messages(
+            run=run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Goal focus:" in combined
+    assert "youtube" in combined.lower()
+    assert "complete one or two direct enrichments" in combined
+
+
+@pytest.mark.asyncio
+async def test_agent_context_builder_includes_resume_context(client: AsyncClient):
+    project_id = await _create_project(client, "AgentResumeContextProject")
+    run_id = await _start_agent_run(client, project_id, prompt="Resume prior work.")
+
+    assert db_module.async_session_maker is not None
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        assert run is not None
+        run.config = {
+            **dict(run.config or {}),
+            "resume_context": {
+                "source_run_id": "11111111-1111-1111-1111-111111111111",
+                "source_status": "failed",
+                "source_summary": "Previously found the YouTube profile URL.",
+                "source_error": "AI Investigator max_steps budget exceeded",
+                "last_completed_step_number": 52,
+                "recent_steps": ["step 52: tool_result [completed] tool=run_transform output=Ran url_to_headers"],
+                "attempted_actions": ["run_transform {'entity_id': 'abc', 'transform_name': 'url_to_headers'}"],
+            },
+        }
+        session.add(run)
+        await session.commit()
+        messages = await AgentContextBuilder().build_messages(
+            run=run,
+            recent_steps=[],
+            tools=[],
+            session=session,
+        )
+
+    combined = "\n".join(message["content"] for message in messages)
+    assert "Resume context from a previous investigator run" in combined
+    assert "Previously found the YouTube profile URL" in combined
+    assert "Do not restart the investigation from scratch" in combined
 
 
 @pytest.mark.asyncio
@@ -909,3 +1137,110 @@ async def test_execute_direct_publishes_transform_events_for_worker_path(client:
     assert len(result["entities"]) > 0
     event_types = [json.loads(payload)["type"] for _channel, payload in fake_redis.messages]
     assert event_types == ["job_submitted", "job_started", "job_completed"]
+
+
+@pytest.mark.asyncio
+async def test_agent_invalid_transform_name_triggers_replan_instead_of_failure(client: AsyncClient):
+    project_id = await _create_project(client, "AgentInvalidTransformReplan")
+    created_entity = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "URL", "value": "https://www.youtube.com/@acidvegas"},
+    )
+    assert created_entity.status_code == 201
+    entity_id = created_entity.json()["id"]
+    run_id = await _start_agent_run(client, project_id, prompt="Use exact listed transforms only.")
+
+    orchestrator = _build_orchestrator(
+        worker_id="worker-invalid-transform-replan",
+        decisions=[
+            LlmDecision(
+                reasoning="Try a made-up YouTube metadata transform.",
+                action_type="tool_call",
+                tool_name="run_transform",
+                tool_params={"entity_id": entity_id, "transform_name": "youtube_channel_metadata"},
+                token_usage=TokenUsage(prompt_tokens=10, completion_tokens=5),
+            ),
+            LlmDecision(
+                reasoning="Use an actual listed transform on the URL.",
+                action_type="tool_call",
+                tool_name="run_transform",
+                tool_params={"entity_id": entity_id, "transform_name": "url_to_links"},
+                token_usage=TokenUsage(prompt_tokens=9, completion_tokens=4),
+            ),
+            LlmDecision(
+                reasoning="The valid transform ran successfully, so finish.",
+                action_type="finish",
+                final_summary="Recovered from an invalid transform guess and used a valid URL transform.",
+                token_usage=TokenUsage(prompt_tokens=8, completion_tokens=4),
+            ),
+        ],
+    )
+
+    await orchestrator.run_once()
+    await orchestrator.run_once()
+
+    async with db_module.async_session_maker() as session:
+        steps = await AgentStepStore(session).list_for_run(run_id)
+        first_tool_step = next(step for step in steps if step.type == AgentStepType.TOOL_CALL)
+
+    assert first_tool_step.status == AgentStepStatus.WAITING_APPROVAL
+
+    approve_first = await client.post(
+        f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{first_tool_step.id}/approve",
+        json={"note": "Run it"},
+    )
+    assert approve_first.status_code == 200
+
+    for _ in range(8):
+        await orchestrator.run_once()
+        async with db_module.async_session_maker() as session:
+            run = await session.get(AgentRun, run_id)
+            steps = await AgentStepStore(session).list_for_run(run_id)
+            assert run is not None
+            waiting_tool = next(
+                (
+                    step
+                    for step in steps
+                    if step.type == AgentStepType.TOOL_CALL
+                    and step.status == AgentStepStatus.WAITING_APPROVAL
+                    and step.id != first_tool_step.id
+                ),
+                None,
+            )
+        if waiting_tool is not None:
+            approve_next = await client.post(
+                f"/api/v1/projects/{project_id}/agent/runs/{run_id}/steps/{waiting_tool.id}/approve",
+                json={"note": "Run the valid transform"},
+            )
+            assert approve_next.status_code == 200
+            continue
+        async with db_module.async_session_maker() as session:
+            run = await session.get(AgentRun, run_id)
+            assert run is not None
+            if run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
+                break
+
+    async with db_module.async_session_maker() as session:
+        run = await session.get(AgentRun, run_id)
+        steps = await AgentStepStore(session).list_for_run(run_id)
+
+    assert run is not None
+    assert run.status == AgentRunStatus.COMPLETED
+    invalid_result = next(
+        step
+        for step in steps
+        if step.type == AgentStepType.TOOL_RESULT
+        and step.tool_name == "run_transform"
+        and "youtube_channel_metadata" in str(step.tool_input)
+    )
+    assert invalid_result.tool_output is not None
+    assert invalid_result.tool_output["success"] is False
+    assert "exact names" in invalid_result.tool_output["summary"]
+    rejected_tool_call = next(
+        step
+        for step in steps
+        if step.type == AgentStepType.TOOL_CALL
+        and "youtube_channel_metadata" in str(step.tool_input)
+    )
+    assert "Policy feedback:" in (rejected_tool_call.llm_output or "")
+    assert "not available for entity" in (rejected_tool_call.llm_output or "")

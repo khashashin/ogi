@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ogi.agent.models import AgentRun, AgentStep
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.tools import ToolDefinition
 from ogi.store.entity_store import EntityStore
 
@@ -14,6 +15,20 @@ from ogi.store.entity_store import EntityStore
 class AgentContextBuilder:
     max_recent_steps: int = 8
     max_scope_entities: int = 25
+    PLATFORM_KEYWORDS = (
+        "youtube",
+        "github",
+        "reddit",
+        "twitter",
+        "x.com",
+        "instagram",
+        "tiktok",
+        "linkedin",
+        "facebook",
+        "telegram",
+        "discord",
+        "twitch",
+    )
 
     async def build_messages(
         self,
@@ -24,7 +39,9 @@ class AgentContextBuilder:
         session: AsyncSession,
     ) -> list[dict[str, str]]:
         entity_store = EntityStore(session)
+        project_memory_store = AgentProjectMemoryStore(session)
         scope_summary = await self._build_scope_summary(run, entity_store)
+        project_memory = await project_memory_store.build_read_model(run.project_id)
         older_steps = recent_steps[:-self.max_recent_steps]
         detailed_steps = recent_steps[-self.max_recent_steps :]
 
@@ -34,7 +51,9 @@ class AgentContextBuilder:
                 "content": (
                     "You are OGI AI Investigator. Decide the next best investigative action. "
                     "Use only the available tools. Keep reasoning concise, factual, and auditable. "
-                    "Do not invent entities or transform results."
+                    "Do not invent entities or transform results. "
+                    "Entity properties are metadata, not standalone graph entities, unless they are separately "
+                    "returned by search/list tools or explicitly created with create_entity."
                 ),
             },
             {
@@ -46,6 +65,22 @@ class AgentContextBuilder:
                 ),
             },
         ]
+
+        goal_focus = self._render_goal_focus(run.prompt)
+        if goal_focus:
+            messages.append({"role": "system", "content": goal_focus})
+
+        if project_memory.summary or project_memory.known_facts or project_memory.recent_runs:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": self._render_project_memory(project_memory),
+                }
+            )
+
+        resume_context = self._render_resume_context(run)
+        if resume_context:
+            messages.append({"role": "system", "content": resume_context})
 
         if older_steps:
             messages.append(
@@ -98,6 +133,16 @@ class AgentContextBuilder:
                 }
             )
 
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "When you run a transform, the transform_name must exactly match a name returned by "
+                    "list_transforms for that specific entity. Do not invent or paraphrase transform names."
+                ),
+            }
+        )
+
         if detailed_steps:
             messages.append(
                 {
@@ -109,6 +154,90 @@ class AgentContextBuilder:
             )
 
         return messages
+
+    @staticmethod
+    def _render_project_memory(project_memory: object) -> str:
+        summary = getattr(project_memory, "summary", "") or ""
+        known_facts = getattr(project_memory, "known_facts", []) or []
+        recent_findings = getattr(project_memory, "recent_findings", []) or []
+        exhausted_paths = getattr(project_memory, "exhausted_paths", []) or []
+        recent_runs = getattr(project_memory, "recent_runs", []) or []
+
+        sections: list[str] = ["Project memory from prior AI Investigator activity:"]
+        if summary:
+            sections.append(f"Summary:\n{summary}")
+        if known_facts:
+            sections.append("Known facts:\n" + "\n".join(f"- {item}" for item in known_facts[-6:]))
+        if recent_findings:
+            sections.append("Recent findings:\n" + "\n".join(f"- {item}" for item in recent_findings[-6:]))
+        if exhausted_paths:
+            sections.append("Exhausted paths:\n" + "\n".join(f"- {item}" for item in exhausted_paths[-4:]))
+        if recent_runs:
+            rendered_runs = []
+            for item in recent_runs[-4:]:
+                prompt = getattr(item, "prompt", "")
+                status = getattr(item, "status", "")
+                run_summary = getattr(item, "summary", "")
+                rendered_runs.append(f"- [{status}] {prompt}: {run_summary}")
+            sections.append("Recent runs:\n" + "\n".join(rendered_runs))
+        return "\n\n".join(sections)
+
+    def _render_goal_focus(self, prompt: str) -> str:
+        normalized = prompt.lower()
+        targets = [keyword for keyword in self.PLATFORM_KEYWORDS if keyword in normalized]
+        if not targets:
+            return (
+                "Stay tightly aligned to the user goal. Prefer direct enrichment of the requested target over "
+                "broad lateral pivots. Finish once the goal is sufficiently answered and no clearly better direct "
+                "transform remains."
+            )
+
+        rendered_targets = ", ".join(sorted(set(targets)))
+        return (
+            f"Goal focus: the user explicitly asked about {rendered_targets}. "
+            "Prioritize entities and transforms directly related to that target. "
+            "Do not pivot into unrelated sibling accounts unless they are clearly needed to answer the target question. "
+            "Once you identify the target entity and complete one or two direct enrichments on it, prefer summarizing "
+            "the findings instead of continuing broad exploration."
+        )
+
+    @staticmethod
+    def _render_resume_context(run: AgentRun) -> str:
+        if not isinstance(run.config, dict):
+            return ""
+        resume = run.config.get("resume_context")
+        if not isinstance(resume, dict):
+            return ""
+
+        source_run_id = str(resume.get("source_run_id") or "").strip()
+        source_status = str(resume.get("source_status") or "").strip()
+        source_summary = str(resume.get("source_summary") or "").strip()
+        source_error = str(resume.get("source_error") or "").strip()
+        last_step_number = resume.get("last_completed_step_number")
+        recent_steps = resume.get("recent_steps") if isinstance(resume.get("recent_steps"), list) else []
+        attempted_actions = resume.get("attempted_actions") if isinstance(resume.get("attempted_actions"), list) else []
+
+        lines = [
+            "Resume context from a previous investigator run:",
+            f"- source run id: {source_run_id or 'unknown'}",
+            f"- source status: {source_status or 'unknown'}",
+        ]
+        if last_step_number is not None:
+            lines.append(f"- last completed step number: {last_step_number}")
+        if source_summary:
+            lines.append(f"- prior summary: {source_summary}")
+        if source_error:
+            lines.append(f"- prior error: {source_error}")
+        if recent_steps:
+            lines.append("Recent steps before the prior run stopped:")
+            lines.extend(f"- {str(item)}" for item in recent_steps[-6:])
+        if attempted_actions:
+            lines.append("Previously attempted actions to avoid repeating:")
+            lines.extend(f"- {str(item)}" for item in attempted_actions[-10:])
+        lines.append(
+            "Continue from these collected results. Do not restart the investigation from scratch or repeat the same actions unless new evidence justifies it."
+        )
+        return "\n".join(lines)
 
     async def _build_scope_summary(self, run: AgentRun, entity_store: EntityStore) -> str:
         if run.scope.get("mode") == "selected":

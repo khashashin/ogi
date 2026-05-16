@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ogi.agent.models import (
     AgentRun,
+    AgentProjectMemoryRead,
     AgentRunStatus,
     AgentStep,
     AgentStepStatus,
@@ -35,6 +36,7 @@ from ogi.agent.orchestrator import build_agent_event, publish_agent_event
 from ogi.agent.store import AgentRunStore, AgentStepStore
 from ogi.api.auth import get_current_user, require_project_editor, require_project_viewer
 from ogi.api.dependencies import (
+    get_agent_project_memory_store,
     get_agent_run_store,
     get_agent_settings_store,
     get_agent_step_store,
@@ -42,6 +44,7 @@ from ogi.api.dependencies import (
     get_api_key_store,
     get_redis,
 )
+from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.config import settings
 from ogi.models import AuditLogCreate, UserProfile
 from ogi.store.api_key_store import ApiKeyStore
@@ -71,6 +74,36 @@ def _default_budget(payload: BudgetConfig | None) -> dict[str, int]:
         "max_transforms": min(max_transforms, settings.agent_max_max_transforms),
         "max_runtime_sec": min(max_runtime_sec, settings.agent_max_max_runtime_sec),
     }
+
+
+def _summarize_attempted_actions_for_retry(steps: list[AgentStep]) -> list[str]:
+    summaries: list[str] = []
+    seen: set[str] = set()
+    for step in steps:
+        if step.type != AgentStepType.TOOL_CALL or not step.tool_name:
+            continue
+        params = step.tool_input or {}
+        if step.tool_name == "run_transform":
+            signature = f"{step.tool_name}:{params.get('transform_name')}:{params.get('entity_id') or params.get('entity_value')}"
+        else:
+            signature = f"{step.tool_name}:{str(params)}"
+        if signature in seen:
+            continue
+        seen.add(signature)
+        summaries.append(f"{step.tool_name} {str(params)[:200]}")
+    return summaries[-12:]
+
+
+def _render_retry_step_snapshot(step: AgentStep) -> str:
+    base = f"step {step.step_number}: {step.type.value} [{step.status.value}]"
+    if step.tool_name:
+        base += f" tool={step.tool_name}"
+    if step.llm_output:
+        base += f" reasoning={step.llm_output[:240]}"
+    elif step.tool_output:
+        summary = str((step.tool_output or {}).get("summary") or step.tool_output)[:240]
+        base += f" output={summary}"
+    return base
 
 async def _build_agent_settings_response(
     *,
@@ -246,6 +279,36 @@ async def test_agent_settings(
     return await test_provider_settings(provider, data.model, api_key)
 
 
+@router.get("/memory", response_model=AgentProjectMemoryRead)
+async def get_agent_project_memory(
+    project_id: UUID,
+    _role: str = Depends(require_project_viewer),
+    memory_store: AgentProjectMemoryStore = Depends(get_agent_project_memory_store),
+) -> AgentProjectMemoryRead:
+    return await memory_store.build_read_model(project_id)
+
+
+@router.delete("/memory", status_code=204)
+async def reset_agent_project_memory(
+    project_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
+    memory_store: AgentProjectMemoryStore = Depends(get_agent_project_memory_store),
+    audit_store: AuditLogStore = Depends(get_audit_log_store),
+) -> None:
+    await memory_store.reset_for_project(project_id)
+    await audit_store.create(
+        project_id,
+        current_user.id,
+        AuditLogCreate(
+            action="agent.project_memory_reset",
+            resource_type="agent_project_memory",
+            resource_id=str(project_id),
+            details={"project_id": str(project_id)},
+        ),
+    )
+
+
 @router.get("/runs", response_model=list[AgentRun])
 async def list_agent_runs(
     project_id: UUID,
@@ -324,6 +387,90 @@ async def cancel_agent_run(
         ),
     )
     return updated
+
+
+@router.post("/runs/{run_id}/retry", response_model=AgentRun, status_code=201)
+async def retry_agent_run(
+    project_id: UUID,
+    run_id: UUID,
+    current_user: UserProfile = Depends(get_current_user),
+    _role: str = Depends(require_project_editor),
+    run_store: AgentRunStore = Depends(get_agent_run_store),
+    step_store: AgentStepStore = Depends(get_agent_step_store),
+    audit_store: AuditLogStore = Depends(get_audit_log_store),
+) -> AgentRun:
+    source_run = await _load_run_or_404(project_id, run_id, run_store)
+    if source_run.status not in (AgentRunStatus.FAILED, AgentRunStatus.COMPLETED, AgentRunStatus.CANCELLED):
+        raise HTTPException(status_code=400, detail=f"Cannot retry a {_enum_value(source_run.status)} run")
+
+    active = await run_store.get_active_for_project(project_id)
+    if active is not None:
+        raise HTTPException(status_code=409, detail="An active AI investigation already exists for this project")
+
+    source_steps = await step_store.list_for_run(source_run.id)
+    completed_steps = [
+        step for step in source_steps
+        if step.status == AgentStepStatus.COMPLETED
+    ]
+    last_completed_step = completed_steps[-1] if completed_steps else None
+    recent_snapshots = [_render_retry_step_snapshot(step) for step in completed_steps[-6:]]
+    attempted_actions = _summarize_attempted_actions_for_retry(source_steps)
+
+    new_run = AgentRun(
+        project_id=project_id,
+        user_id=current_user.id,
+        status=AgentRunStatus.PENDING,
+        scope=source_run.scope,
+        prompt=source_run.prompt,
+        provider=source_run.provider,
+        model=source_run.model,
+        config={
+            "provider_service": (source_run.config or {}).get("provider_service", LLM_PROVIDER_SERVICE_MAP.get(source_run.provider, source_run.provider)),
+            "resume_context": {
+                "source_run_id": str(source_run.id),
+                "source_status": _enum_value(source_run.status),
+                "source_summary": source_run.summary or "",
+                "source_error": source_run.error or "",
+                "last_completed_step_number": None if last_completed_step is None else last_completed_step.step_number,
+                "recent_steps": recent_snapshots,
+                "attempted_actions": attempted_actions,
+            },
+        },
+        budget=dict(source_run.budget or {}),
+        usage=UsageInfo().model_dump(mode="json"),
+    )
+    created = await run_store.create(new_run)
+    await step_store.create(
+        AgentStep(
+            run_id=created.id,
+            step_number=1,
+            type=AgentStepType.THINK,
+            status=AgentStepStatus.PENDING,
+        )
+    )
+    await audit_store.create(
+        project_id,
+        current_user.id,
+        AuditLogCreate(
+            action="agent.run_retried",
+            resource_type="agent_run",
+            resource_id=str(created.id),
+            details={
+                "source_run_id": str(source_run.id),
+                "new_run_id": str(created.id),
+                "prompt": created.prompt,
+                "scope": created.scope,
+            },
+        ),
+    )
+    publish_agent_event(
+        get_redis(),
+        build_agent_event(
+            event_type="agent_run_started",
+            run=created,
+        ),
+    )
+    return created
 
 
 @router.post("/runs/{run_id}/steps/{step_id}/approve", response_model=AgentStep)

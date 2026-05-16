@@ -43,6 +43,11 @@ interface PinnedGraphState {
   entityIds: string[];
 }
 
+interface GraphRecoveryState {
+  nonce: number;
+  reason: string | null;
+}
+
 export type GraphFocusMode = "none" | "selection" | "neighbors-1" | "neighbors-2" | "search";
 
 export interface GraphDeclutterState {
@@ -60,6 +65,8 @@ const DEFAULT_DECLUTTER_STATE: GraphDeclutterState = {
   hideLowDegree: false,
   lowDegreeThreshold: 1,
 };
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 function loadPositions(projectId: string): NodePositions {
   try {
@@ -383,6 +390,7 @@ interface GraphState {
   manualHiddenEdgeIds: Set<string>;
   hiddenNodeIds: Set<string>;
   hiddenEdgeIds: Set<string>;
+  pendingEdges: Map<string, Edge>;
   filterState: GraphFilterState;
   declutterState: GraphDeclutterState;
   searchQuery: string;
@@ -392,13 +400,22 @@ interface GraphState {
   error: string | null;
   nodeOverlay: NodeOverlay | null;
   analysisResults: AnalysisResults | null;
+  graphRecovery: GraphRecoveryState;
 
   loadGraph: (projectId: string) => Promise<void>;
   loadGraphWindow: (projectId: string, fromTs?: string, toTs?: string) => Promise<void>;
   addEntity: (projectId: string, entity: Entity) => void;
+  upsertEntities: (projectId: string, entities: Entity[]) => void;
+  applyTransformResult: (
+    projectId: string,
+    result: { entities: Entity[]; edges: Edge[] },
+  ) => void;
+  removeEntityLocal: (projectId: string, entityId: string) => void;
   removeEntity: (projectId: string, entityId: string) => Promise<void>;
   removeEntities: (projectId: string, entityIds: string[]) => Promise<void>;
   addEdge: (projectId: string, edge: Edge) => void;
+  upsertEdges: (projectId: string, edges: Edge[]) => void;
+  removeEdgeLocal: (projectId: string, edgeId: string) => void;
   removeEdge: (projectId: string, edgeId: string) => Promise<void>;
   updateEdge: (projectId: string, edgeId: string, data: EdgeUpdate) => Promise<Edge | null>;
   selectNode: (nodeId: string | null, mode?: SelectionMode) => void;
@@ -429,6 +446,7 @@ interface GraphState {
   setCenterView: (view: CenterView) => void;
   setNodeOverlay: (overlay: NodeOverlay | null) => void;
   setAnalysisResults: (results: AnalysisResults | null) => void;
+  clearGraphRecovery: () => void;
   clearGraph: () => void;
   persistPositions: (projectId: string) => void;
   recordNodeMove: (
@@ -444,6 +462,83 @@ function createGraph(): Graph {
   return new Graph({ multi: true, type: "directed" });
 }
 
+function computeInitialPosition(index: number) {
+  const radius = 24 * Math.sqrt(index + 1);
+  const angle = index * GOLDEN_ANGLE;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
+
+function buildNodeAttrs(entity: Entity, index = 0) {
+  const meta = ENTITY_TYPE_META[entity.type];
+  const position = computeInitialPosition(index);
+  return {
+    label: entity.value,
+    x: position.x,
+    y: position.y,
+    size: 8 + entity.weight * 2,
+    color: meta?.color ?? "#6366f1",
+    type: "circle" as const,
+    entityType: entity.type,
+  };
+}
+
+function recomputeVisibility(state: {
+  graph: Graph;
+  entities: Map<string, Entity>;
+  edges: Map<string, Edge>;
+  filterState: GraphFilterState;
+  manualHiddenNodeIds: Set<string>;
+  manualHiddenEdgeIds: Set<string>;
+  selectedNodeIds: Set<string>;
+  searchQuery: string;
+  declutterState: GraphDeclutterState;
+}) {
+  const hiddenNodeIds = computeHiddenNodeIds(
+    state.graph,
+    state.entities,
+    state.filterState,
+    state.manualHiddenNodeIds,
+    state.selectedNodeIds,
+    state.searchQuery,
+    state.declutterState,
+  );
+  const hiddenEdgeIds = computeHiddenEdgeIds(
+    state.edges,
+    hiddenNodeIds,
+    state.manualHiddenEdgeIds,
+  );
+  return { hiddenNodeIds, hiddenEdgeIds };
+}
+
+function ensureEdgeMaterialized(graph: Graph, edge: Edge) {
+  if (
+    graph.hasNode(edge.source_id) &&
+    graph.hasNode(edge.target_id) &&
+    !graph.hasEdge(edge.id)
+  ) {
+    graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
+      label: edge.label,
+      size: 3,
+      color: "#4b5563",
+    });
+  }
+}
+
+function flushPendingEdges(graph: Graph, pendingEdges: Map<string, Edge>) {
+  let materialized = 0;
+  for (const [edgeId, edge] of [...pendingEdges.entries()]) {
+    if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
+      ensureEdgeMaterialized(graph, edge);
+      pendingEdges.delete(edgeId);
+      materialized += 1;
+    }
+  }
+  return materialized;
+}
+
 export const useGraphStore = create<GraphState>((set, get) => ({
   graph: createGraph(),
   selectedNodeId: null,
@@ -456,6 +551,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   manualHiddenEdgeIds: new Set(),
   hiddenNodeIds: new Set(),
   hiddenEdgeIds: new Set(),
+  pendingEdges: new Map(),
   filterState: { ...DEFAULT_FILTER_STATE },
   declutterState: { ...DEFAULT_DECLUTTER_STATE },
   searchQuery: "",
@@ -465,6 +561,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   error: null,
   nodeOverlay: null,
   analysisResults: null,
+  graphRecovery: { nonce: 0, reason: null },
 
   loadGraph: async (projectId) => {
     set({ loading: true, error: null });
@@ -479,20 +576,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const pinnedState = loadPinnedGraphState(projectId);
       const declutterState = loadDeclutterState(projectId);
 
-      for (const entity of data.entities) {
+      data.entities.forEach((entity, index) => {
         const meta = ENTITY_TYPE_META[entity.type];
         const pos = savedPositions[entity.id];
+        const initial = computeInitialPosition(index);
         graph.addNode(entity.id, {
           label: entity.value,
-          x: pos?.x ?? Math.random() * 800,
-          y: pos?.y ?? Math.random() * 600,
+          x: pos?.x ?? initial.x,
+          y: pos?.y ?? initial.y,
           size: 8 + entity.weight * 2,
           color: meta?.color ?? "#6366f1",
           type: "circle",
           entityType: entity.type,
         });
         entities.set(entity.id, entity);
-      }
+      });
 
       for (const edge of data.edges) {
         if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
@@ -527,6 +625,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         manualHiddenEdgeIds,
         hiddenNodeIds,
         hiddenEdgeIds,
+        pendingEdges: new Map(),
         filterState,
         declutterState,
         currentProjectId: projectId,
@@ -537,6 +636,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         searchQuery: "",
         nodeOverlay: null,
         analysisResults: null,
+        graphRecovery: { nonce: 0, reason: null },
       });
     } catch (e) {
       set({ error: String(e), loading: false });
@@ -556,20 +656,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const pinnedState = loadPinnedGraphState(projectId);
       const declutterState = loadDeclutterState(projectId);
 
-      for (const entity of data.entities) {
+      data.entities.forEach((entity, index) => {
         const meta = ENTITY_TYPE_META[entity.type];
         const pos = savedPositions[entity.id];
+        const initial = computeInitialPosition(index);
         graph.addNode(entity.id, {
           label: entity.value,
-          x: pos?.x ?? Math.random() * 800,
-          y: pos?.y ?? Math.random() * 600,
+          x: pos?.x ?? initial.x,
+          y: pos?.y ?? initial.y,
           size: 8 + entity.weight * 2,
           color: meta?.color ?? "#6366f1",
           type: "circle",
           entityType: entity.type,
         });
         entities.set(entity.id, entity);
-      }
+      });
 
       for (const edge of data.edges) {
         if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
@@ -604,6 +705,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         manualHiddenEdgeIds,
         hiddenNodeIds,
         hiddenEdgeIds,
+        pendingEdges: new Map(),
         declutterState,
         currentProjectId: projectId,
         loading: false,
@@ -612,44 +714,131 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selectedNodeIds: new Set(),
         searchQuery: "",
         nodeOverlay: null,
+        graphRecovery: { nonce: 0, reason: null },
       });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
   },
 
-  addEntity: (_projectId, entity) => {
-    const { graph, entities } = get();
-    const meta = ENTITY_TYPE_META[entity.type];
-    const nodeAttrs = {
-      label: entity.value,
-      x: Math.random() * 800,
-      y: Math.random() * 600,
-      size: 8 + entity.weight * 2,
-      color: meta?.color ?? "#6366f1",
-      type: "circle" as const,
-      entityType: entity.type,
-    };
-    if (!graph.hasNode(entity.id)) {
-      graph.addNode(entity.id, nodeAttrs);
-    }
-    entities.set(entity.id, entity);
+  addEntity: (projectId, entity) => {
+    const nodeAttrs = buildNodeAttrs(entity, get().entities.size);
+    get().upsertEntities(projectId, [entity]);
     useUndoStore.getState().push({ type: "add_entity", entity, nodeAttrs });
-    const { filterState, manualHiddenNodeIds, manualHiddenEdgeIds, edges, selectedNodeIds, searchQuery, declutterState } = get();
-    const hiddenNodeIds = computeHiddenNodeIds(
+  },
+
+  upsertEntities: (_projectId, incomingEntities) => {
+    if (incomingEntities.length === 0) return;
+    const state = get();
+    const { graph, entities, edges } = state;
+    const pendingEdges = new Map(state.pendingEdges);
+
+    for (const entity of incomingEntities) {
+      const nodeAttrs = buildNodeAttrs(entity, entities.size);
+      if (!graph.hasNode(entity.id)) {
+        graph.addNode(entity.id, nodeAttrs);
+      } else {
+        graph.setNodeAttribute(entity.id, "label", entity.value);
+        graph.setNodeAttribute(entity.id, "size", 8 + entity.weight * 2);
+        graph.setNodeAttribute(entity.id, "entityType", entity.type);
+        graph.setNodeAttribute(entity.id, "color", nodeAttrs.color);
+      }
+      entities.set(entity.id, entity);
+    }
+
+    flushPendingEdges(graph, pendingEdges);
+
+    for (const edge of edges.values()) {
+      ensureEdgeMaterialized(graph, edge);
+      if (graph.hasEdge(edge.id)) {
+        graph.setEdgeAttribute(edge.id, "label", edge.label);
+      }
+    }
+
+    const { hiddenNodeIds, hiddenEdgeIds } = recomputeVisibility({
       graph,
       entities,
-      filterState,
-      manualHiddenNodeIds,
-      selectedNodeIds,
-      searchQuery,
-      declutterState,
-    );
+      edges,
+      filterState: state.filterState,
+      manualHiddenNodeIds: state.manualHiddenNodeIds,
+      manualHiddenEdgeIds: state.manualHiddenEdgeIds,
+      selectedNodeIds: state.selectedNodeIds,
+      searchQuery: state.searchQuery,
+      declutterState: state.declutterState,
+    });
+
     set({
       graph,
       entities: new Map(entities),
       hiddenNodeIds,
-      hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, manualHiddenEdgeIds),
+      hiddenEdgeIds,
+      pendingEdges,
+      graphRecovery:
+        pendingEdges.size === 0
+          ? { nonce: state.graphRecovery.nonce, reason: null }
+          : state.graphRecovery,
+    });
+  },
+
+  applyTransformResult: (projectId, result) => {
+    get().upsertEntities(projectId, result.entities);
+    get().upsertEdges(projectId, result.edges);
+  },
+
+  removeEntityLocal: (projectId, entityId) => {
+    const state = get();
+    const { graph, entities, edges, manualHiddenNodeIds, manualHiddenEdgeIds } = state;
+    const pendingEdges = new Map(state.pendingEdges);
+    const entity = entities.get(entityId);
+    if (!entity) return;
+
+    if (graph.hasNode(entityId)) {
+      graph.dropNode(entityId);
+    }
+    entities.delete(entityId);
+    for (const [edgeId, edge] of edges.entries()) {
+      if (edge.source_id === entityId || edge.target_id === entityId) {
+        edges.delete(edgeId);
+        pendingEdges.delete(edgeId);
+      }
+    }
+
+    const nextPinnedNodeIds = new Set([...state.pinnedNodeIds].filter((id) => id !== entityId));
+    savePinnedGraphState(projectId, { entityIds: [...nextPinnedNodeIds] });
+    const nextManualHiddenNodeIds = new Set([...manualHiddenNodeIds].filter((id) => id !== entityId));
+    const nextManualHiddenEdgeIds = new Set([...manualHiddenEdgeIds].filter((id) => edges.has(id)));
+    const nextSelectedNodeIds = new Set([...state.selectedNodeIds].filter((id) => id !== entityId));
+    const nextSelectedNodeId =
+      state.selectedNodeId === entityId ? (nextSelectedNodeIds.values().next().value ?? null) : state.selectedNodeId;
+
+    const { hiddenNodeIds, hiddenEdgeIds } = recomputeVisibility({
+      graph,
+      entities,
+      edges,
+      filterState: state.filterState,
+      manualHiddenNodeIds: nextManualHiddenNodeIds,
+      manualHiddenEdgeIds: nextManualHiddenEdgeIds,
+      selectedNodeIds: nextSelectedNodeIds,
+      searchQuery: state.searchQuery,
+      declutterState: state.declutterState,
+    });
+
+    set({
+      graph,
+      entities: new Map(entities),
+      edges: new Map(edges),
+      pinnedNodeIds: nextPinnedNodeIds,
+      manualHiddenNodeIds: nextManualHiddenNodeIds,
+      manualHiddenEdgeIds: nextManualHiddenEdgeIds,
+      hiddenNodeIds,
+      hiddenEdgeIds,
+      pendingEdges,
+      selectedNodeId: nextSelectedNodeId,
+      selectedNodeIds: nextSelectedNodeIds,
+      graphRecovery:
+        pendingEdges.size === 0
+          ? { nonce: state.graphRecovery.nonce, reason: null }
+          : state.graphRecovery,
     });
   },
 
@@ -817,32 +1006,100 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
-  addEdge: (_projectId, edge) => {
-    const { graph, edges } = get();
+  addEdge: (projectId, edge) => {
     const edgeAttrs = { label: edge.label, size: 3, color: "#4b5563" };
-    if (
-      graph.hasNode(edge.source_id) &&
-      graph.hasNode(edge.target_id) &&
-      !graph.hasEdge(edge.id)
-    ) {
-      graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, edgeAttrs);
-    }
-    edges.set(edge.id, edge);
+    get().upsertEdges(projectId, [edge]);
     useUndoStore.getState().push({ type: "add_edge", edge, edgeAttrs });
-    const hiddenNodeIds = computeHiddenNodeIds(
+  },
+
+  upsertEdges: (_projectId, incomingEdges) => {
+    if (incomingEdges.length === 0) return;
+    const state = get();
+    const { graph, edges, entities } = state;
+    const pendingEdges = new Map(state.pendingEdges);
+    let unresolvedIncoming = 0;
+
+    for (const edge of incomingEdges) {
+      edges.set(edge.id, edge);
+      if (graph.hasNode(edge.source_id) && graph.hasNode(edge.target_id)) {
+        ensureEdgeMaterialized(graph, edge);
+        pendingEdges.delete(edge.id);
+      } else {
+        pendingEdges.set(edge.id, edge);
+        unresolvedIncoming += 1;
+      }
+      if (graph.hasEdge(edge.id)) {
+        graph.setEdgeAttribute(edge.id, "label", edge.label);
+        graph.setEdgeAttribute(edge.id, "size", Math.max(1, edge.weight ?? 3));
+      }
+    }
+
+    const { hiddenNodeIds, hiddenEdgeIds } = recomputeVisibility({
       graph,
-      get().entities,
-      get().filterState,
-      get().manualHiddenNodeIds,
-      get().selectedNodeIds,
-      get().searchQuery,
-      get().declutterState,
-    );
+      entities,
+      edges,
+      filterState: state.filterState,
+      manualHiddenNodeIds: state.manualHiddenNodeIds,
+      manualHiddenEdgeIds: state.manualHiddenEdgeIds,
+      selectedNodeIds: state.selectedNodeIds,
+      searchQuery: state.searchQuery,
+      declutterState: state.declutterState,
+    });
+
     set({
       graph,
       edges: new Map(edges),
       hiddenNodeIds,
-      hiddenEdgeIds: computeHiddenEdgeIds(edges, hiddenNodeIds, get().manualHiddenEdgeIds),
+      hiddenEdgeIds,
+      pendingEdges,
+      graphRecovery:
+        unresolvedIncoming > 0
+          ? {
+              nonce: state.graphRecovery.nonce + 1,
+              reason: `Pending edges reference missing nodes (${unresolvedIncoming} new unresolved edge${unresolvedIncoming === 1 ? "" : "s"})`,
+            }
+          : pendingEdges.size === 0
+            ? { nonce: state.graphRecovery.nonce, reason: null }
+            : state.graphRecovery,
+    });
+  },
+
+  removeEdgeLocal: (_projectId, edgeId) => {
+    const state = get();
+    const { graph, edges } = state;
+    const pendingEdges = new Map(state.pendingEdges);
+    if (!edges.has(edgeId)) return;
+
+    if (graph.hasEdge(edgeId)) {
+      graph.dropEdge(edgeId);
+    }
+    edges.delete(edgeId);
+    pendingEdges.delete(edgeId);
+    const nextManualHiddenEdgeIds = new Set(
+      [...state.manualHiddenEdgeIds].filter((id) => id !== edgeId),
+    );
+    const { hiddenNodeIds, hiddenEdgeIds } = recomputeVisibility({
+      graph,
+      entities: state.entities,
+      edges,
+      filterState: state.filterState,
+      manualHiddenNodeIds: state.manualHiddenNodeIds,
+      manualHiddenEdgeIds: nextManualHiddenEdgeIds,
+      selectedNodeIds: state.selectedNodeIds,
+      searchQuery: state.searchQuery,
+      declutterState: state.declutterState,
+    });
+    set({
+      graph,
+      edges: new Map(edges),
+      manualHiddenEdgeIds: nextManualHiddenEdgeIds,
+      hiddenNodeIds,
+      hiddenEdgeIds,
+      pendingEdges,
+      graphRecovery:
+        pendingEdges.size === 0
+          ? { nonce: state.graphRecovery.nonce, reason: null }
+          : state.graphRecovery,
     });
   },
 
@@ -1316,6 +1573,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setCenterView: (view) => set({ centerView: view }),
   setNodeOverlay: (overlay) => set({ nodeOverlay: overlay }),
   setAnalysisResults: (results) => set({ analysisResults: results }),
+  clearGraphRecovery: () =>
+    set((state) => ({
+      graphRecovery: { nonce: state.graphRecovery.nonce, reason: null },
+    })),
 
   clearGraph: () => {
     useUndoStore.getState().clear();
@@ -1331,6 +1592,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       manualHiddenEdgeIds: new Set(),
       hiddenNodeIds: new Set(),
       hiddenEdgeIds: new Set(),
+      pendingEdges: new Map(),
       filterState: { ...DEFAULT_FILTER_STATE },
       declutterState: { ...DEFAULT_DECLUTTER_STATE },
       searchQuery: "",
@@ -1338,6 +1600,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       currentProjectId: null,
       nodeOverlay: null,
       analysisResults: null,
+      graphRecovery: { nonce: 0, reason: null },
     });
   },
 

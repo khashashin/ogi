@@ -26,6 +26,10 @@ interface GraphState {
   edges: Map<string, StubEdge>;
   addEntity: ReturnType<typeof vi.fn>;
   addEdge: ReturnType<typeof vi.fn>;
+  upsertEntities: ReturnType<typeof vi.fn>;
+  upsertEdges: ReturnType<typeof vi.fn>;
+  removeEntityLocal: ReturnType<typeof vi.fn>;
+  removeEdgeLocal: ReturnType<typeof vi.fn>;
 }
 
 interface RealtimePayload {
@@ -141,6 +145,32 @@ describe("useRealtimeSync", () => {
         edges.set(edge.id, edge);
         graph.__seedEdge(edge.id);
       }),
+      upsertEntities: vi.fn((_projectId: string, incoming: StubEntity[]) => {
+        for (const entity of incoming) {
+          entities.set(entity.id, entity);
+          graph.__seedNode(entity.id);
+          if (entity.value) {
+            graph.setNodeAttribute(entity.id, "label", entity.value);
+          }
+        }
+      }),
+      upsertEdges: vi.fn((_projectId: string, incoming: StubEdge[]) => {
+        for (const edge of incoming) {
+          edges.set(edge.id, edge);
+          graph.__seedEdge(edge.id);
+          if (edge.label) {
+            graph.setEdgeAttribute(edge.id, "label", edge.label);
+          }
+        }
+      }),
+      removeEntityLocal: vi.fn((_projectId: string, entityId: string) => {
+        entities.delete(entityId);
+        graph.dropNode(entityId);
+      }),
+      removeEdgeLocal: vi.fn((_projectId: string, edgeId: string) => {
+        edges.delete(edgeId);
+        graph.dropEdge(edgeId);
+      }),
     };
   });
 
@@ -162,7 +192,7 @@ describe("useRealtimeSync", () => {
     const entity = { id: "e1", value: "alpha.test" };
     hoisted.handlers.entities({ eventType: "INSERT", new: entity, old: {} });
     hoisted.handlers.entities({ eventType: "INSERT", new: entity, old: {} });
-    expect(hoisted.state.addEntity).toHaveBeenCalledTimes(1);
+    expect(hoisted.state.upsertEntities).toHaveBeenCalledTimes(2);
 
     const updated = { id: "e1", value: "beta.test" };
     hoisted.handlers.entities({ eventType: "UPDATE", new: updated, old: entity });
@@ -170,6 +200,7 @@ describe("useRealtimeSync", () => {
     expect(hoisted.state.graph.__nodeLabels.get("e1")).toBe("beta.test");
 
     hoisted.handlers.entities({ eventType: "DELETE", old: { id: "e1" }, new: {} });
+    expect(hoisted.state.removeEntityLocal).toHaveBeenCalledWith("project-1", "e1");
     expect(hoisted.state.entities.has("e1")).toBe(false);
     unmount();
   });
@@ -180,7 +211,7 @@ describe("useRealtimeSync", () => {
     const edge = { id: "edge-1", source_id: "a", target_id: "b", label: "links to" };
     hoisted.handlers.edges({ eventType: "INSERT", new: edge, old: {} });
     hoisted.handlers.edges({ eventType: "INSERT", new: edge, old: {} });
-    expect(hoisted.state.addEdge).toHaveBeenCalledTimes(1);
+    expect(hoisted.state.upsertEdges).toHaveBeenCalledTimes(2);
 
     const updated = { ...edge, label: "related to" };
     hoisted.handlers.edges({ eventType: "UPDATE", new: updated, old: edge });
@@ -188,6 +219,7 @@ describe("useRealtimeSync", () => {
     expect(hoisted.state.graph.__edgeLabels.get("edge-1")).toBe("related to");
 
     hoisted.handlers.edges({ eventType: "DELETE", old: { id: "edge-1" }, new: {} });
+    expect(hoisted.state.removeEdgeLocal).toHaveBeenCalledWith("project-1", "edge-1");
     expect(hoisted.state.edges.has("edge-1")).toBe(false);
     unmount();
   });
