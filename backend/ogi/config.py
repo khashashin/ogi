@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from typing import Any
 from typing_extensions import Annotated
@@ -22,13 +23,13 @@ class Settings(BaseSettings):
     database_url: str = os.environ.get("OGI_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ogi")
 
     # Plugins
-    plugin_dirs: list[str] = ["plugins", "../plugins"]
+    plugin_dirs: Annotated[list[str], NoDecode] = ["plugins", "../plugins"]
 
     # SQLite (default for local dev; set OGI_USE_SQLITE=false for PostgreSQL)
     database_path: str = os.environ.get("OGI_DB_PATH", "ogi.db")
     use_sqlite: bool = os.environ.get("OGI_USE_SQLITE", True)
 
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173", "http://localhost:3000"]
     host: str = os.environ.get("OGI_HOST", "0.0.0.0")
     port: int = os.environ.get("OGI_PORT", 8000)
 
@@ -68,7 +69,10 @@ class Settings(BaseSettings):
             if not stripped:
                 return []
             if stripped.startswith("["):
-                return v
+                parsed = json.loads(stripped)
+                if not isinstance(parsed, list):
+                    raise ValueError("Expected a JSON array")
+                return parsed
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return v
 
@@ -88,8 +92,6 @@ class Settings(BaseSettings):
             if not stripped:
                 return {}
             if stripped.startswith("{"):
-                import json
-
                 parsed = json.loads(stripped)
                 if not isinstance(parsed, dict):
                     raise ValueError("transform_setting_max_overrides JSON must be an object")
@@ -159,14 +161,14 @@ class Settings(BaseSettings):
     sandbox_enabled: bool = False  # auto-enabled in cloud mode
     sandbox_timeout: int = 30
     sandbox_memory_mb: int = 256
-    sandbox_allowed_tiers: list[str] = ["official", "verified"]
+    sandbox_allowed_tiers: Annotated[list[str], NoDecode] = ["official", "verified"]
 
     # Plugin API key policy
     api_key_injection_allow_community_plugins: bool = True
     api_key_injection_trusted_tiers_only: bool = False
-    api_key_injection_allowed_tiers: list[str] = ["official", "verified"]
-    api_key_service_allowlist: list[str] = []
-    api_key_service_blocklist: list[str] = []
+    api_key_injection_allowed_tiers: Annotated[list[str], NoDecode] = ["official", "verified"]
+    api_key_service_allowlist: Annotated[list[str], NoDecode] = []
+    api_key_service_blocklist: Annotated[list[str], NoDecode] = []
 
     @property
     def abs_database_path(self) -> Path:

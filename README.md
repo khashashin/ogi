@@ -74,9 +74,31 @@ uv run uvicorn ogi.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
+For local transform execution, Redis and the transform worker must also be running. Redis alone is not enough.
+
+Start Redis:
+
+```bash
+docker run -d --name ogi-redis -p 6379:6379 redis:7-alpine
+```
+
+Start the transform worker in a second terminal:
+
+```bash
+cd backend
+uv run python -m ogi.worker.run_worker
+```
+
+If you see `Job queue not available` or `Redis not available`, verify that:
+
+- `OGI_REDIS_URL` points to `redis://localhost:6379/0` for local host-based runs
+- the backend was restarted after Redis came up
+- the separate worker process is running
+- you are not using the Docker-only hostname `redis` outside Docker Compose
+
 If you run the backend against PostgreSQL (`OGI_USE_SQLITE=false`), startup will automatically apply Alembic migrations before serving requests. Docker deployments do the same in the backend container entrypoint.
 
-AI Investigator runs are processed by a separate worker:
+AI Investigator runs are processed by another separate worker:
 
 ```bash
 cd backend
