@@ -160,7 +160,17 @@ docker compose up
 
 ### Production
 
-Use the prebuilt GHCR images:
+Use the prebuilt GHCR images.
+
+Important: [docker-compose.prod.yml](https://github.com/khashashin/ogi/blob/main/docker-compose.prod.yml) requires an external PostgreSQL database. It does not include a `db` service.
+
+If you want the all-in-one local Docker stack with built-in Postgres and Redis, use:
+
+```bash
+docker compose up -d
+```
+
+Use the production compose file only when you already have a reachable PostgreSQL instance and have set `OGI_DATABASE_URL` accordingly:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
@@ -188,16 +198,31 @@ OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=none,max_urls=none,max_links=non
 The override is keyed by transform setting name and applies to built-in transforms and community plugins that use OGI's shared transform base/runtime.
 
 <details>
-<summary><strong>Services overview</strong></summary>
+<summary><strong>Development Compose Services</strong></summary>
 
-| Service    | Description                | Port |
-| ---------- | -------------------------- | ---- |
-| `backend`  | FastAPI application server | 8000 |
-| `worker`   | RQ async job worker        | -    |
-| `agent-worker` | AI Investigator worker | -    |
-| `frontend` | React app served via nginx | 80   |
-| `db`       | PostgreSQL 16              | 5432 |
-| `redis`    | Redis 7 (job queue)        | 6379 |
+| Service        | Description                | Port |
+| -------------- | -------------------------- | ---- |
+| `backend`      | FastAPI application server | 8000 |
+| `worker`       | RQ async job worker        | -    |
+| `agent-worker` | AI Investigator worker     | -    |
+| `frontend`     | React app served via nginx | 80   |
+| `db`           | PostgreSQL 16              | 5432 |
+| `redis`        | Redis 7 (job queue)        | 6379 |
+
+</details>
+
+<details>
+<summary><strong>Production Compose Services</strong></summary>
+
+| Service        | Description                | Port |
+| -------------- | -------------------------- | ---- |
+| `backend`      | FastAPI application server | 8000 |
+| `worker`       | RQ async job worker        | -    |
+| `agent-worker` | AI Investigator worker     | -    |
+| `frontend`     | React app served via nginx | 80   |
+| `redis`        | Redis 7 (job queue)        | 6379 |
+
+`docker-compose.prod.yml` expects an external PostgreSQL database via `OGI_DATABASE_URL`.
 
 </details>
 
@@ -286,16 +311,16 @@ permissions:
 
 ### Tech Stack
 
-| Layer            | Technology                                                               |
-| ---------------- | ------------------------------------------------------------------------ |
-| Backend          | Python 3.14+, FastAPI, SQLModel, asyncpg / aiosqlite                     |
-| Frontend         | React 19, TypeScript 5.9, Sigma.js (graphology), Zustand, Tailwind CSS 4 |
-| Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                        |
-| Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                  |
-| Job Queue        | Redis 7 + RQ (async transforms)                                          |
+| Layer            | Technology                                                                  |
+| ---------------- | --------------------------------------------------------------------------- |
+| Backend          | Python 3.14+, FastAPI, SQLModel, asyncpg / aiosqlite                        |
+| Frontend         | React 19, TypeScript 5.9, Sigma.js (graphology), Zustand, Tailwind CSS 4    |
+| Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                           |
+| Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                     |
+| Job Queue        | Redis 7 + RQ (async transforms)                                             |
 | AI Runtime       | Provider-backed AI Investigator worker with audited transform orchestration |
-| Package Managers | uv (backend), pnpm (frontend)                                            |
-| Deployment       | Docker, nginx, GHCR                                                      |
+| Package Managers | uv (backend), pnpm (frontend)                                               |
+| Deployment       | Docker, nginx, GHCR                                                         |
 
 ### Project Structure
 
@@ -360,8 +385,8 @@ List-style settings accept either:
 | `OGI_REDIS_URL`                                 | Redis connection string for RQ/jobs                                                                              | `redis://localhost:6379/0`                          |
 | `OGI_RQ_QUEUE_NAME`                             | Queue name for transform jobs                                                                                    | `transforms`                                        |
 | `OGI_TRANSFORM_TIMEOUT`                         | Per-transform job timeout in seconds                                                                             | `300`                                               |
-| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`           | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
-| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                  | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
+| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`            | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
+| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                   | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
 | `OGI_AUTO_RUN_MIGRATIONS`                       | Auto-run Alembic on local non-SQLite app startup                                                                 | `true`                                              |
 | `OGI_RUN_DB_MIGRATIONS`                         | Run DB migrations in container entrypoint                                                                        | `false`                                             |
 | `OGI_DB_MIGRATION_RETRIES`                      | Entry-point migration retry count                                                                                | `30`                                                |
