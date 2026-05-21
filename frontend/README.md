@@ -55,6 +55,7 @@ Supported keys:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_SUPABASE_REDIRECT_URL`
+- `VITE_GA_MEASUREMENT_ID`
 
 Two configuration modes are supported:
 

@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import ReactGA from "react-ga4";
+import { getEnv } from "../lib/env";
 
 export function GoogleAnalytics() {
   const location = useLocation();
 
   useEffect(() => {
-    // We expect this to be defined in .env
-    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+    const measurementId = getEnv("VITE_GA_MEASUREMENT_ID");
     if (measurementId) {
       ReactGA.initialize(measurementId);
     } else {
@@ -16,10 +16,13 @@ export function GoogleAnalytics() {
   }, []);
 
   useEffect(() => {
+    const measurementId = getEnv("VITE_GA_MEASUREMENT_ID");
+    if (!measurementId) return;
+
     // Send a pageview event whenever the route changes
-    ReactGA.send({ 
-      hitType: "pageview", 
-      page: location.pathname + location.search 
+    ReactGA.send({
+      hitType: "pageview",
+      page: location.pathname + location.search
     });
   }, [location]);
 
