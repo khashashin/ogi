@@ -67,6 +67,13 @@ async def test_health(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_settings_capabilities_reports_cloud_export_disabled_without_supabase(client: AsyncClient):
+    resp = await client.get("/api/v1/settings/capabilities")
+    assert resp.status_code == 200
+    assert resp.json()["cloud_export_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_create_and_list_projects(client: AsyncClient):
     resp = await client.post("/api/v1/projects", json={"name": "Test", "description": "desc"})
     assert resp.status_code == 201

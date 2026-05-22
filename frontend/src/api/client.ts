@@ -43,6 +43,10 @@ interface CloudExportResponse {
   url: string;
 }
 
+interface CapabilitiesResponse {
+  cloud_export_enabled: boolean;
+}
+
 interface DiscoverProject {
   id: string;
   name: string;
@@ -122,6 +126,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // Projects
 export const api = {
+  settings: {
+    capabilities: () => request<CapabilitiesResponse>("/settings/capabilities"),
+  },
+
   projects: {
     list: () => request<Project[]>("/projects"),
     my: () => request<MyProjectItem[]>("/projects/my"),
