@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from ogi.models import (
@@ -9,6 +10,9 @@ from ogi.models import (
     TransformStatus,
 )
 from ogi.transforms.base import BaseTransform, TransformConfig
+
+if TYPE_CHECKING:
+    from ogi.engine.plugin_engine import PluginEngine
 
 
 def _api_key_services(transform: BaseTransform) -> list[str]:
@@ -128,6 +132,8 @@ class TransformEngine:
         from ogi.transforms.email.email_to_domain import EmailToDomain
         from ogi.transforms.email.domain_to_emails import DomainToEmails
         from ogi.transforms.cert.domain_to_certs import DomainToCerts
+        from ogi.transforms.email.email_to_holehe import EmailToHolehe
+        from ogi.transforms.email.google_email_to_ghunt import GoogleEmailToGHunt
         from ogi.transforms.cert.cert_transparency import CertTransparency
         from ogi.transforms.person.person_to_usernames import PersonToUsernames
         from ogi.transforms.social.username_search import UsernameSearch
@@ -138,6 +144,8 @@ class TransformEngine:
         from ogi.transforms.location.location_to_reverse_geocode import LocationToReverseGeocode
         from ogi.transforms.location.location_to_timezone import LocationToTimezone
         from ogi.transforms.location.location_to_sun_times import LocationToSunTimes
+        from ogi.transforms.social.username_to_maigret import UsernameToMaigret
+        from ogi.transforms.social.username_to_sherlock import UsernameToSherlock
         from ogi.transforms.location.location_to_weather_snapshot import LocationToWeatherSnapshot
 
         for cls in [
@@ -146,8 +154,9 @@ class TransformEngine:
             URLToHeaders, URLToLinks, URLToContent, ContentToIOCs, DomainToURLs,
             EmailToDomain, DomainToEmails,
             DomainToCerts, CertTransparency,
+            EmailToHolehe, GoogleEmailToGHunt,
             PersonToUsernames,
-            UsernameSearch, HashLookup,
+            UsernameSearch, UsernameToMaigret, UsernameToSherlock, HashLookup,
             WebsiteToPeople,
             LocationToGeocode,
             LocationToNearbyASNs,

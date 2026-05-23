@@ -20,6 +20,7 @@ export const EntityType = {
   SSLCertificate: "SSLCertificate",
   Subdomain: "Subdomain",
   HTTPHeader: "HTTPHeader",
+  Identifier: "Identifier",
 } as const;
 
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
@@ -60,6 +61,7 @@ export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.SSLCertificate]: { type: EntityType.SSLCertificate, icon: "shield", color: "#10b981", category: "Infrastructure" },
   [EntityType.Subdomain]: { type: EntityType.Subdomain, icon: "subdomain", color: "#06b6d4", category: "Infrastructure" },
   [EntityType.HTTPHeader]: { type: EntityType.HTTPHeader, icon: "file-code", color: "#8b5cf6", category: "Forensics" },
+  [EntityType.Identifier]: { type: EntityType.Identifier, icon: "tag", color: "#a78bfa", category: "Reference" },
 };
 
 export interface Entity {

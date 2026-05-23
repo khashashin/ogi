@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Column, JSON, DateTime
 
 
@@ -29,6 +28,7 @@ class EntityType(str, Enum):
     SSL_CERTIFICATE = "SSLCertificate"
     SUBDOMAIN = "Subdomain"
     HTTP_HEADER = "HTTPHeader"
+    IDENTIFIER = "Identifier"
 
 
 ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
@@ -53,6 +53,7 @@ ENTITY_TYPE_META: dict[EntityType, dict[str, str]] = {
     EntityType.SSL_CERTIFICATE: {"icon": "shield", "color": "#10b981", "category": "Infrastructure"},
     EntityType.SUBDOMAIN: {"icon": "globe", "color": "#06b6d4", "category": "Infrastructure"},
     EntityType.HTTP_HEADER: {"icon": "file-code", "color": "#8b5cf6", "category": "Forensics"},
+    EntityType.IDENTIFIER: {"icon": "tag", "color": "#a78bfa", "category": "Reference"},
 }
 
 

@@ -1,4 +1,4 @@
-import asyncio
+import json
 from uuid import uuid4
 
 import pytest
@@ -17,6 +17,8 @@ from ogi.store.weather_store import WeatherSnapshot, WeatherStore
 from ogi.transforms.base import TransformConfig
 from ogi.transforms.cert.cert_transparency import CertTransparency
 from ogi.transforms.cert.domain_to_certs import DomainToCerts
+from ogi.transforms.email.email_to_holehe import EmailToHolehe
+from ogi.transforms.email.google_email_to_ghunt import GoogleEmailToGHunt
 from ogi.transforms.email.domain_to_emails import DomainToEmails
 from ogi.transforms.email.email_to_domain import EmailToDomain
 from ogi.transforms.dns.whois_lookup import WhoisLookup
@@ -32,6 +34,8 @@ from ogi.transforms.location.location_to_weather_snapshot import LocationToWeath
 from ogi.transforms.person.person_to_usernames import PersonToUsernames
 from ogi.transforms.social.username_search import UsernameSearch
 from ogi.transforms.web.domain_to_urls import DomainToURLs
+from ogi.transforms.social.username_to_maigret import UsernameToMaigret
+from ogi.transforms.social.username_to_sherlock import UsernameToSherlock
 from ogi.transforms.web.url_to_headers import URLToHeaders
 from ogi.transforms.web.url_to_links import URLToLinks
 from ogi.transforms.web.website_to_people import WebsiteToPeople
@@ -670,6 +674,186 @@ async def test_username_search_uses_post_for_sites_with_post_body(monkeypatch: p
     method, _url, kwargs = client.requests[0]
     assert method == "POST"
     assert kwargs["data"] == "username=alice"
+
+
+@pytest.mark.asyncio
+async def test_username_to_maigret_parses_fixture_output():
+    transform = UsernameToMaigret()
+    entity = Entity(type=EntityType.USERNAME, value="alice")
+    payload = {
+        "username": "alice",
+        "results": {
+            "GitHub": {
+                "status": "Claimed",
+                "url_user": "https://github.com/alice",
+                "tags": ["coding", "developer"],
+            },
+            "ExampleMissing": {
+                "status": "Available",
+                "url_user": "https://example.test/alice",
+            },
+        },
+    }
+
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "result_json": json.dumps(payload),
+                "source_timestamp": "2026-05-23T22:00:00Z",
+                "tool_version": "maigret-test",
+            }
+        ),
+    )
+
+    social = [row for row in result.entities if row.type == EntityType.SOCIAL_MEDIA]
+    urls = [row for row in result.entities if row.type == EntityType.URL]
+    docs = [row for row in result.entities if row.type == EntityType.DOCUMENT]
+
+    assert [row.value for row in social] == ["alice@GitHub"]
+    assert [row.value for row in urls] == ["https://github.com/alice"]
+    assert docs and "Maigret" in docs[0].value
+    assert social[0].properties["tool_name"] == "maigret"
+    assert social[0].properties["tool_version"] == "maigret-test"
+    assert social[0].properties["raw_match_url"] == "https://github.com/alice"
+    assert social[0].properties["source_timestamp"] == "2026-05-23T22:00:00Z"
+    assert social[0].properties["confidence"] == pytest.approx(0.95)
+    assert "maigret alice" in social[0].properties["command"]
+    assert any(edge.label == "found account" for edge in result.edges)
+    assert any("Maigret fixture produced 1 account match" in msg for msg in result.messages)
+
+
+@pytest.mark.asyncio
+async def test_username_to_sherlock_parses_fixture_output():
+    transform = UsernameToSherlock()
+    entity = Entity(type=EntityType.USERNAME, value="alice")
+    payload = {
+        "GitHub": {
+            "status": "Claimed",
+            "url_user": "https://github.com/alice",
+            "http_status": 200,
+        },
+        "Reddit": {
+            "status": "Available",
+            "url_user": "https://www.reddit.com/user/alice",
+            "http_status": 404,
+        },
+    }
+
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "result_json": json.dumps(payload),
+                "source_timestamp": "2026-05-23T22:00:00Z",
+            }
+        ),
+    )
+
+    social = [row for row in result.entities if row.type == EntityType.SOCIAL_MEDIA]
+    urls = [row for row in result.entities if row.type == EntityType.URL]
+
+    assert [row.value for row in social] == ["alice@GitHub"]
+    assert [row.value for row in urls] == ["https://github.com/alice"]
+    assert social[0].properties["tool_name"] == "sherlock"
+    assert social[0].properties["raw_match_url"] == "https://github.com/alice"
+    assert social[0].properties["source_timestamp"] == "2026-05-23T22:00:00Z"
+    assert social[0].properties["warning"]
+    assert "sherlock alice" in social[0].properties["command"]
+    assert all("Reddit" not in row.value for row in social)
+
+
+@pytest.mark.asyncio
+async def test_email_to_holehe_parses_fixture_output():
+    transform = EmailToHolehe()
+    entity = Entity(type=EntityType.EMAIL_ADDRESS, value="alice@example.org")
+    payload = [
+        {
+            "name": "Instagram",
+            "exists": True,
+            "rateLimit": False,
+            "emailrecovery": "a***@example.org",
+            "phoneNumber": "+1******0100",
+        },
+        {
+            "name": "Twitter",
+            "exists": False,
+            "rateLimit": False,
+        },
+    ]
+
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "result_json": json.dumps(payload),
+                "source_timestamp": "2026-05-23T22:00:00Z",
+            }
+        ),
+    )
+
+    social = [row for row in result.entities if row.type == EntityType.SOCIAL_MEDIA]
+    docs = [row for row in result.entities if row.type == EntityType.DOCUMENT]
+
+    assert [row.value for row in social] == ["alice@example.org@Instagram"]
+    assert docs and "Holehe" in docs[0].value
+    assert social[0].properties["tool_name"] == "holehe"
+    assert social[0].properties["email_recovery"] == "a***@example.org"
+    assert social[0].properties["phone_recovery"] == "+1******0100"
+    assert social[0].properties["source_timestamp"] == "2026-05-23T22:00:00Z"
+    assert social[0].properties["warning"]
+    assert "holehe alice@example.org" in social[0].properties["command"]
+
+
+@pytest.mark.asyncio
+async def test_google_email_to_ghunt_parses_fixture_output():
+    transform = GoogleEmailToGHunt()
+    entity = Entity(type=EntityType.EMAIL_ADDRESS, value="alice@gmail.com")
+    payload = {
+        "email": "alice@gmail.com",
+        "gaia_id": "1234567890",
+        "profile": {
+            "name": "Alice Example",
+            "profile_url": "https://get.google.com/albumarchive/1234567890",
+        },
+        "calendar": {"timezone": "Europe/London"},
+    }
+
+    result = await transform.run(
+        entity,
+        TransformConfig(
+            settings={
+                "result_json": json.dumps(payload),
+                "source_timestamp": "2026-05-23T22:00:00Z",
+            }
+        ),
+    )
+
+    identifiers = [row for row in result.entities if row.type == EntityType.IDENTIFIER]
+    social = [row for row in result.entities if row.type == EntityType.SOCIAL_MEDIA]
+    docs = [row for row in result.entities if row.type == EntityType.DOCUMENT]
+
+    assert [row.value for row in identifiers] == ["google-gaia:1234567890"]
+    assert [row.value for row in social] == ["alice@gmail.com@Google"]
+    assert docs and "GHunt" in docs[0].value
+    assert identifiers[0].properties["tool_name"] == "ghunt"
+    assert identifiers[0].properties["source_timestamp"] == "2026-05-23T22:00:00Z"
+    assert identifiers[0].properties["warning"]
+    assert "ghunt email alice@gmail.com" in identifiers[0].properties["command"]
+
+
+def test_transform_engine_discovers_user_osint_transforms():
+    from ogi.engine.transform_engine import TransformEngine
+
+    engine = TransformEngine()
+    engine.auto_discover()
+    names = {row.name for row in engine.list_transforms()}
+    assert {
+        "username_to_maigret",
+        "username_to_sherlock",
+        "email_to_holehe",
+        "google_email_to_ghunt",
+    } <= names
 
 
 @pytest.mark.asyncio
