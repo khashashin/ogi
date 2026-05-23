@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideProps } from "lucide-react";
+import { Link } from "react-router";
 import {
-  User, Globe, Server, Mail, Phone, Building2, Link, AtSign,
-  Hash, FileText, MapPin, Network, Wifi, Search, Mailbox,
-  HardDrive, Shield, FileCode
+  User,
+  Globe,
+  Server,
+  Mail,
+  Phone,
+  Building2,
+  Link as LinkIcon,
+  AtSign,
+  Hash,
+  FileText,
+  MapPin,
+  Network,
+  Wifi,
+  Search,
+  Mailbox,
+  HardDrive,
+  Shield,
+  FileCode,
 } from "lucide-react";
 import { EntityType, ENTITY_TYPE_META } from "../types/entity";
 import type { EntityTypeMeta } from "../types/entity";
@@ -20,7 +36,7 @@ const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
   mail: Mail,
   phone: Phone,
   building: Building2,
-  link: Link,
+  link: LinkIcon,
   "at-sign": AtSign,
   hash: Hash,
   "file-text": FileText,
@@ -63,23 +79,29 @@ export function EntityPalette() {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<EntityType | null>(null);
   const [value, setValue] = useState("");
-  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [locationSuggestions, setLocationSuggestions] = useState<
+    LocationSuggestion[]
+  >([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestHint, setSuggestHint] = useState<string>("");
-  const [selectedSuggestion, setSelectedSuggestion] = useState<LocationSuggestion | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] =
+    useState<LocationSuggestion | null>(null);
   const suggestionTimer = useRef<number | null>(null);
   const { currentProject } = useProjectStore();
   const { addEntity } = useGraphStore();
   const isViewer = useIsViewer();
   const isLocationMode = adding === EntityType.Location;
   const valuePlaceholder = adding
-    ? (isLocationMode ? "Search location..." : ENTITY_VALUE_PLACEHOLDERS[adding] ?? "Enter value")
+    ? isLocationMode
+      ? "Search location..."
+      : (ENTITY_VALUE_PLACEHOLDERS[adding] ?? "Enter value")
     : "Enter value";
 
   const groupedTypes = useMemo(() => {
     const groups: Record<string, EntityTypeMeta[]> = {};
     for (const meta of Object.values(ENTITY_TYPE_META)) {
-      if (search && !meta.type.toLowerCase().includes(search.toLowerCase())) continue;
+      if (search && !meta.type.toLowerCase().includes(search.toLowerCase()))
+        continue;
       if (!groups[meta.category]) groups[meta.category] = [];
       groups[meta.category].push(meta);
     }
@@ -91,7 +113,9 @@ export function EntityPalette() {
     try {
       const trimmed = value.trim();
       const properties =
-        adding === EntityType.Location && selectedSuggestion && selectedSuggestion.display_name === trimmed
+        adding === EntityType.Location &&
+        selectedSuggestion &&
+        selectedSuggestion.display_name === trimmed
           ? {
               lat: selectedSuggestion.lat,
               lon: selectedSuggestion.lon,
@@ -131,7 +155,9 @@ export function EntityPalette() {
     if (q.length < 3) {
       setLocationSuggestions([]);
       setLoadingSuggestions(false);
-      setSuggestHint(q.length === 0 ? "" : "Type at least 3 characters for suggestions.");
+      setSuggestHint(
+        q.length === 0 ? "" : "Type at least 3 characters for suggestions.",
+      );
       return;
     }
 
@@ -143,7 +169,9 @@ export function EntityPalette() {
         setLocationSuggestions(resp.suggestions ?? []);
         if (resp.rate_limited) {
           const retry = resp.retry_after_seconds ?? 60;
-          setSuggestHint(`Location search is rate-limited. Try again in ~${retry}s.`);
+          setSuggestHint(
+            `Location search is rate-limited. Try again in ~${retry}s.`,
+          );
         } else if ((resp.suggestions ?? []).length === 0) {
           setSuggestHint("No matches found.");
         } else {
@@ -170,7 +198,10 @@ export function EntityPalette() {
       <div className="p-3 border-b border-border">
         <h2 className="text-sm font-semibold text-text mb-2">Entities</h2>
         <div className="relative">
-          <Search size={14} className="absolute left-2 top-2.5 text-text-muted" />
+          <Search
+            size={14}
+            className="absolute left-2 top-2.5 text-text-muted"
+          />
           <input
             type="text"
             placeholder="Search types..."
@@ -199,10 +230,14 @@ export function EntityPalette() {
           {isLocationMode && (
             <div className="mb-2 rounded border border-border bg-bg/60">
               {loadingSuggestions && (
-                <p className="px-2 py-1 text-[11px] text-text-muted">Searching...</p>
+                <p className="px-2 py-1 text-[11px] text-text-muted">
+                  Searching...
+                </p>
               )}
               {!loadingSuggestions && suggestHint && (
-                <p className="px-2 py-1 text-[11px] text-warning">{suggestHint}</p>
+                <p className="px-2 py-1 text-[11px] text-warning">
+                  {suggestHint}
+                </p>
               )}
               {!loadingSuggestions && locationSuggestions.length > 0 && (
                 <div className="max-h-36 overflow-y-auto">
@@ -213,7 +248,9 @@ export function EntityPalette() {
                         setValue(item.display_name);
                         setSelectedSuggestion(item);
                         setLocationSuggestions([]);
-                        setSuggestHint("Coordinates will be attached when you add this entity.");
+                        setSuggestHint(
+                          "Coordinates will be attached when you add this entity.",
+                        );
                       }}
                       className="w-full border-t border-border px-2 py-1 text-left text-[11px] text-text hover:bg-surface-hover first:border-t-0"
                     >
@@ -271,7 +308,11 @@ export function EntityPalette() {
                       className="shrink-0 invert"
                     />
                   ) : (
-                    <IconComponent size={14} className="shrink-0" style={{ color: meta.color }} />
+                    <IconComponent
+                      size={14}
+                      className="shrink-0"
+                      style={{ color: meta.color }}
+                    />
                   )}
                   <span>{meta.type}</span>
                 </button>
@@ -283,10 +324,23 @@ export function EntityPalette() {
 
       <div className="sticky bottom-0 border-t border-border bg-surface/95 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center justify-between text-[10px] text-text-muted">
-          <span>OGI</span>
-          <span className="rounded border border-border px-1.5 py-0.5 font-medium" title="Frontend version">
-            v{appVersion}
-          </span>
+          <Link
+            to="/"
+            className="text-xs font-semibold text-text hover:text-accent transition-colors"
+          >
+            OpenGraph Intel
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="rounded border border-warning/30 bg-warning/15 px-1.5 py-0.5 font-semibold uppercase tracking-wider text-warning">
+              Beta
+            </span>
+            <span
+              className="rounded border border-border px-1.5 py-0.5 font-medium"
+              title="Frontend version"
+            >
+              v{appVersion}
+            </span>
+          </div>
         </div>
       </div>
     </div>

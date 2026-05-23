@@ -53,7 +53,7 @@ export function Layout() {
         {/* Left sidebar: Entity Palette */}
         {!isViewer && (
           <>
-            <Panel defaultSize={10} minSize={2}>
+            <Panel defaultSize={14} minSize={2}>
               <div className="h-full bg-surface border-r border-border overflow-hidden">
                 <EntityPalette />
               </div>
@@ -64,7 +64,7 @@ export function Layout() {
         )}
 
         {/* Center: Graph + Bottom panel */}
-        <Panel defaultSize={80} minSize={30}>
+        <Panel defaultSize={76} minSize={30}>
           <Group orientation="vertical">
             <Panel defaultSize={65} minSize={30}>
               <div className="relative w-full h-full">
