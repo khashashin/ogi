@@ -15,6 +15,7 @@ const KNOWN_SERVICES = [
   "peeringdb",
   "openweather",
   "virustotal",
+  "urlscan",
   "shodan",
   "censys",
   "passivetotal",
