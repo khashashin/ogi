@@ -133,6 +133,11 @@ class TransformEngine:
         from ogi.transforms.email.domain_to_emails import DomainToEmails
         from ogi.transforms.cert.domain_to_certs import DomainToCerts
         from ogi.transforms.email.email_to_holehe import EmailToHolehe
+        from ogi.transforms.breachvip import (
+            EmailToBreachVipSummary,
+            PhoneToBreachVipSummary,
+            UsernameToBreachVipSummary,
+        )
         from ogi.transforms.email.google_email_to_ghunt import GoogleEmailToGHunt
         from ogi.transforms.cert.cert_transparency import CertTransparency
         from ogi.transforms.person.person_to_usernames import PersonToUsernames
@@ -155,6 +160,7 @@ class TransformEngine:
             EmailToDomain, DomainToEmails,
             DomainToCerts, CertTransparency,
             EmailToHolehe, GoogleEmailToGHunt,
+            EmailToBreachVipSummary, UsernameToBreachVipSummary, PhoneToBreachVipSummary,
             PersonToUsernames,
             UsernameSearch, UsernameToMaigret, UsernameToSherlock, HashLookup,
             WebsiteToPeople,
