@@ -64,4 +64,5 @@ def test_entity_types():
     names = {item.value for item in EntityType}
     assert "Person" in names
     assert "Username" in names
+    assert "Vulnerability" in names
     assert len(names) == len(EntityType)
