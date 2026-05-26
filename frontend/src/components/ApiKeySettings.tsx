@@ -18,6 +18,7 @@ const KNOWN_SERVICES = [
   "ipinfo",
   "urlscan",
   "shodan",
+  "opencve",
   "maltiverse",
   "censys",
   "passivetotal",
