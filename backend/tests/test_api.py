@@ -2377,6 +2377,29 @@ async def test_map_points_endpoint_returns_points_and_clusters(client: AsyncClie
         assert data["clusters"][0]["count"] >= 2
 
 
+@pytest.mark.asyncio
+async def test_map_points_endpoint_splits_clusters_at_high_zoom(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "MapClusterZoomProject"})
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+
+    payloads = [
+        {"type": "Location", "value": "loc-a", "properties": {"lat": 46.8182, "lon": 8.2275, "location_label": "A"}},
+        {"type": "Location", "value": "loc-b", "properties": {"lat": 46.8270, "lon": 8.2360, "location_label": "B"}},
+    ]
+    for payload in payloads:
+        created = await client.post(f"/api/v1/projects/{project_id}/entities", json=payload)
+        assert created.status_code == 201
+
+    low_zoom = await client.get(f"/api/v1/projects/{project_id}/map/points?cluster=true&zoom=4")
+    assert low_zoom.status_code == 200
+    assert low_zoom.json()["clusters"]
+
+    high_zoom = await client.get(f"/api/v1/projects/{project_id}/map/points?cluster=true&zoom=12")
+    assert high_zoom.status_code == 200
+    assert high_zoom.json()["clusters"] == []
+
+
 # ---------------------------------------------------------------------------
 # AI Investigator foundations
 # ---------------------------------------------------------------------------

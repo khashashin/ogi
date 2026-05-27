@@ -62,13 +62,19 @@ class MapStore:
         zoom: int = 3,
         geocode_missing: bool = True,
     ) -> MapPointsResponse:
-        entities = list((await self.session.execute(select(Entity).where(Entity.project_id == project_id))).scalars().all())
+        entity_rows = list(
+            (
+                await self.session.execute(
+                    select(Entity.id, Entity.type, Entity.value, Entity.properties).where(Entity.project_id == project_id)
+                )
+            ).all()
+        )
         points: list[MapPoint] = []
         unresolved: list[str] = []
 
-        for entity in entities:
-            fallback = entity.value if entity.type == EntityType.LOCATION else None
-            lat, lon, label, confidence = _extract_geo(entity.properties or {}, fallback)
+        for entity_id, entity_type, entity_value, entity_properties in entity_rows:
+            fallback = entity_value if entity_type == EntityType.LOCATION else None
+            lat, lon, label, confidence = _extract_geo(entity_properties or {}, fallback)
 
             if lat is None or lon is None:
                 if label:
@@ -91,9 +97,9 @@ class MapStore:
 
             points.append(
                 MapPoint(
-                    entity_id=entity.id,
-                    entity_type=entity.type.value,
-                    label=entity.value,
+                    entity_id=entity_id,
+                    entity_type=entity_type.value,
+                    label=entity_value,
                     lat=float(lat),
                     lon=float(lon),
                     geo_confidence=confidence,
@@ -108,25 +114,31 @@ class MapStore:
     async def get_routes(self, project_id: UUID, geocode_missing: bool = True) -> MapRoutesResponse:
         points = await self.get_points(project_id, cluster=False, geocode_missing=geocode_missing)
         point_by_entity = {point.entity_id: point for point in points.points}
-        edges = list((await self.session.execute(select(Edge).where(Edge.project_id == project_id))).scalars().all())
+        edge_rows = list(
+            (
+                await self.session.execute(
+                    select(Edge.id, Edge.source_id, Edge.target_id, Edge.label, Edge.weight).where(Edge.project_id == project_id)
+                )
+            ).all()
+        )
 
         routes: list[MapRoute] = []
-        for edge in edges:
-            src = point_by_entity.get(edge.source_id)
-            dst = point_by_entity.get(edge.target_id)
+        for edge_id, source_id, target_id, label, weight in edge_rows:
+            src = point_by_entity.get(source_id)
+            dst = point_by_entity.get(target_id)
             if src is None or dst is None:
                 continue
             routes.append(
                 MapRoute(
-                    edge_id=edge.id,
-                    source_entity_id=edge.source_id,
-                    target_entity_id=edge.target_id,
+                    edge_id=edge_id,
+                    source_entity_id=source_id,
+                    target_entity_id=target_id,
                     source_lat=src.lat,
                     source_lon=src.lon,
                     target_lat=dst.lat,
                     target_lon=dst.lon,
-                    label=edge.label,
-                    weight=edge.weight,
+                    label=label,
+                    weight=weight,
                 )
             )
         return MapRoutesResponse(routes=routes)
@@ -214,7 +226,10 @@ class MapStore:
         if not points:
             return []
         z = max(1, min(20, int(zoom)))
-        cell = max(0.03, 2.4 / z)
+        # Shrink the clustering cell exponentially with zoom so nearby points
+        # split apart as the user zooms in, instead of staying merged until
+        # very high zoom levels.
+        cell = max(0.0005, 360 / (2 ** (z + 3)))
         buckets: dict[tuple[int, int], list[MapPoint]] = {}
         for point in points:
             key = (int(point.lat / cell), int(point.lon / cell))

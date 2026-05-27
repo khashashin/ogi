@@ -8,6 +8,7 @@ import { AnalysisPanel } from "./AnalysisPanel";
 import { Toolbar } from "./Toolbar";
 import { RightToolbar } from "./RightToolbar";
 import { ContextMenu } from "./ContextMenu";
+import { CreateConnectionDialog } from "./CreateConnectionDialog";
 import { SearchBar } from "./SearchBar";
 import { FilterPanel } from "./FilterPanel";
 import { TableView } from "./TableView";
@@ -195,6 +196,7 @@ export function Layout() {
       </Group>
 
       <ContextMenu />
+      <CreateConnectionDialog />
     </div>
   );
 }

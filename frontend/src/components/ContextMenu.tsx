@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock } from "lucide-react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -29,12 +29,27 @@ export function ContextMenu() {
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { entities, pinnedNodeIds, removeEntity, removeEdge, selectNode, hideNode, hideEdge, hideConnectedEdges, pinNode, unpinNode } = useGraphStore();
+  const {
+    entities,
+    pinnedNodeIds,
+    removeEntity,
+    removeEdge,
+    selectNode,
+    hideNode,
+    hideEdge,
+    hideConnectedEdges,
+    pinNode,
+    unpinNode,
+    connectionDraft,
+    startConnectionDraft,
+    cancelConnectionDraft,
+  } = useGraphStore();
   const { currentProject } = useProjectStore();
   const isViewer = useIsViewer();
 
   const entity = menu.id && menu.type === "node" ? entities.get(menu.id) : null;
   const isPinned = Boolean(menu.id && pinnedNodeIds.has(menu.id));
+  const isConnectionSource = Boolean(menu.id && connectionDraft.sourceId === menu.id);
   const menuVisible = menu.visible;
   const menuX = menu.x;
   const menuY = menu.y;
@@ -207,6 +222,19 @@ export function ContextMenu() {
     close();
   };
 
+  const handleStartConnection = () => {
+    if (!menu.id || menu.type !== "node") return;
+    if (isConnectionSource) {
+      cancelConnectionDraft();
+      toast.success("Connection mode cancelled");
+    } else {
+      startConnectionDraft(menu.id);
+      selectNode(menu.id);
+      toast.success("Connection mode started. Select a target node.");
+    }
+    close();
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -268,6 +296,11 @@ export function ContextMenu() {
 
           {!isViewer && (
             <>
+              <button onClick={handleStartConnection} className={itemClass}>
+                <Link2 size={12} />
+                {isConnectionSource ? "Cancel Connection" : "Start Connection"}
+              </button>
+
               <button onClick={handleTogglePin} className={itemClass}>
                 {isPinned ? <Unlock size={12} /> : <Lock size={12} />}
                 {isPinned ? "Unpin Node" : "Pin Node"}

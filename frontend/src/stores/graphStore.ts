@@ -48,6 +48,12 @@ interface GraphRecoveryState {
   reason: string | null;
 }
 
+interface ConnectionDraftState {
+  sourceId: string | null;
+  targetId: string | null;
+  dialogOpen: boolean;
+}
+
 export type GraphFocusMode = "none" | "selection" | "neighbors-1" | "neighbors-2" | "search";
 
 export interface GraphDeclutterState {
@@ -401,6 +407,7 @@ interface GraphState {
   nodeOverlay: NodeOverlay | null;
   analysisResults: AnalysisResults | null;
   graphRecovery: GraphRecoveryState;
+  connectionDraft: ConnectionDraftState;
 
   loadGraph: (projectId: string) => Promise<void>;
   loadGraphWindow: (projectId: string, fromTs?: string, toTs?: string) => Promise<void>;
@@ -422,6 +429,9 @@ interface GraphState {
   selectNodes: (nodeIds: string[], mode?: SelectionMode) => void;
   selectEdge: (edgeId: string | null) => void;
   clearSelection: () => void;
+  startConnectionDraft: (sourceId: string) => void;
+  setConnectionTarget: (targetId: string | null) => void;
+  cancelConnectionDraft: () => void;
   pinNode: (projectId: string, nodeId: string) => void;
   unpinNode: (projectId: string, nodeId: string) => void;
   pinSelected: (projectId: string) => void;
@@ -562,6 +572,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   nodeOverlay: null,
   analysisResults: null,
   graphRecovery: { nonce: 0, reason: null },
+  connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
 
   loadGraph: async (projectId) => {
     set({ loading: true, error: null });
@@ -1154,6 +1165,42 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   selectNode: (nodeId, mode = "replace") =>
     set((state) => {
+      if (
+        nodeId !== null &&
+        state.connectionDraft.sourceId &&
+        nodeId !== state.connectionDraft.sourceId
+      ) {
+        const next = mode === "replace" ? new Set<string>([nodeId]) : new Set(state.selectedNodeIds);
+        if (mode !== "replace") {
+          if (mode === "toggle") {
+            if (next.has(nodeId)) next.delete(nodeId);
+            else next.add(nodeId);
+          } else {
+            next.add(nodeId);
+          }
+        }
+        const hiddenNodeIds = computeHiddenNodeIds(
+          state.graph,
+          state.entities,
+          state.filterState,
+          state.manualHiddenNodeIds,
+          next,
+          state.searchQuery,
+          state.declutterState,
+        );
+        return {
+          selectedNodeId: nodeId,
+          selectedEdgeId: null,
+          selectedNodeIds: next,
+          hiddenNodeIds,
+          hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+          connectionDraft: {
+            sourceId: state.connectionDraft.sourceId,
+            targetId: nodeId,
+            dialogOpen: true,
+          },
+        };
+      }
       if (nodeId === null) {
         const selectedNodeIds = new Set<string>();
         const hiddenNodeIds = computeHiddenNodeIds(
@@ -1171,6 +1218,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           selectedNodeIds,
           hiddenNodeIds,
           hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+          connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
         };
       }
       const next = mode === "replace" ? new Set<string>() : new Set(state.selectedNodeIds);
@@ -1243,6 +1291,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selectedNodeIds,
         hiddenNodeIds,
         hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+        connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
       };
     }),
   clearSelection: () =>
@@ -1263,8 +1312,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selectedNodeIds,
         hiddenNodeIds,
         hiddenEdgeIds: computeHiddenEdgeIds(state.edges, hiddenNodeIds, state.manualHiddenEdgeIds),
+        connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
       };
     }),
+  startConnectionDraft: (sourceId) =>
+    set(() => ({
+      connectionDraft: { sourceId, targetId: null, dialogOpen: false },
+      selectedEdgeId: null,
+    })),
+  setConnectionTarget: (targetId) =>
+    set((state) => ({
+      connectionDraft: {
+        sourceId: state.connectionDraft.sourceId,
+        targetId,
+        dialogOpen: Boolean(state.connectionDraft.sourceId && targetId),
+      },
+    })),
+  cancelConnectionDraft: () =>
+    set(() => ({
+      connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
+    })),
   pinNode: (projectId, nodeId) => {
     const { entities, pinnedNodeIds } = get();
     if (!entities.has(nodeId)) return;
@@ -1601,6 +1668,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodeOverlay: null,
       analysisResults: null,
       graphRecovery: { nonce: 0, reason: null },
+      connectionDraft: { sourceId: null, targetId: null, dialogOpen: false },
     });
   },
 
