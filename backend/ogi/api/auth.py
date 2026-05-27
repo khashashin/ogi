@@ -40,6 +40,17 @@ def get_supabase_client() -> Client | None:
         _supabase_client = create_client(settings.supabase_url, settings.supabase_anon_key)
     return _supabase_client
 
+
+def _detach_profile(profile: UserProfile) -> UserProfile:
+    """Return a plain profile snapshot detached from the active ORM session."""
+    return UserProfile(
+        id=profile.id,
+        email=profile.email,
+        display_name=profile.display_name,
+        avatar_url=profile.avatar_url,
+        created_at=profile.created_at,
+    )
+
 async def get_current_user(
     request: Request,
     session: AsyncSession = Depends(get_session),
@@ -94,7 +105,7 @@ async def get_current_user(
         session.add(profile)
         await session.commit()
 
-    return profile
+    return _detach_profile(profile)
 
 async def get_optional_user(request: Request) -> UserProfile | None:
     """Like ``get_current_user`` but returns ``None`` instead of raising."""

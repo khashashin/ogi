@@ -110,7 +110,7 @@ async def _resolve_ws_user(token: str | None) -> UserProfile | None:
         return None
 
     try:
-        from ogi.api.auth import get_supabase_client
+        from ogi.api.auth import get_supabase_client, _detach_profile
         from ogi.db.database import get_session
 
         client = get_supabase_client()
@@ -139,7 +139,7 @@ async def _resolve_ws_user(token: str | None) -> UserProfile | None:
                 profile.email = email
                 session.add(profile)
                 await session.commit()
-            return profile
+            return _detach_profile(profile)
     except Exception:
         return None
     return None
