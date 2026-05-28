@@ -5,6 +5,7 @@ import logging
 import shutil
 import subprocess
 import sys
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 
 from ogi.cli.lockfile import (
@@ -19,6 +20,14 @@ from ogi.cli.registry import RegistryClient, RegistryTransform
 logger = logging.getLogger(__name__)
 
 
+def get_runtime_ogi_version() -> str:
+    """Return the installed OGI package version used for compatibility gates."""
+    try:
+        return package_version("ogi")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
 class InstallError(Exception):
     """Raised when a transform cannot be installed."""
 
@@ -30,11 +39,11 @@ class TransformInstaller:
         self,
         registry: RegistryClient,
         plugins_dir: Path,
-        ogi_version: str = "0.3.0",
+        ogi_version: str | None = None,
     ) -> None:
         self.registry = registry
         self.plugins_dir = plugins_dir
-        self.ogi_version = ogi_version
+        self.ogi_version = ogi_version or get_runtime_ogi_version()
 
     def _lock(self) -> LockFile:
         return read_lockfile(
