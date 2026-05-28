@@ -5,7 +5,12 @@ import "./styles/globals.css";
 import App from "./App.tsx";
 import { GoogleAnalytics } from "./components/GoogleAnalytics.tsx";
 
-createRoot(document.getElementById("root")!).render(
+const rootElement = document.getElementById("root")!;
+if (rootElement.dataset.prerendered === "true") {
+  rootElement.innerHTML = "";
+}
+
+createRoot(rootElement).render(
   <StrictMode>
     <BrowserRouter>
       <GoogleAnalytics />
