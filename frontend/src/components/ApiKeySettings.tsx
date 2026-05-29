@@ -24,6 +24,7 @@ const KNOWN_SERVICES = [
   "passivetotal",
   "securitytrails",
   "abuseipdb",
+  "abusech",
 ] as const;
 
 export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeySettingsProps) {
