@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 
 from ogi.cli.installer import TransformInstaller, get_runtime_ogi_version
 from ogi.cli.lockfile import LOCK_FILENAME, LockFile, read_lockfile
@@ -81,4 +82,8 @@ def test_read_lockfile_backfills_missing_top_level_metadata(tmp_path: Path) -> N
 
 
 def test_get_runtime_ogi_version_matches_project_version() -> None:
-    assert get_runtime_ogi_version() == "0.5.8"
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject_path.open("rb") as fh:
+        pyproject = tomllib.load(fh)
+
+    assert get_runtime_ogi_version() == pyproject["project"]["version"]
