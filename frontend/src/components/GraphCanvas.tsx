@@ -7,6 +7,7 @@ import { applyGraphLayout } from "../lib/graphLayouts";
 import { ENTITY_TYPE_META } from "../types/entity";
 import { isCustomSvgIcon, resolveEntityIconName } from "../lib/entityIconRegistry";
 import { LazyLucideIcon } from "./LazyLucideIcon";
+import { ProtectedMediaImage } from "./ProtectedMediaImage";
 
 const SELECTED_LABEL_COLOR = "#111827";
 const SELECTED_LABEL_BG = "#f3f4f6";
@@ -14,6 +15,10 @@ const PINNED_LABEL_COLOR = "#dbeafe";
 const PINNED_LABEL_BG = "#1e3a8a";
 const CONNECTION_LABEL_COLOR = "#fef3c7";
 const CONNECTION_LABEL_BG = "#92400e";
+
+type NodeVisualOverlay =
+  | { id: string; x: number; y: number; size: number; kind: "icon"; icon: string; color: string }
+  | { id: string; x: number; y: number; size: number; kind: "image"; imageUrl: string; projectId: string | null };
 
 function getContrastIconColor(color?: string): string {
   const hex = (color ?? "").trim();
@@ -34,6 +39,16 @@ function getCustomNodeIcon(entity: { type: string; icon?: string | null }): stri
     return null;
   }
   return iconName;
+}
+
+function getPersonNodeImage(
+  entity: { type: string; properties?: Record<string, unknown> | null },
+): string | null {
+  if (entity.type !== "Person") return null;
+  const imageUrl = entity.properties?.visual_image_url;
+  if (typeof imageUrl !== "string") return null;
+  const trimmed = imageUrl.trim();
+  return trimmed || null;
 }
 
 function drawHighlightedNodeHover(
@@ -137,9 +152,7 @@ export function GraphCanvas() {
   } = useGraphStore();
   const { currentProject } = useProjectStore();
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
-  const [nodeIconOverlays, setNodeIconOverlays] = useState<
-    Array<{ id: string; x: number; y: number; size: number; icon: string; color: string }>
-  >([]);
+  const [nodeVisualOverlays, setNodeVisualOverlays] = useState<NodeVisualOverlay[]>([]);
   const [selectionBox, setSelectionBox] = useState<null | {
     startX: number;
     startY: number;
@@ -591,7 +604,7 @@ export function GraphCanvas() {
     return () => setSigmaRef(null);
   });
 
-  const updateNodeIconOverlays = useCallback(() => {
+  const updateNodeVisualOverlays = useCallback(() => {
     const renderer = sigmaRef.current as (Sigma & {
       getNodeDisplayData?: (key: string) => { x: number; y: number; size: number } | undefined;
       framedGraphToViewport?: (point: { x: number; y: number }) => { x: number; y: number };
@@ -610,14 +623,15 @@ export function GraphCanvas() {
 
     const width = container.clientWidth;
     const height = container.clientHeight;
-    const overlays: Array<{ id: string; x: number; y: number; size: number; icon: string; color: string }> = [];
+    const overlays: NodeVisualOverlay[] = [];
 
     graph.forEachNode((nodeId, attrs) => {
       if (hiddenNodeIds.has(nodeId)) return;
       const entity = entities.get(nodeId);
       if (!entity) return;
+      const imageUrl = getPersonNodeImage(entity);
       const customIcon = getCustomNodeIcon(entity);
-      if (!customIcon) return;
+      if (!imageUrl && !customIcon) return;
       const displayData = renderer.getNodeDisplayData?.(nodeId);
       if (!displayData) return;
       const point = renderer.framedGraphToViewport?.({
@@ -629,17 +643,32 @@ export function GraphCanvas() {
 
       const rawNodeSize = Number(displayData.size) || Number(attrs.size) || 12;
       const nodeSize = renderer.scaleSize?.(rawNodeSize) ?? rawNodeSize;
+
+      if (imageUrl) {
+        overlays.push({
+          id: nodeId,
+          x: point.x,
+          y: point.y,
+          size: Math.max(18, nodeSize * 2),
+          kind: "image",
+          imageUrl,
+          projectId: entity.project_id,
+        });
+        return;
+      }
+
       overlays.push({
         id: nodeId,
         x: point.x,
         y: point.y,
         size: Math.max(10, nodeSize * 1.35),
-        icon: customIcon,
+        kind: "icon",
+        icon: customIcon!,
         color: getContrastIconColor(String(attrs.color ?? "")),
       });
     });
 
-    setNodeIconOverlays(overlays);
+    setNodeVisualOverlays(overlays);
   }, [entities, graph, hiddenNodeIds]);
 
   useEffect(() => {
@@ -653,7 +682,7 @@ export function GraphCanvas() {
     }) | null;
     if (!renderer) return;
 
-    const refreshDomIcons = () => window.requestAnimationFrame(updateNodeIconOverlays);
+    const refreshDomIcons = () => window.requestAnimationFrame(updateNodeVisualOverlays);
     const camera = renderer.getCamera();
 
     renderer.on?.("afterRender", refreshDomIcons);
@@ -666,7 +695,7 @@ export function GraphCanvas() {
       camera.off?.("updated", refreshDomIcons);
       window.removeEventListener("resize", refreshDomIcons);
     };
-  }, [updateNodeIconOverlays]);
+  }, [updateNodeVisualOverlays]);
 
   const handleMouseDownCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!wrapperRef.current || event.button !== 0) return;
@@ -764,7 +793,7 @@ export function GraphCanvas() {
     >
       <div ref={containerRef} className="absolute inset-0" />
       <div className="pointer-events-none absolute inset-0 z-[30]">
-        {nodeIconOverlays.map((overlay) => {
+        {nodeVisualOverlays.map((overlay) => {
           return (
             <div
               key={overlay.id}
@@ -775,10 +804,17 @@ export function GraphCanvas() {
                 width: overlay.size,
                 height: overlay.size,
                 transform: "translate(-50%, -50%)",
-                color: overlay.color,
+                color: overlay.kind === "icon" ? overlay.color : undefined,
               }}
             >
-              {isCustomSvgIcon(overlay.icon) ? (
+              {overlay.kind === "image" ? (
+                <ProtectedMediaImage
+                  projectId={overlay.projectId}
+                  entityId={overlay.id}
+                  src={overlay.imageUrl}
+                  className="h-full w-full rounded-full border border-white/20 object-cover shadow-[0_0_0_1px_rgba(15,23,42,0.25)]"
+                />
+              ) : isCustomSvgIcon(overlay.icon) ? (
                 <img
                   src={`/icons/${overlay.icon}.svg`}
                   alt=""

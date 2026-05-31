@@ -13,12 +13,17 @@ services:
         condition: service_healthy
     volumes:
       - ogi_plugins:/app/plugins
+      - ogi_media:/app/media
     environment:
       - OGI_DATABASE_URL=${OGI_DATABASE_URL}
       - OGI_USE_SQLITE=false
       - OGI_GITHUB_TOKEN=${OGI_GITHUB_TOKEN:-}
       - OGI_SUPABASE_URL=${OGI_SUPABASE_URL}
       - OGI_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY}
+      - OGI_SUPABASE_SERVICE_ROLE_KEY=${OGI_SUPABASE_SERVICE_ROLE_KEY:-}
+      - OGI_MEDIA_DIR=${OGI_MEDIA_DIR:-/app/media}
+      - OGI_MEDIA_BUCKET_NAME=${OGI_MEDIA_BUCKET_NAME:-media}
+      - OGI_MEDIA_UPLOAD_MAX_BYTES=${OGI_MEDIA_UPLOAD_MAX_BYTES:-5242880}
       - OGI_REDIS_URL=redis://redis:6379/0
       - OGI_RUN_DB_MIGRATIONS=true
       - OGI_AUTO_RUN_MIGRATIONS=false
@@ -105,3 +110,4 @@ services:
 
 volumes:
   ogi_plugins:
+  ogi_media:

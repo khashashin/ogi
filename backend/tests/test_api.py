@@ -24,6 +24,7 @@ from ogi.main import app
 from ogi.db import database as db_module
 from ogi.agent.project_memory_store import AgentProjectMemoryStore
 from ogi.agent.models import AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentStepType
+from ogi.media_storage import MediaPayload, StoredMediaRef
 
 
 def assert_error_envelope(
@@ -119,6 +120,106 @@ async def test_entity_crud(client: AsyncClient):
     # Delete entity
     resp = await client.delete(f"/api/v1/projects/{project_id}/entities/{entity_id}")
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_person_image_upload_updates_person_entity(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    resp = await client.post("/api/v1/projects", json={"name": "PersonImage"})
+    project_id = resp.json()["id"]
+
+    create_resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Person", "value": "Jane Doe"},
+    )
+    assert create_resp.status_code == 201
+    entity_id = create_resp.json()["id"]
+
+    monkeypatch.setattr(
+        "ogi.api.entities.store_person_visual_image",
+        lambda **_: StoredMediaRef(
+            backend="local",
+            path="projects/test/entities/test/avatar.png",
+            content_type="image/png",
+        ),
+    )
+
+    upload_resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities/{entity_id}/person-image",
+        files={"file": ("avatar.png", b"fake-image-bytes", "image/png")},
+    )
+    assert upload_resp.status_code == 200
+    body = upload_resp.json()
+    assert body["storage_backend"] == "local"
+    assert body["image_url"] == f"/api/v1/projects/{project_id}/entities/{entity_id}/person-image"
+    assert body["entity"]["properties"]["visual_image_url"] == body["image_url"]
+    assert body["entity"]["properties"]["visual_image_backend"] == "local"
+    assert body["entity"]["properties"]["visual_image_path"] == "projects/test/entities/test/avatar.png"
+    assert body["entity"]["properties"]["visual_image_content_type"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_person_image_download_streams_protected_media(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    resp = await client.post("/api/v1/projects", json={"name": "PersonImageDownload"})
+    project_id = resp.json()["id"]
+
+    create_resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={
+            "type": "Person",
+            "value": "Jane Doe",
+            "properties": {
+                "visual_image_backend": "local",
+                "visual_image_path": "projects/test/entities/test/avatar.png",
+                "visual_image_content_type": "image/png",
+                "visual_image_url": f"/api/v1/projects/{project_id}/entities/placeholder/person-image",
+            },
+        },
+    )
+    assert create_resp.status_code == 201
+    entity_id = create_resp.json()["id"]
+
+    monkeypatch.setattr(
+        "ogi.api.entities.load_local_media",
+        lambda path, content_type=None: MediaPayload(
+            content=b"fake-image-bytes",
+            content_type=content_type or "image/png",
+        ),
+    )
+
+    download_resp = await client.get(
+        f"/api/v1/projects/{project_id}/entities/{entity_id}/person-image"
+    )
+    assert download_resp.status_code == 200
+    assert download_resp.content == b"fake-image-bytes"
+    assert download_resp.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_person_image_upload_rejects_non_person_entities(client: AsyncClient):
+    resp = await client.post("/api/v1/projects", json={"name": "NonPersonImage"})
+    project_id = resp.json()["id"]
+
+    create_resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities",
+        json={"type": "Domain", "value": "example.com"},
+    )
+    assert create_resp.status_code == 201
+    entity_id = create_resp.json()["id"]
+
+    upload_resp = await client.post(
+        f"/api/v1/projects/{project_id}/entities/{entity_id}/person-image",
+        files={"file": ("avatar.png", b"fake-image-bytes", "image/png")},
+    )
+    assert_error_envelope(
+        upload_resp,
+        400,
+        code="HTTP_400",
+        message_contains="Only Person entities can use uploaded images",
+    )
 
 
 @pytest.mark.asyncio

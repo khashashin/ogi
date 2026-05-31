@@ -64,3 +64,7 @@ backend/plugins/*
 !backend/plugins/.gitkeep
 plugins/*
 !plugins/.gitkeep
+
+# Uploaded media / protected local storage
+media/
+backend/media/
