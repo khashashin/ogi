@@ -1,26 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LucideProps } from "lucide-react";
 import { Link } from "react-router";
 import {
-  User,
-  Globe,
-  Server,
-  Mail,
-  Phone,
-  Building2,
-  Link as LinkIcon,
-  AtSign,
   Hash,
-  FileText,
-  ShieldAlert,
-  MapPin,
-  Network,
-  Wifi,
   Search,
-  Mailbox,
-  HardDrive,
-  Shield,
-  FileCode,
 } from "lucide-react";
 import { EntityType, ENTITY_TYPE_META } from "../types/entity";
 import type { EntityTypeMeta } from "../types/entity";
@@ -29,30 +11,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import { useIsViewer } from "../hooks/useIsViewer";
 import type { LocationSuggestion } from "../types/location";
-
-const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
-  user: User,
-  globe: Globe,
-  server: Server,
-  mail: Mail,
-  phone: Phone,
-  building: Building2,
-  link: LinkIcon,
-  "at-sign": AtSign,
-  hash: Hash,
-  "file-text": FileText,
-  "shield-alert": ShieldAlert,
-  "file-code": FileCode,
-  "map-pin": MapPin,
-  network: Network,
-  wifi: Wifi,
-  mailbox: Mailbox,
-  "hard-drive": HardDrive,
-  shield: Shield,
-};
-
-/** Custom SVG icons served from /icons/ */
-const CUSTOM_SVG_ICONS = new Set(["subdomain", "nsrecord"]);
+import { getEntityIconComponent, isCustomSvgIcon } from "../lib/entityIconRegistry";
 
 const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
   [EntityType.Person]: "Enter first and last name",
@@ -294,8 +253,8 @@ export function EntityPalette() {
               {category}
             </p>
             {types.map((meta) => {
-              const isCustomSvg = CUSTOM_SVG_ICONS.has(meta.icon);
-              const IconComponent = ICON_MAP[meta.icon] ?? Hash;
+              const isCustomSvg = isCustomSvgIcon(meta.icon);
+              const IconComponent = getEntityIconComponent(meta.icon) ?? Hash;
               return (
                 <button
                   key={meta.type}

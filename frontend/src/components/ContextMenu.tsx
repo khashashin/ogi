@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock, Link2 } from "lucide-react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import { Trash2, Play, Copy, Focus, Loader2, Pencil, EyeOff, Lock, Unlock, Link2, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -7,6 +7,11 @@ import type { TransformInfo } from "../types/transform";
 import { api } from "../api/client";
 import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
+import { resolveEntityIconName } from "../lib/entityIconRegistry";
+import { ENTITY_TYPE_META } from "../types/entity";
+const ChangeIconDialog = lazy(() =>
+  import("./ChangeIconDialog").then((module) => ({ default: module.ChangeIconDialog })),
+);
 
 interface MenuState {
   visible: boolean;
@@ -27,6 +32,7 @@ export function ContextMenu() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
   const [showTransforms, setShowTransforms] = useState(false);
   const [runningTransform, setRunningTransform] = useState<string | null>(null);
+  const [showChangeIcon, setShowChangeIcon] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -122,8 +128,6 @@ export function ContextMenu() {
       setMenu((m) => ({ ...m, x, y }));
     }
   }, [menuVisible, menuX, menuY]);
-
-  if (!menu.visible) return null;
 
   const close = () => setMenu((m) => ({ ...m, visible: false }));
 
@@ -235,6 +239,32 @@ export function ContextMenu() {
     close();
   };
 
+  const handleOpenChangeIcon = () => {
+    if (!menu.id || menu.type !== "node") return;
+    setShowChangeIcon(true);
+    close();
+  };
+
+  const handleSaveIcon = async (iconName: string) => {
+    if (!currentProject || !entity) return;
+    try {
+      const defaultIcon = ENTITY_TYPE_META[entity.type]?.icon ?? iconName;
+      const normalizedIcon =
+        resolveEntityIconName(iconName) === resolveEntityIconName(defaultIcon)
+          ? defaultIcon
+          : iconName;
+      const updated = await api.entities.update(currentProject.id, entity.id, { icon: normalizedIcon });
+      const { entities: entityMap } = useGraphStore.getState();
+      entityMap.set(updated.id, updated);
+      useGraphStore.setState({ entities: new Map(entityMap) });
+      toast.success("Node icon updated");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Icon update failed: ${msg}`);
+      throw e;
+    }
+  };
+
   const handleRunTransform = async (name: string) => {
     if (!currentProject || !menu.id) return;
     setRunningTransform(name);
@@ -266,13 +296,15 @@ export function ContextMenu() {
     "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text hover:bg-surface-hover text-left";
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed z-50 bg-surface border border-border rounded shadow-lg py-1 min-w-[180px] animate-fade-in"
-      style={{ left: menu.x, top: menu.y }}
-    >
-      {menu.type === "node" && entity && (
-        <>
+    <>
+      {menu.visible && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 bg-surface border border-border rounded shadow-lg py-1 min-w-[180px] animate-fade-in"
+          style={{ left: menu.x, top: menu.y }}
+        >
+          {menu.type === "node" && entity && (
+            <>
           <div className="px-3 py-1 text-[10px] text-text-muted border-b border-border mb-1 truncate max-w-[240px]">
             {entity.value}
           </div>
@@ -291,6 +323,13 @@ export function ContextMenu() {
             <button onClick={handleEditProperties} className={itemClass}>
               <Pencil size={12} />
               Edit Properties...
+            </button>
+          )}
+
+          {!isViewer && (
+            <button onClick={handleOpenChangeIcon} className={itemClass}>
+              <Palette size={12} />
+              Change Icon...
             </button>
           )}
 
@@ -363,33 +402,45 @@ export function ContextMenu() {
               </button>
             </>
           )}
-        </>
+            </>
+          )}
+
+          {menu.type === "edge" && !isViewer && (
+            <>
+              <button onClick={handleHideEdge} className={itemClass}>
+                <EyeOff size={12} />
+                Hide Edge
+              </button>
+
+              <div className="border-t border-border my-1" />
+
+              <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
+                <Trash2 size={12} />
+                Delete Edge
+              </button>
+            </>
+          )}
+
+          {menu.type === "stage" && (
+            <>
+              <button onClick={handleFitToScreen} className={itemClass}>
+                <Focus size={12} />
+                Fit to Screen
+              </button>
+            </>
+          )}
+        </div>
       )}
 
-      {menu.type === "edge" && !isViewer && (
-        <>
-          <button onClick={handleHideEdge} className={itemClass}>
-            <EyeOff size={12} />
-            Hide Edge
-          </button>
-
-          <div className="border-t border-border my-1" />
-
-          <button onClick={handleDelete} className={`${itemClass} text-danger hover:text-danger`}>
-            <Trash2 size={12} />
-            Delete Edge
-          </button>
-        </>
-      )}
-
-      {menu.type === "stage" && (
-        <>
-          <button onClick={handleFitToScreen} className={itemClass}>
-            <Focus size={12} />
-            Fit to Screen
-          </button>
-        </>
-      )}
-    </div>
+      <Suspense fallback={null}>
+        <ChangeIconDialog
+          open={showChangeIcon && Boolean(entity)}
+          currentIcon={entity?.icon ?? "hash"}
+          entityLabel={entity?.value ?? ""}
+          onClose={() => setShowChangeIcon(false)}
+          onSave={handleSaveIcon}
+        />
+      </Suspense>
+    </>
   );
 }

@@ -92,6 +92,7 @@ export interface EntityCreate {
 export interface EntityUpdate {
   value?: string;
   properties?: Record<string, PropertyValue>;
+  icon?: string;
   weight?: number;
   notes?: string;
   tags?: string[];
