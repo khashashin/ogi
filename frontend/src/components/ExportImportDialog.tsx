@@ -3,6 +3,7 @@ import { Download, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
+import { exportGraphImage } from "../stores/graphExport";
 import { api } from "../api/client";
 import { useIsViewer } from "../hooks/useIsViewer";
 
@@ -17,6 +18,7 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
   const [cloudImportUrl, setCloudImportUrl] = useState("");
   const [cloudExportBusy, setCloudExportBusy] = useState<null | "json" | "csv" | "graphml">(null);
   const [cloudExportEnabled, setCloudExportEnabled] = useState(false);
+  const [graphExporting, setGraphExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentProject } = useProjectStore();
   const { loadGraph } = useGraphStore();
@@ -70,6 +72,19 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
       toast.error(`Cloud export failed: ${msg}`);
     } finally {
       setCloudExportBusy(null);
+    }
+  };
+
+  const handleGraphExport = async () => {
+    setGraphExporting(true);
+    try {
+      await exportGraphImage();
+      toast.success("Graph image exported");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`Graph export failed: ${msg}`);
+    } finally {
+      setGraphExporting(false);
     }
   };
 
@@ -261,6 +276,21 @@ export function ExportImportDialog({ open, onClose }: ExportImportDialogProps) {
                   </div>
                 </button>
               )}
+              <button
+                onClick={handleGraphExport}
+                disabled={graphExporting}
+                className={`${btnClass} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <Download size={14} className="text-accent" />
+                <div className="text-left">
+                  <p className="font-medium">Graph PNG</p>
+                  <p className="text-[10px] text-text-muted">
+                    {graphExporting
+                      ? "Rendering full graph image..."
+                      : "High-resolution image of the full graph canvas"}
+                  </p>
+                </div>
+              </button>
             </div>
           ) : (
             <div className="space-y-3">

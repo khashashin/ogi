@@ -3,6 +3,7 @@ import Sigma from "sigma";
 import { useGraphStore } from "../stores/graphStore";
 import { useProjectStore } from "../stores/projectStore";
 import { setSigmaRef } from "../stores/sigmaRef";
+import { setGraphExportHandler } from "../stores/graphExport";
 import { applyGraphLayout } from "../lib/graphLayouts";
 import { ENTITY_TYPE_META } from "../types/entity";
 import { isCustomSvgIcon, resolveEntityIconName } from "../lib/entityIconRegistry";
@@ -603,6 +604,26 @@ export function GraphCanvas() {
     setSigmaRef(sigmaRef.current);
     return () => setSigmaRef(null);
   });
+
+  const handleExportGraphImage = useCallback(async () => {
+    const backgroundColor = wrapperRef.current
+      ? getComputedStyle(wrapperRef.current).backgroundColor || "#0b1020"
+      : "#0b1020";
+    const { exportGraphImage } = await import("../lib/exportGraphImage");
+    await exportGraphImage({
+      graph,
+      entities,
+      hiddenNodeIds,
+      hiddenEdgeIds,
+      projectName: currentProject?.name ?? "graph",
+      backgroundColor,
+    });
+  }, [currentProject?.name, entities, graph, hiddenEdgeIds, hiddenNodeIds]);
+
+  useEffect(() => {
+    setGraphExportHandler(handleExportGraphImage);
+    return () => setGraphExportHandler(null);
+  }, [handleExportGraphImage]);
 
   const updateNodeVisualOverlays = useCallback(() => {
     const renderer = sigmaRef.current as (Sigma & {
