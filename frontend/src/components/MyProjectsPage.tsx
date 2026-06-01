@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import { Loader2, Plus, Trash2, Lock, Unlock, User, FolderOpen, LogOut } from "lucide-react";
 import { api } from "../api/client";
-import type { MyProjectItem } from "../api/client";
+import type { CapabilitiesResponse, MyProjectItem } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectStore } from "../stores/projectStore";
 import { ProfileDialog } from "./ProfileDialog";
@@ -27,6 +27,7 @@ export function MyProjectsPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(null);
 
   const fetchMyProjects = async () => {
     setLoading(true);
@@ -43,6 +44,23 @@ export function MyProjectsPage() {
 
   useEffect(() => {
     fetchMyProjects();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const caps = await api.settings.capabilities();
+        if (!cancelled) {
+          setCapabilities(caps);
+        }
+      } catch {
+        // Non-critical; leave capabilities unavailable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const owned = projects.filter((p) => p.source === "owned");
@@ -134,13 +152,23 @@ export function MyProjectsPage() {
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-xl font-semibold text-text">My Projects</h1>
-          <button
-            onClick={() => setShowCreate(!showCreate)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent-hover"
-          >
-            <Plus size={14} />
-            New Project
-          </button>
+          <div className="flex items-center gap-2">
+            {capabilities?.telemetry_admin_enabled && (
+              <Link
+                to="/admin/telemetry"
+                className="px-3 py-1.5 text-sm rounded border border-border text-text-muted hover:text-text hover:border-accent/40"
+              >
+                Telemetry Admin
+              </Link>
+            )}
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent-hover"
+            >
+              <Plus size={14} />
+              New Project
+            </button>
+          </div>
         </div>
 
         {/* Create project form */}
@@ -241,6 +269,7 @@ export function MyProjectsPage() {
         open={showProfile}
         onClose={() => setShowProfile(false)}
         onOpenApiKeys={() => setShowApiKeys(true)}
+        capabilities={capabilities}
       />
       <ApiKeySettings
         open={showApiKeys}

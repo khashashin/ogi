@@ -51,6 +51,36 @@ interface PersonImageUploadResponse {
 
 interface CapabilitiesResponse {
   cloud_export_enabled: boolean;
+  deployment_mode: string;
+  telemetry_enabled: boolean;
+  telemetry_level: string;
+  telemetry_admin_enabled: boolean;
+  telemetry_docs_url: string;
+}
+
+interface TelemetryOverview {
+  active_instances_30d: number;
+  self_hosted_instances_30d: number;
+  cloud_instances_30d: number;
+  latest_metric_date: string | null;
+  recent_versions: { version: string; count: number }[];
+}
+
+interface TelemetryTransformSnapshot {
+  name: string;
+  version: string;
+}
+
+interface TelemetryInstanceSummary {
+  instance_id: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  instance_created_at: string | null;
+  latest_ogi_version: string;
+  latest_telemetry_level: string;
+  deployment_mode: string;
+  latest_country_code: string | null;
+  installed_transforms: TelemetryTransformSnapshot[];
 }
 
 interface DiscoverProject {
@@ -156,6 +186,12 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
 export const api = {
   settings: {
     capabilities: () => request<CapabilitiesResponse>("/settings/capabilities"),
+  },
+
+  telemetry: {
+    overview: () => request<TelemetryOverview>("/telemetry/admin/overview"),
+    instances: (limit = 50) =>
+      request<TelemetryInstanceSummary[]>(`/telemetry/admin/instances?limit=${limit}`),
   },
 
   projects: {
@@ -510,3 +546,4 @@ export const api = {
 };
 
 export type { DiscoverProject, MyProjectItem, ProjectMember };
+export type { CapabilitiesResponse, TelemetryOverview, TelemetryInstanceSummary };

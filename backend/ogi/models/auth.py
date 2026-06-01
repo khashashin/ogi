@@ -12,6 +12,10 @@ class UserProfile(SQLModel, table=True):
     display_name: str = ""
     avatar_url: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
+    last_active_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
 
 class ProjectMember(SQLModel, table=True):

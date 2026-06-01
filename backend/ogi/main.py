@@ -24,6 +24,7 @@ from ogi.api.dependencies import (
     init_redis,
 )
 from ogi.api.router import api_router
+from ogi.telemetry import telemetry_manager
 
 # Configure logging so all errors are visible in the terminal
 logging.basicConfig(level=logging.DEBUG)
@@ -109,6 +110,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Initialize Redis + RQ queue
     pubsub_task: asyncio.Task | None = None  # type: ignore[type-arg]
+    telemetry_task: asyncio.Task | None = None  # type: ignore[type-arg]
     try:
         from redis import Redis
         from rq import Queue
@@ -129,6 +131,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.warning("Redis not available — transforms will fail to enqueue. Start Redis to enable the job queue.")
 
+    from ogi.db.database import async_session_maker
+
+    if settings.effective_telemetry_enabled and async_session_maker is not None:
+        try:
+            async with async_session_maker() as session:
+                await telemetry_manager.run_due_cycle(session)
+        except Exception:
+            logger.exception("Initial telemetry cycle failed")
+        telemetry_task = asyncio.create_task(telemetry_manager.telemetry_loop(async_session_maker))
+
     yield
 
     # Shutdown
@@ -136,6 +148,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pubsub_task.cancel()
         try:
             await pubsub_task
+        except asyncio.CancelledError:
+            pass
+    if telemetry_task is not None:
+        telemetry_task.cancel()
+        try:
+            await telemetry_task
         except asyncio.CancelledError:
             pass
 

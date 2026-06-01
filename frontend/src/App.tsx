@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route, useParams } from "react-router";
+import { Routes, Route, useLocation, useParams } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { Layout } from "./components/Layout";
@@ -12,6 +12,7 @@ import { DiscoverPage } from "./components/DiscoverPage";
 import { TransformsCatalogPage } from "./components/TransformsCatalogPage";
 import { TermsPage } from "./components/TermsPage";
 import { PrivacyPage } from "./components/PrivacyPage";
+import { TelemetryAdminPage } from "./components/TelemetryAdminPage";
 import { CookieConsentBanner } from "./components/CookieConsentBanner";
 import { BetaNoticeDialog } from "./components/BetaNoticeDialog";
 import { useProjectStore } from "./stores/projectStore";
@@ -70,6 +71,35 @@ function WorkspaceView() {
   );
 }
 
+function HashScrollHandler() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!location.hash) {
+      return;
+    }
+
+    const id = location.hash.slice(1);
+    let attempts = 0;
+
+    const scrollToHash = () => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.scrollIntoView({ block: "start" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 10) {
+        window.setTimeout(scrollToHash, 50);
+      }
+    };
+
+    window.setTimeout(scrollToHash, 0);
+  }, [location.hash, location.pathname]);
+
+  return null;
+}
+
 function App() {
   useAnalytics();
   const initialize = useAuthStore((state) => state.initialize);
@@ -80,6 +110,7 @@ function App() {
 
   return (
     <>
+      <HashScrollHandler />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<AuthPage mode="signin" />} />
@@ -93,6 +124,7 @@ function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route path="/projects" element={<MyProjectsPage />} />
+          <Route path="/admin/telemetry" element={<TelemetryAdminPage />} />
           <Route path="/projects/:projectId" element={<WorkspaceView />} />
         </Route>
       </Routes>
