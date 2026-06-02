@@ -179,6 +179,7 @@ class AgentStepStore:
             worker_id=worker_id,
             now=now,
             where_clause=AgentStep.status.in_(CLAIMABLE_STEP_STATUSES),
+            order_by=(AgentStep.created_at.asc(), AgentStep.step_number.asc()),
         )
         if claimable is not None:
             return claimable
@@ -191,6 +192,7 @@ class AgentStepStore:
                 AgentStep.claimed_at.is_not(None),
                 AgentStep.claimed_at < stale_cutoff,
             ),
+            order_by=(AgentStep.claimed_at.asc(), AgentStep.created_at.asc()),
         )
 
     async def _claim_one_step(
@@ -199,13 +201,14 @@ class AgentStepStore:
         worker_id: str,
         now: datetime,
         where_clause: object,
+        order_by: tuple[object, ...],
     ) -> AgentStep | None:
         stmt = (
             select(AgentStep)
             .join(AgentRun, AgentRun.id == AgentStep.run_id)
             .where(AgentRun.status.in_(RUNNABLE_RUN_STATUSES))
             .where(where_clause)
-            .order_by(AgentStep.created_at.asc(), AgentStep.step_number.asc())
+            .order_by(*order_by)
             .limit(1)
             .with_for_update(skip_locked=True)
         )
