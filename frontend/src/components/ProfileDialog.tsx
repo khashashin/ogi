@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { X, LogOut, Loader2, Key, Cookie, FileText, Shield } from "lucide-react";
+import { X, LogOut, Loader2, Key, Cookie, FileText, Shield, CreditCard } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useCookieConsentStore } from "../stores/cookieConsentStore";
-import type { CapabilitiesResponse } from "../api/client";
+import { api } from "../api/client";
+import type { BillingStatus, CapabilitiesResponse } from "../api/client";
 
 interface ProfileDialogProps {
   open: boolean;
@@ -32,6 +33,10 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingAction, setBillingAction] = useState<"checkout" | "portal" | "cancel" | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const userEmail = user?.email ?? "anonymous";
@@ -56,6 +61,32 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
     return () => window.removeEventListener("mousedown", handler);
   }, [onClose]);
 
+  useEffect(() => {
+    if (capabilities?.cloud_billing_enabled === false) {
+      setBillingStatus(null);
+      setBillingLoading(false);
+      setBillingError(null);
+      return;
+    }
+    let cancelled = false;
+    setBillingLoading(true);
+    setBillingError(null);
+    api.billing
+      .status()
+      .then((status) => {
+        if (!cancelled) setBillingStatus(status.billing_enabled ? status : null);
+      })
+      .catch((err) => {
+        if (!cancelled) setBillingError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setBillingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [capabilities?.cloud_billing_enabled]);
+
   const handleSaveProfile = async () => {
     setError(null);
     setSaving(true);
@@ -74,9 +105,65 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
     onClose();
   };
 
+  const handleBillingAction = async () => {
+    if (!billingStatus) return;
+    setBillingError(null);
+    const action = billingStatus.subscribed ? "portal" : "checkout";
+    setBillingAction(action);
+    try {
+      const session = billingStatus.subscribed
+        ? await api.billing.customerPortal()
+        : await api.billing.checkoutSession();
+      window.location.href = session.url;
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBillingAction(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!billingStatus?.subscribed || billingStatus.cancel_at_period_end) return;
+    const confirmed = window.confirm(
+      "Cancel your Supporter subscription? You will keep Supporter access until the end of the current billing period.",
+    );
+    if (!confirmed) return;
+    setBillingError(null);
+    setBillingAction("cancel");
+    try {
+      const status = await api.billing.cancelSubscription();
+      setBillingStatus(status.billing_enabled ? status : null);
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBillingAction(null);
+    }
+  };
+
+  const formatMoney = (status: BillingStatus) =>
+    new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: status.currency || "usd",
+      maximumFractionDigits: 2,
+    }).format(status.amount_cents / 100);
+
+  const formatDate = (value: string | null) =>
+    value
+      ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value))
+      : null;
+
+  const cooldownMinutes = billingStatus
+    ? Math.max(1, Math.ceil(billingStatus.free_transform_cooldown_seconds / 60))
+    : 30;
+  const retryMinutes = billingStatus?.retry_after_seconds
+    ? Math.max(1, Math.ceil(billingStatus.retry_after_seconds / 60))
+    : 0;
+
   const initials = currentDisplayName
     ? currentDisplayName.slice(0, 2).toUpperCase()
     : userEmail.slice(0, 2).toUpperCase();
+  const primaryBillingAction = billingStatus?.subscribed ? "portal" : "checkout";
+  const currentPeriodEnd = formatDate(billingStatus?.current_period_end ?? null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -144,6 +231,70 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
 
           {/* Quick Links */}
           <div className="flex flex-col gap-1 border-t border-border pt-3">
+            {(billingLoading || billingStatus || billingError) && (
+              <div className="px-2 py-2 mb-1 rounded bg-bg text-xs text-text-muted leading-relaxed">
+                <div className="flex items-start gap-2">
+                  <CreditCard size={13} className="mt-0.5 text-text-muted shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-text">
+                        {billingStatus?.subscribed ? "Supporter" : "Cloud Free"}
+                      </p>
+                      {billingStatus && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={handleBillingAction}
+                            disabled={
+                              billingAction !== null ||
+                              (!billingStatus.subscribed && !billingStatus.checkout_enabled)
+                            }
+                            className="px-2 py-1 text-[11px] bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {billingAction === primaryBillingAction && (
+                              <Loader2 size={11} className="animate-spin" />
+                            )}
+                            {billingStatus.subscribed ? "Manage" : "Upgrade"}
+                          </button>
+                          {billingStatus.subscribed && !billingStatus.cancel_at_period_end && (
+                            <button
+                              onClick={handleCancelSubscription}
+                              disabled={billingAction !== null}
+                              className="px-2 py-1 text-[11px] bg-surface border border-border text-text rounded hover:bg-surface-hover disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {billingAction === "cancel" && (
+                                <Loader2 size={11} className="animate-spin" />
+                              )}
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {billingLoading ? (
+                      <p>Loading billing status...</p>
+                    ) : billingStatus?.subscribed && billingStatus.cancel_at_period_end ? (
+                      <p>
+                        Your {billingStatus.plan_name} plan remains active
+                        {currentPeriodEnd ? ` until ${currentPeriodEnd}` : ""}. Renewal is cancelled.
+                      </p>
+                    ) : billingStatus?.subscribed ? (
+                      <p>
+                        Your {billingStatus.plan_name} plan is active.
+                      </p>
+                    ) : billingStatus ? (
+                      <p>
+                        Free cloud accounts can run one transform every {cooldownMinutes} minutes.
+                        Upgrade for {formatMoney(billingStatus)}/month.
+                      </p>
+                    ) : null}
+                    {retryMinutes > 0 && (
+                      <p className="mt-1 text-warning">Next free run in about {retryMinutes} minute{retryMinutes === 1 ? "" : "s"}.</p>
+                    )}
+                    {billingError && <p className="mt-1 text-danger">{billingError}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
             {capabilities?.telemetry_enabled && (
               <div className="px-2 py-2 mb-1 rounded bg-bg text-xs text-text-muted leading-relaxed">
                 Usage telemetry is currently on at the{" "}

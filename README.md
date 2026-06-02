@@ -197,6 +197,16 @@ OGI_TRANSFORM_SETTING_MAX_OVERRIDES=max_results=none,max_urls=none,max_links=non
 
 The override is keyed by transform setting name and applies to built-in transforms and community plugins that use OGI's shared transform base/runtime.
 
+### Hosted cloud instance and Supporter plan
+
+The hosted cloud version at [ogi.khas.app](https://ogi.khas.app) was initially built so users could try OGI quickly before deciding whether to self-host it. It has since become the most popular way to use the project, with over 350 active cloud users.
+
+That usage also increased the infrastructure costs for this side project. The repository therefore includes a cloud-only Supporter subscription and transformer-run cooldown system. On the public cloud instance, free users may be limited by a timeout between transformer runs, while Supporter users can subscribe for a symbolic USD 3/month to help cover Supabase and VPS costs.
+
+Supporter subscriptions can be cancelled from the profile billing controls or the Stripe billing portal. Cancellation stops future billing, but paid subscription periods are not refunded or prorated.
+
+This billing code is intentionally guarded by configuration: it only has an effect when `OGI_DEPLOYMENT_MODE=cloud` and `OGI_CLOUD_BILLING_ENABLED=true`. Self-hosted deployments should leave billing disabled and should not see any billing or paywall behavior.
+
 ### Telemetry
 
 OGI includes installation-level product telemetry intended to help us understand real-world usage, especially across self-hosted deployments.
@@ -415,6 +425,17 @@ List-style settings accept either:
 | `OGI_DB_MIGRATION_DELAY_SECONDS`                | Delay between entry-point migration retries                                                                      | `2`                                                 |
 | `OGI_PLUGIN_DIRS`                               | Plugin search directories                                                                                        | `plugins,../plugins`                                |
 | `OGI_DEPLOYMENT_MODE`                           | Deployment mode (`self-hosted` or `cloud`)                                                                       | `self-hosted`                                       |
+| `OGI_CLOUD_BILLING_ENABLED`                     | Enable cloud-only Supporter billing and transform cooldown enforcement                                           | `false`                                             |
+| `OGI_FREE_TRANSFORM_COOLDOWN_SECONDS`           | Cooldown between free cloud-user transformer runs                                                                | `1800`                                              |
+| `OGI_PAID_TRANSFORM_COOLDOWN_SECONDS`           | Cooldown between paid cloud-user transformer runs                                                                | `0`                                                 |
+| `OGI_STRIPE_SECRET_KEY`                         | Stripe server-side secret key for Checkout and portal sessions                                                   | unset                                               |
+| `OGI_STRIPE_WEBHOOK_SECRET`                     | Stripe webhook signing secret                                                                                    | unset                                               |
+| `OGI_STRIPE_SUPPORTER_PRICE_ID`                 | Stripe recurring Price ID for the Supporter plan                                                                 | unset                                               |
+| `OGI_STRIPE_SUPPORTER_AMOUNT_CENTS`             | Display amount for the Supporter plan                                                                            | `300`                                               |
+| `OGI_STRIPE_SUPPORTER_CURRENCY`                 | Display currency for the Supporter plan                                                                          | `usd`                                               |
+| `OGI_BILLING_SUCCESS_URL`                       | Optional Stripe Checkout success redirect                                                                        | derived from request                                |
+| `OGI_BILLING_CANCEL_URL`                        | Optional Stripe Checkout cancel redirect                                                                         | derived from request                                |
+| `OGI_BILLING_PORTAL_RETURN_URL`                 | Optional Stripe billing portal return URL                                                                        | derived from request                                |
 | `OGI_REGISTRY_REPO`                             | Transform registry GitHub repo                                                                                   | `opengraphintel/ogi-transforms`                     |
 | `OGI_REGISTRY_CACHE_TTL`                        | Registry cache TTL in seconds                                                                                    | `3600`                                              |
 | `OGI_TRANSFORM_SETTING_MAX_OVERRIDES`           | Optional global max override map for transform settings                                                          | empty                                               |

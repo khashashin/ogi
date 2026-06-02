@@ -180,7 +180,13 @@ settings.abs_media_path.mkdir(parents=True, exist_ok=True)
 app.include_router(api_router)
 
 
-def _error_response(status_code: int, code: str, message: str, details: object | None = None) -> JSONResponse:
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    details: object | None = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     payload: dict[str, object] = {
         "error": {
             "code": code,
@@ -189,7 +195,7 @@ def _error_response(status_code: int, code: str, message: str, details: object |
     }
     if details is not None:
         payload["error"]["details"] = details  # type: ignore[index]
-    return JSONResponse(status_code=status_code, content=payload)
+    return JSONResponse(status_code=status_code, content=payload, headers=headers)
 
 
 @app.exception_handler(HTTPException)
@@ -209,6 +215,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         code=f"HTTP_{exc.status_code}",
         message=message,
         details=details,
+        headers=exc.headers,
     )
 
 

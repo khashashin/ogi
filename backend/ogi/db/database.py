@@ -16,6 +16,7 @@ import ogi.models.api_key  # noqa: F401
 import ogi.models.plugin  # noqa: F401
 import ogi.models.user_plugin_preference  # noqa: F401
 import ogi.models.transform_settings  # noqa: F401
+import ogi.models.billing  # noqa: F401
 import ogi.models.eventing  # noqa: F401
 import ogi.models.telemetry  # noqa: F401
 import ogi.agent.models  # noqa: F401

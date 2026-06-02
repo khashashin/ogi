@@ -52,10 +52,53 @@ interface PersonImageUploadResponse {
 interface CapabilitiesResponse {
   cloud_export_enabled: boolean;
   deployment_mode: string;
+  cloud_billing_enabled: boolean;
+  stripe_checkout_enabled: boolean;
   telemetry_enabled: boolean;
   telemetry_level: string;
   telemetry_admin_enabled: boolean;
   telemetry_docs_url: string;
+}
+
+interface BillingStatus {
+  billing_enabled: boolean;
+  checkout_enabled: boolean;
+  subscribed: boolean;
+  subscription_status: string;
+  plan_name: string;
+  amount_cents: number;
+  currency: string;
+  free_transform_cooldown_seconds: number;
+  paid_transform_cooldown_seconds: number;
+  cancel_at_period_end: boolean;
+  current_period_end: string | null;
+  last_transform_run_at: string | null;
+  next_allowed_transform_at: string | null;
+  retry_after_seconds: number;
+}
+
+class ApiError extends Error {
+  status: number;
+  code: string | null;
+  details: unknown;
+  retryAfterSeconds: number | null;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      code?: string | null;
+      details?: unknown;
+      retryAfterSeconds?: number | null;
+    },
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = options.status;
+    this.code = options.code ?? null;
+    this.details = options.details;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
+  }
 }
 
 interface TelemetryOverview {
@@ -154,7 +197,29 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`API error ${res.status}: ${body}`);
+    let message = body || `API error ${res.status}`;
+    let code: string | null = null;
+    let details: unknown;
+    try {
+      const parsed = JSON.parse(body) as {
+        error?: { code?: string; message?: string; details?: unknown };
+      };
+      if (parsed.error?.message) {
+        message = parsed.error.message;
+      }
+      code = parsed.error?.code ?? null;
+      details = parsed.error?.details;
+    } catch {
+      // Keep the raw body as the error message.
+    }
+    const retryAfterRaw = res.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterRaw ? Number.parseInt(retryAfterRaw, 10) : null;
+    throw new ApiError(message, {
+      status: res.status,
+      code,
+      details,
+      retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : null,
+    });
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -186,6 +251,16 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
 export const api = {
   settings: {
     capabilities: () => request<CapabilitiesResponse>("/settings/capabilities"),
+  },
+
+  billing: {
+    status: () => request<BillingStatus>("/billing/status"),
+    checkoutSession: () =>
+      request<{ url: string }>("/billing/checkout-session", { method: "POST" }),
+    customerPortal: () =>
+      request<{ url: string }>("/billing/customer-portal", { method: "POST" }),
+    cancelSubscription: () =>
+      request<BillingStatus>("/billing/subscription/cancel", { method: "POST" }),
   },
 
   telemetry: {
@@ -546,4 +621,5 @@ export const api = {
 };
 
 export type { DiscoverProject, MyProjectItem, ProjectMember };
-export type { CapabilitiesResponse, TelemetryOverview, TelemetryInstanceSummary };
+export type { BillingStatus, CapabilitiesResponse, TelemetryOverview, TelemetryInstanceSummary };
+export { ApiError };

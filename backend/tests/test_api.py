@@ -69,12 +69,125 @@ async def test_health(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_settings_capabilities_reports_cloud_export_disabled_without_supabase(client: AsyncClient):
+async def test_settings_capabilities_reports_cloud_export_disabled_without_supabase(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "deployment_mode", "self-hosted")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", False)
+
     resp = await client.get("/api/v1/settings/capabilities")
     assert resp.status_code == 200
     assert resp.json()["cloud_export_enabled"] is False
+    assert resp.json()["cloud_billing_enabled"] is False
+    assert resp.json()["stripe_checkout_enabled"] is False
     assert resp.json()["telemetry_enabled"] is False
     assert resp.json()["telemetry_level"] == "full"
+
+
+@pytest.mark.asyncio
+async def test_billing_status_disabled_by_default(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "deployment_mode", "self-hosted")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", False)
+
+    resp = await client.get("/api/v1/billing/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["billing_enabled"] is False
+    assert body["checkout_enabled"] is False
+    assert body["subscribed"] is False
+    assert body["retry_after_seconds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_requires_stripe_secret_when_enabled(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.config import settings
+
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", True)
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "")
+
+    resp = await client.post("/api/v1/billing/webhook", json={"type": "checkout.session.completed"})
+    assert_error_envelope(
+        resp,
+        503,
+        code="HTTP_503",
+        message_contains="Stripe webhook secret is not configured",
+    )
+
+
+@pytest.mark.asyncio
+async def test_billing_cancel_subscription_marks_cancel_at_period_end(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi import billing as billing_service
+    from ogi.config import settings
+    from ogi.db.database import async_session_maker
+    from ogi.store.billing_store import BillingStore
+
+    user_id = UUID("00000000-0000-0000-0000-000000000000")
+    period_end = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", True)
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test")
+
+    assert async_session_maker is not None
+    async with async_session_maker() as session:
+        await BillingStore(session).upsert_subscription(
+            user_id=user_id,
+            stripe_customer_id="cus_cancel",
+            stripe_subscription_id="sub_cancel",
+            status="active",
+            price_id="price_test",
+            amount_cents=300,
+            currency="usd",
+            current_period_end=period_end,
+        )
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def fake_stripe_post(path: str, data: dict[str, object]) -> dict[str, object]:
+        calls.append((path, data))
+        return {
+            "id": "sub_cancel",
+            "customer": "cus_cancel",
+            "status": "active",
+            "metadata": {"user_id": str(user_id)},
+            "cancel_at_period_end": True,
+            "current_period_end": int(period_end.timestamp()),
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_test",
+                            "unit_amount": 300,
+                            "currency": "usd",
+                        }
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(billing_service, "stripe_post", fake_stripe_post)
+
+    resp = await client.post("/api/v1/billing/subscription/cancel")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert calls == [
+        ("/subscriptions/sub_cancel", {"cancel_at_period_end": "true"}),
+    ]
+    assert body["billing_enabled"] is True
+    assert body["subscribed"] is True
+    assert body["cancel_at_period_end"] is True
+    assert body["current_period_end"].startswith("2100-01-01")
 
 
 @pytest.mark.asyncio
@@ -1453,6 +1566,73 @@ async def test_run_transform_returns_503_when_enqueue_fails(
 
 
 @pytest.mark.asyncio
+async def test_cloud_billing_limits_free_transform_runs_and_allows_supporters(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from ogi.api import transforms as transforms_api
+    from ogi.config import settings
+    from ogi.db.database import async_session_maker
+    from ogi.store.billing_store import BillingStore
+
+    class CaptureQueue:
+        def enqueue(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(transforms_api, "get_rq_queue", lambda: CaptureQueue())
+    monkeypatch.setattr(settings, "deployment_mode", "cloud")
+    monkeypatch.setattr(settings, "cloud_billing_enabled", True)
+    monkeypatch.setattr(settings, "free_transform_cooldown_seconds", 1800)
+    monkeypatch.setattr(settings, "paid_transform_cooldown_seconds", 0)
+
+    resp = await client.post("/api/v1/projects", json={"name": "CloudCooldown"})
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/projects/{pid}/entities",
+        json={"type": "Domain", "value": "example.com"},
+    )
+    assert resp.status_code == 201
+    eid = resp.json()["id"]
+
+    first = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert first.status_code == 200
+
+    status = await client.get("/api/v1/billing/status")
+    assert status.status_code == 200
+    assert status.json()["billing_enabled"] is True
+    assert status.json()["retry_after_seconds"] > 0
+
+    second = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert_error_envelope(second, 429, code="HTTP_429", message_contains="Free cloud accounts")
+    assert int(second.headers["Retry-After"]) > 0
+
+    assert async_session_maker is not None
+    async with async_session_maker() as session:
+        await BillingStore(session).upsert_subscription(
+            user_id=UUID("00000000-0000-0000-0000-000000000000"),
+            stripe_customer_id="cus_test",
+            stripe_subscription_id="sub_test",
+            status="active",
+            price_id="price_test",
+            amount_cents=300,
+            currency="usd",
+        )
+
+    supporter = await client.post(
+        "/api/v1/transforms/domain_to_ip/run",
+        json={"entity_id": eid, "project_id": pid, "config": {"settings": {}}},
+    )
+    assert supporter.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_run_transform_injects_required_api_key_from_store(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1755,6 +1935,7 @@ async def test_registry_install_writes_system_audit_log(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
     from ogi.api import registry as registry_api
+    from ogi.config import settings
     from ogi.db.database import get_session
     from ogi.models import SystemAuditLog
 
@@ -1777,6 +1958,7 @@ async def test_registry_install_writes_system_audit_log(
     monkeypatch.setattr(registry_api, "get_registry_client", lambda: FakeRegistry())
     monkeypatch.setattr(registry_api, "get_transform_installer", lambda: FakeInstaller())
     monkeypatch.setattr(registry_api, "_reload_plugin_runtime", lambda name: 0)
+    monkeypatch.setattr(settings, "deployment_mode", "self-hosted")
 
     resp = await client.post("/api/v1/registry/install/mock-plugin")
     assert resp.status_code == 200

@@ -4,7 +4,9 @@ export function PrivacyPage() {
   return (
     <div className="min-h-screen bg-bg">
       <header className="flex items-center h-12 px-4 bg-surface border-b border-border">
-        <span className="text-sm font-semibold text-text mr-6">OpenGraph Intel</span>
+        <span className="text-sm font-semibold text-text mr-6">
+          OpenGraph Intel
+        </span>
         <nav className="flex items-center gap-4">
           <Link to="/" className="text-sm text-text-muted hover:text-text">
             Home
@@ -20,30 +22,42 @@ export function PrivacyPage() {
 
         <div className="flex flex-col gap-6 text-sm text-text-muted leading-relaxed">
           <section>
-            <h2 className="text-base font-medium text-text mb-2">1. Information We Collect</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              1. Information We Collect
+            </h2>
             <p>We collect the following types of information:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>
-                <strong className="text-text">Account information:</strong> email address and
-                authentication credentials when you create an account
+                <strong className="text-text">Account information:</strong>{" "}
+                email address and authentication credentials when you create an
+                account
               </li>
               <li>
-                <strong className="text-text">Usage data:</strong> pages visited, features used, and
-                interactions with the service, collected via Google Analytics
+                <strong className="text-text">Usage data:</strong> pages
+                visited, features used, and interactions with the service,
+                collected via Google Analytics
               </li>
               <li>
-                <strong className="text-text">Project data:</strong> graphs, entities, and other
-                content you create within the service
+                <strong className="text-text">Project data:</strong> graphs,
+                entities, and other content you create within the service
+              </li>
+              <li>
+                <strong className="text-text">Billing data:</strong>{" "}
+                subscription status, Stripe customer and subscription
+                identifiers, billing email, and payment-related metadata needed
+                to operate the hosted cloud Supporter subscription
               </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">2. Authentication</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              2. Authentication
+            </h2>
             <p>
-              We use Supabase for user authentication. Your email and password are securely managed
-              by Supabase's authentication infrastructure. We do not store your password directly.
-              Please refer to{" "}
+              We use Supabase for user authentication. Your email and password
+              are securely managed by Supabase's authentication infrastructure.
+              We do not store your password directly. Please refer to{" "}
               <a
                 href="https://supabase.com/privacy"
                 target="_blank"
@@ -57,12 +71,15 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">3. Analytics</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              3. Analytics
+            </h2>
             <p>
-              We use Google Analytics to collect anonymized usage data to understand how the service
-              is used and to improve it. Google Analytics may collect information such as your IP
-              address (anonymized), browser type, operating system, pages visited, and session
-              duration. Please refer to{" "}
+              We use Google Analytics to collect anonymized usage data to
+              understand how the service is used and to improve it. Google
+              Analytics may collect information such as your IP address
+              (anonymized), browser type, operating system, pages visited, and
+              session duration. Please refer to{" "}
               <a
                 href="https://policies.google.com/privacy"
                 target="_blank"
@@ -76,58 +93,110 @@ export function PrivacyPage() {
           </section>
 
           <section id="telemetry">
-            <h2 className="text-base font-medium text-text mb-2">4. Product Telemetry</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              4. Product Telemetry
+            </h2>
             <p>
-              OGI can send installation-level product telemetry to help us understand how the
-              software is used in the wild, especially for self-hosted deployments. This telemetry
-              can be disabled entirely with <code>OGI_TELEMETRY_ENABLED=false</code> or reduced to
-              the <code>basic</code> level with <code>OGI_TELEMETRY_LEVEL=basic</code>.
+              OGI can send installation-level product telemetry to help us
+              understand how the software is used in the wild, especially for
+              self-hosted deployments. This telemetry can be disabled entirely
+              with <code>OGI_TELEMETRY_ENABLED=false</code> or reduced to the{" "}
+              <code>basic</code> level with{" "}
+              <code>OGI_TELEMETRY_LEVEL=basic</code>.
             </p>
             <p className="mt-2">
-              The <code>basic</code> level includes the running OGI version and a daily active
-              installation ping. The <code>full</code> level additionally includes the instance
-              creation date, aggregate counts for projects, entities, edges, transform runs,
-              investigator runs, active users for the period, and the installed transform list with
-              versions. We do not use this channel to collect graph contents, entity values, API
-              keys, or other user-supplied investigation data.
+              The <code>basic</code> level includes the running OGI version and
+              a daily active installation ping. The <code>full</code> level
+              additionally includes the instance creation date, aggregate counts
+              for projects, entities, edges, transform runs, investigator runs,
+              active users for the period, and the installed transform list with
+              versions. We do not use this channel to collect graph contents,
+              entity values, API keys, or other user-supplied investigation
+              data.
             </p>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">5. Cookies</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              5. Payments and Billing
+            </h2>
             <p>
-              We use cookies and similar technologies for authentication session management and
-              analytics. Essential cookies are required for the service to function properly.
-              Analytics cookies help us understand usage patterns.
+              Payments for the hosted cloud Supporter subscription are processed
+              by Stripe. We do not store full card numbers, card security codes,
+              or bank account details. Stripe may process billing contact
+              details, payment method details, invoices, tax information,
+              subscription status, and related transaction records. We store
+              only the Stripe customer and subscription identifiers and the
+              subscription status needed to provide Supporter access in the
+              hosted cloud service.
+            </p>
+            <p className="mt-2">
+              Please refer to{" "}
+              <a
+                href="https://stripe.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Stripe's Privacy Policy
+              </a>{" "}
+              for details on how Stripe handles payment and billing data.
             </p>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">6. Data Retention</h2>
+            <h2 className="text-base font-medium text-text mb-2">6. Cookies</h2>
             <p>
-              We retain your account information and project data for as long as your account is
-              active. If you delete your account, we will remove your personal data within a
-              reasonable timeframe. Anonymized analytics data may be retained indefinitely.
+              We use cookies and similar technologies for authentication session
+              management and analytics. Essential cookies are required for the
+              service to function properly. Analytics cookies help us understand
+              usage patterns.
             </p>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">7. Third-Party Services</h2>
-            <p>We use the following third-party services that may process your data:</p>
+            <h2 className="text-base font-medium text-text mb-2">
+              7. Data Retention
+            </h2>
+            <p>
+              We retain your account information and project data for as long as
+              your account is active. If you delete your account, we will remove
+              your personal data within a reasonable timeframe. Billing records
+              may be retained as required for accounting, tax, fraud prevention,
+              dispute handling, and legal compliance. Anonymized analytics data
+              may be retained indefinitely.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-medium text-text mb-2">
+              8. Third-Party Services
+            </h2>
+            <p>
+              We use the following third-party services that may process your
+              data:
+            </p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>
-                <strong className="text-text">Supabase</strong> — authentication, database, and
-                real-time features
+                <strong className="text-text">Supabase</strong> —
+                authentication, database, and real-time features
               </li>
               <li>
-                <strong className="text-text">Google Analytics</strong> — usage tracking and
-                analytics
+                <strong className="text-text">Google Analytics</strong> — usage
+                tracking and analytics
+              </li>
+              <li>
+                <strong className="text-text">Stripe</strong> — payment
+                processing, subscription billing, invoices, and the
+                billing portal for the hosted cloud service
               </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">8. Your Rights</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              9. Your Rights
+            </h2>
             <p>You have the right to:</p>
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>Access your personal data</li>
@@ -139,12 +208,14 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">9. Contact</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              10. Contact
+            </h2>
             <p>
-              If you have questions about this Privacy Policy or wish to exercise your rights, please
-              open an issue on our{" "}
+              If you have questions about this Privacy Policy or wish to
+              exercise your rights, please open an issue on our{" "}
               <a
-                href="https://github.com/opengraphintel/ogi"
+                href="https://github.com/khashashin/ogi"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-accent hover:underline"
@@ -156,11 +227,13 @@ export function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium text-text mb-2">10. Changes to This Policy</h2>
+            <h2 className="text-base font-medium text-text mb-2">
+              11. Changes to This Policy
+            </h2>
             <p>
-              We may update this Privacy Policy from time to time. Continued use of the service after
-              changes constitutes acceptance of the revised policy. We encourage you to review this
-              policy periodically.
+              We may update this Privacy Policy from time to time. Continued use
+              of the service after changes constitutes acceptance of the revised
+              policy. We encourage you to review this policy periodically.
             </p>
           </section>
         </div>
