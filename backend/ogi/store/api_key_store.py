@@ -5,11 +5,16 @@ import base64
 from uuid import UUID
 
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from ogi.config import settings
 from ogi.models.api_key import ApiKey
+
+
+def normalize_service_name(service_name: str) -> str:
+    return service_name.strip().lower()
 
 
 class ApiKeyStore:
@@ -27,16 +32,19 @@ class ApiKeyStore:
         """Return service names for which the user has stored keys."""
         stmt = select(ApiKey.service_name).where(ApiKey.user_id == user_id).order_by(ApiKey.service_name)
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return sorted({name for raw in result.scalars().all() if (name := normalize_service_name(raw))})
 
     async def get_key(self, user_id: UUID, service_name: str) -> str | None:
         """Return decrypted key or None."""
+        normalized = normalize_service_name(service_name)
+        if not normalized:
+            return None
         stmt = select(ApiKey.encrypted_key).where(
-            ApiKey.user_id == user_id, 
-            ApiKey.service_name == service_name
+            ApiKey.user_id == user_id,
+            func.lower(func.trim(ApiKey.service_name)) == normalized,
         )
         result = await self.session.execute(stmt)
-        encrypted = result.scalar_one_or_none()
+        encrypted = result.scalars().first()
         
         if not encrypted:
             return None
@@ -44,34 +52,46 @@ class ApiKeyStore:
 
     async def set_key(self, user_id: UUID, service_name: str, key: str) -> None:
         """Store or update an API key."""
+        normalized = normalize_service_name(service_name)
+        if not normalized:
+            raise ValueError("Service name is required")
+
         stmt = select(ApiKey).where(
-            ApiKey.user_id == user_id, 
-            ApiKey.service_name == service_name
+            ApiKey.user_id == user_id,
+            func.lower(func.trim(ApiKey.service_name)) == normalized,
         )
         result = await self.session.execute(stmt)
-        entry = result.scalar_one_or_none()
+        entries = list(result.scalars().all())
         
         encrypted = self._encrypt(key)
         
-        if entry:
+        if entries:
+            entry = entries[0]
+            entry.service_name = normalized
             entry.encrypted_key = encrypted
+            for duplicate in entries[1:]:
+                await self.session.delete(duplicate)
         else:
-            entry = ApiKey(user_id=user_id, service_name=service_name, encrypted_key=encrypted)
+            entry = ApiKey(user_id=user_id, service_name=normalized, encrypted_key=encrypted)
             
         self.session.add(entry)
         await self.session.commit()
 
     async def delete_key(self, user_id: UUID, service_name: str) -> bool:
         """Remove an API key. Returns True if one was deleted."""
+        normalized = normalize_service_name(service_name)
+        if not normalized:
+            return False
         stmt = select(ApiKey).where(
-            ApiKey.user_id == user_id, 
-            ApiKey.service_name == service_name
+            ApiKey.user_id == user_id,
+            func.lower(func.trim(ApiKey.service_name)) == normalized,
         )
         result = await self.session.execute(stmt)
-        entry = result.scalar_one_or_none()
+        entries = list(result.scalars().all())
         
-        if entry:
-            await self.session.delete(entry)
+        if entries:
+            for entry in entries:
+                await self.session.delete(entry)
             await self.session.commit()
             return True
         return False

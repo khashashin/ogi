@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from ogi.models import UserProfile
 from ogi.api.auth import get_current_user
 from ogi.api.dependencies import get_api_key_store
-from ogi.store.api_key_store import ApiKeyStore
+from ogi.store.api_key_store import ApiKeyStore, normalize_service_name
 
 router = APIRouter(prefix="/settings/api-keys", tags=["api-keys"])
 
@@ -34,14 +34,20 @@ async def list_api_keys(
     return [ApiKeyEntry(service_name=s) for s in services]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=ApiKeyEntry)
 async def save_api_key(
     data: ApiKeyCreate,
     current_user: UserProfile = Depends(get_current_user),
     store: ApiKeyStore = Depends(get_api_key_store),
 ) -> ApiKeyEntry:
-    await store.set_key(current_user.id, data.service_name, data.key)
-    return ApiKeyEntry(service_name=data.service_name)
+    service_name = normalize_service_name(data.service_name)
+    key = data.key.strip()
+    if not service_name:
+        raise HTTPException(status_code=400, detail="Service name is required")
+    if not key:
+        raise HTTPException(status_code=400, detail="API key is required")
+    await store.set_key(current_user.id, service_name, key)
+    return ApiKeyEntry(service_name=service_name)
 
 
 @router.delete("/{service_name}", status_code=204)
