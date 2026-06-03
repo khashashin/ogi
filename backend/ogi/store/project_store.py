@@ -38,7 +38,6 @@ class ProjectStore:
             .where(
                 or_(
                     Project.owner_id == user_id,
-                    Project.owner_id.is_(None),
                     Project.is_public == True,
                     ProjectMember.user_id == user_id,
                 )
@@ -137,7 +136,7 @@ class ProjectStore:
         if not project:
             return None
             
-        if project.owner_id == user_id or project.owner_id is None:
+        if project.owner_id == user_id:
             return "owner"
 
         # Check for explicit membership role
