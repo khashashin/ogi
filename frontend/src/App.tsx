@@ -15,6 +15,7 @@ import { PrivacyPage } from "./components/PrivacyPage";
 import { TelemetryAdminPage } from "./components/TelemetryAdminPage";
 import { CookieConsentBanner } from "./components/CookieConsentBanner";
 import { BetaNoticeDialog } from "./components/BetaNoticeDialog";
+import { BillingCooldownDialog } from "./components/BillingCooldownDialog";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useAuthStore } from "./stores/authStore";
@@ -61,6 +62,7 @@ function WorkspaceView() {
   return (
     <>
       <Layout />
+      <BillingCooldownDialog />
       {graphLoading && (
         <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 bg-surface border border-border rounded px-3 py-2 shadow-lg animate-fade-in">
           <Loader2 size={14} className="animate-spin text-accent" />

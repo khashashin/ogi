@@ -22,6 +22,7 @@ import { getSigmaRef } from "../stores/sigmaRef";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { resolveEntityIconName } from "../lib/entityIconRegistry";
 import { ENTITY_TYPE_META, EntityType } from "../types/entity";
+import { openBillingCooldownDialog } from "../lib/billingCooldownDialog";
 const ChangeIconDialog = lazy(() =>
   import("./ChangeIconDialog").then((module) => ({ default: module.ChangeIconDialog })),
 );
@@ -349,6 +350,7 @@ export function ContextMenu() {
         toast.error(`${name}: ${run.error}`);
       }
     } catch (e) {
+      if (openBillingCooldownDialog(e)) return;
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Transform failed: ${msg}`);
     } finally {

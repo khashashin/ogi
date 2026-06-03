@@ -164,6 +164,12 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
     : userEmail.slice(0, 2).toUpperCase();
   const primaryBillingAction = billingStatus?.subscribed ? "portal" : "checkout";
   const currentPeriodEnd = formatDate(billingStatus?.current_period_end ?? null);
+  const billingPanelClass = billingStatus?.subscribed
+    ? "px-2 py-2 mb-1 rounded border border-accent/35 bg-accent/10 text-xs text-text-muted leading-relaxed"
+    : "px-2 py-2 mb-1 rounded border border-warning/40 bg-warning/10 text-xs text-text-muted leading-relaxed";
+  const billingIconClass = billingStatus?.subscribed
+    ? "mt-0.5 text-accent shrink-0"
+    : "mt-0.5 text-warning shrink-0";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -232,9 +238,9 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
           {/* Quick Links */}
           <div className="flex flex-col gap-1 border-t border-border pt-3">
             {(billingLoading || billingStatus || billingError) && (
-              <div className="px-2 py-2 mb-1 rounded bg-bg text-xs text-text-muted leading-relaxed">
+              <div className={billingPanelClass}>
                 <div className="flex items-start gap-2">
-                  <CreditCard size={13} className="mt-0.5 text-text-muted shrink-0" />
+                  <CreditCard size={13} className={billingIconClass} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium text-text">
@@ -253,7 +259,7 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
                             {billingAction === primaryBillingAction && (
                               <Loader2 size={11} className="animate-spin" />
                             )}
-                            {billingStatus.subscribed ? "Manage" : "Upgrade"}
+                            {billingStatus.subscribed ? "Manage" : "Subscribe"}
                           </button>
                           {billingStatus.subscribed && !billingStatus.cancel_at_period_end && (
                             <button
@@ -282,10 +288,15 @@ function ProfileDialogContent({ onClose, onOpenApiKeys, capabilities }: Omit<Pro
                         Your {billingStatus.plan_name} plan is active.
                       </p>
                     ) : billingStatus ? (
-                      <p>
-                        Free cloud accounts can run one transform every {cooldownMinutes} minutes.
-                        Upgrade for {formatMoney(billingStatus)}/month.
-                      </p>
+                      <div className="space-y-1">
+                        <p>
+                          Free cloud accounts can run one transform every {cooldownMinutes} minutes.
+                        </p>
+                        <p className="font-medium text-warning">
+                          Subscribe for {formatMoney(billingStatus)}/month to remove the cooldown
+                          and support the hosted infrastructure.
+                        </p>
+                      </div>
                     ) : null}
                     {retryMinutes > 0 && (
                       <p className="mt-1 text-warning">Next free run in about {retryMinutes} minute{retryMinutes === 1 ? "" : "s"}.</p>
