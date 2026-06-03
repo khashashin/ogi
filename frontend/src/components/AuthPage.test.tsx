@@ -42,6 +42,33 @@ function renderAuth(mode: "signin" | "signup" | "forgot") {
   };
 }
 
+function renderAuthFlow(initialEntry: string) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root: Root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/login" element={<AuthPage mode="signin" />} />
+          <Route path="/signup" element={<AuthPage mode="signup" />} />
+          <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
+          <Route path="/projects" element={<div>PROJECTS</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  });
+
+  return {
+    container,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
 async function setInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   await act(async () => {
@@ -108,6 +135,35 @@ describe("AuthPage", () => {
 
     expect(authState.resetPassword).toHaveBeenCalledWith("user@example.com");
     expect(container.textContent).toContain("Check your email for a password reset link.");
+    unmount();
+  });
+
+  it("clears signup confirmation when switching to sign-in", async () => {
+    const { container, unmount } = renderAuthFlow("/signup");
+    const emailInput = container.querySelector("input[type='email']") as HTMLInputElement;
+    const passwordInput = container.querySelector("input[type='password']") as HTMLInputElement;
+    const form = container.querySelector("form") as HTMLFormElement;
+
+    await setInputValue(emailInput, "new-user@example.com");
+    await setInputValue(passwordInput, "secret123");
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(authState.signUp).toHaveBeenCalledWith("new-user@example.com", "secret123");
+    expect(container.textContent).toContain("Check your email to confirm your account, then sign in.");
+
+    const signInLink = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent === "Sign in",
+    ) as HTMLAnchorElement;
+
+    await act(async () => {
+      signInLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(container.textContent).toContain("Sign in to continue");
+    expect(container.textContent).not.toContain("Check your email to confirm your account, then sign in.");
+    expect(container.querySelector("form")).not.toBeNull();
     unmount();
   });
 });
