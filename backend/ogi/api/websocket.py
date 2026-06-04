@@ -58,43 +58,79 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
+async def _close_pubsub(pubsub: "object", conn: "object") -> None:
+    """Best-effort teardown of a pub/sub connection (never raises)."""
+    try:
+        await pubsub.punsubscribe("ogi:transform_events:*")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    try:
+        await conn.aclose()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
 async def redis_pubsub_listener() -> None:
     """Background task: subscribe to Redis pub/sub and broadcast to WebSocket clients.
 
     Subscribes to ``ogi:transform_events:*`` pattern channels.  Each message is
     forwarded verbatim to the matching project's WebSocket connections.
+
+    The subscription runs inside a reconnect loop so a dropped connection
+    re-subscribes with backoff instead of killing the bridge for the lifetime
+    of the process — which would otherwise leave every subsequent transform run
+    stuck "pending" in the UI.
+
+    Messages are drained with ``get_message`` rather than ``listen()``: under
+    redis-py 8 the ``listen()`` async iterator raises ``TimeoutError`` on an
+    idle subscription (which previously killed the task), whereas
+    ``get_message`` returns ``None`` when idle. It is non-blocking there, so we
+    pace the idle poll with a short sleep.
     """
     import redis.asyncio as aioredis
 
-    conn = aioredis.from_url(settings.redis_url, decode_responses=True)
-    pubsub = conn.pubsub()
-    await pubsub.psubscribe("ogi:transform_events:*")
-    logger.info("Redis pub/sub listener started")
+    backoff = 1.0
+    max_backoff = 30.0
+    idle_poll_seconds = 0.1
 
-    try:
-        async for raw_message in pubsub.listen():
-            if raw_message["type"] != "pmessage":
-                continue
-            channel: str = raw_message["channel"]
-            data: str = raw_message["data"]
+    while True:
+        conn = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = conn.pubsub()
+        try:
+            await pubsub.psubscribe("ogi:transform_events:*")
+            logger.info("Redis pub/sub listener started")
+            while True:
+                raw_message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
+                backoff = 1.0  # a successful read means the connection is healthy
+                if raw_message is None:
+                    await asyncio.sleep(idle_poll_seconds)
+                    continue
+                if raw_message["type"] != "pmessage":
+                    continue
+                channel: str = raw_message["channel"]
+                data: str = raw_message["data"]
 
-            # Channel format: ogi:transform_events:<project_id>
-            parts = channel.split(":")
-            if len(parts) < 3:
-                continue
-            try:
-                project_id = UUID(parts[2])
-            except ValueError:
-                continue
+                # Channel format: ogi:transform_events:<project_id>
+                parts = channel.split(":")
+                if len(parts) < 3:
+                    continue
+                try:
+                    project_id = UUID(parts[2])
+                except ValueError:
+                    continue
 
-            await ws_manager.broadcast_to_project(project_id, data)
-    except asyncio.CancelledError:
-        logger.info("Redis pub/sub listener cancelled")
-    except Exception:
-        logger.exception("Redis pub/sub listener error")
-    finally:
-        await pubsub.punsubscribe("ogi:transform_events:*")
-        await conn.aclose()
+                await ws_manager.broadcast_to_project(project_id, data)
+        except asyncio.CancelledError:
+            logger.info("Redis pub/sub listener cancelled")
+            await _close_pubsub(pubsub, conn)
+            raise
+        except Exception:
+            logger.exception("Redis pub/sub listener error; reconnecting in %.0fs", backoff)
+            await _close_pubsub(pubsub, conn)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, max_backoff)
 
 
 async def _resolve_ws_user(token: str | None) -> UserProfile | None:
