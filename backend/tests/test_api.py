@@ -2222,16 +2222,25 @@ async def test_redis_pubsub_listener_bridges_project_messages(monkeypatch: pytes
         def __init__(self) -> None:
             self.subscribed: list[str] = []
             self.unsubscribed: list[str] = []
+            self._pending: list[dict] = [
+                {
+                    "type": "pmessage",
+                    "channel": f"ogi:transform_events:{project_id}",
+                    "data": json.dumps(payload),
+                }
+            ]
 
         async def psubscribe(self, pattern: str) -> None:
             self.subscribed.append(pattern)
 
-        async def listen(self):
-            yield {
-                "type": "pmessage",
-                "channel": f"ogi:transform_events:{project_id}",
-                "data": json.dumps(payload),
-            }
+        async def get_message(
+            self, ignore_subscribe_messages: bool = False, timeout: float | None = None
+        ):
+            # Deliver the queued message once, then report idle (None) like
+            # redis-py does on an idle subscription.
+            if self._pending:
+                return self._pending.pop(0)
+            return None
 
         async def punsubscribe(self, pattern: str) -> None:
             self.unsubscribed.append(pattern)
@@ -2255,7 +2264,19 @@ async def test_redis_pubsub_listener_bridges_project_messages(monkeypatch: pytes
     monkeypatch.setattr(websocket_api.ws_manager, "broadcast_to_project", fake_broadcast)
     monkeypatch.setattr("redis.asyncio.from_url", lambda *args, **kwargs: fake_conn)
 
-    await websocket_api.redis_pubsub_listener()
+    # The listener runs forever (reconnect loop), so drive it as a task and wait
+    # for the message to be bridged before cancelling — mirroring how the
+    # lifespan starts and later cancels it.
+    task = asyncio.create_task(websocket_api.redis_pubsub_listener())
+    try:
+        for _ in range(200):
+            if captured:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
 
     assert fake_conn.pubsub_instance.subscribed == ["ogi:transform_events:*"]
     assert fake_conn.pubsub_instance.unsubscribed == ["ogi:transform_events:*"]
