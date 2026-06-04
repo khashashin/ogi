@@ -179,6 +179,13 @@ docker compose -f docker-compose.prod.yml up -d
 
 Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.2.6`). Defaults to `latest`.
 
+### Hetzner Cloud
+
+[![Get Hetzner Cloud credits](https://img.shields.io/badge/Get_Hetzner_Cloud_credits-D50C2D?style=for-the-badge&logo=hetzner&logoColor=white)](https://hetzner.cloud/?ref=LspEGc99USBa)
+[![Deploy Docker CE on Hetzner](https://img.shields.io/badge/Deploy_Docker_CE_on_Hetzner-D50C2D?style=for-the-badge&logo=hetzner&logoColor=white)](https://console.hetzner.com/deploy/docker-ce)
+
+New Hetzner users can use the first link to sign up with Hetzner Cloud credits. It is a referral link, so the OGI maintainer may also receive Hetzner Cloud credits if the referral qualifies. After creating a server, use the Docker deployment commands above to run OGI.
+
 ### Configurable transform caps
 
 OGI ships with sensible per-transform max values for things like `max_results`, `max_links`, `max_urls`, and `max_content_chars`, but those caps are now centrally overridable so cloud deployments can enforce them without hardcoding local limits.
@@ -446,8 +453,8 @@ List-style settings accept either:
 | `OGI_SUPABASE_JWT_SECRET`                       | Supabase JWT secret                                                                                              | unset                                               |
 | `OGI_SUPABASE_REDIRECT_URL`                     | Redirect URL used by frontend auth flows                                                                         | unset                                               |
 | `OGI_ADMIN_EMAILS`                              | Admin users for registry/plugin management                                                                       | unset                                               |
-| `OGI_TELEMETRY_ENABLED`                        | Enable or disable installation-level telemetry                                                                   | `true`                                              |
-| `OGI_TELEMETRY_LEVEL`                          | Telemetry level (`basic` or `full`)                                                                              | `full`                                              |
+| `OGI_TELEMETRY_ENABLED`                         | Enable or disable installation-level telemetry                                                                   | `true`                                              |
+| `OGI_TELEMETRY_LEVEL`                           | Telemetry level (`basic` or `full`)                                                                              | `full`                                              |
 | `OGI_API_KEY_ENCRYPTION_KEY`                    | Fernet key for encrypted API key storage                                                                         | unset but strongly recommended                      |
 | `OGI_API_KEY_INJECTION_ALLOW_COMMUNITY_PLUGINS` | Allow community plugins to receive stored API keys                                                               | `true`                                              |
 | `OGI_API_KEY_INJECTION_TRUSTED_TIERS_ONLY`      | Restrict stored key injection to trusted tiers only                                                              | `false`                                             |
