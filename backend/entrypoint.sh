@@ -8,6 +8,18 @@ is_true() {
   esac
 }
 
+RUNTIME_USER="${OGI_RUNTIME_USER:-ogi}"
+
+# When the container starts as root, repair ownership of the writable runtime
+# directories (these are usually mounted volumes that may be root-owned from an
+# earlier root-running image) and then drop to the unprivileged runtime user.
+# On the re-exec the uid is no longer 0, so this block is skipped and execution
+# continues as the runtime user.
+if [ "$(id -u)" = "0" ]; then
+  chown -R "$RUNTIME_USER":"$RUNTIME_USER" /app/plugins /app/media 2>/dev/null || true
+  exec gosu "$RUNTIME_USER" "$0" "$@"
+fi
+
 BOOT_REQUIREMENTS_ENABLE="${OGI_BOOT_REQUIREMENTS_ENABLE:-true}"
 BOOT_REQUIREMENTS_FILE="${OGI_BOOT_REQUIREMENTS_FILE:-/app/plugins/requirements.txt}"
 BOOT_LOCK_FILE="${OGI_BOOT_LOCK_FILE:-/app/plugins/ogi-lock.json}"
