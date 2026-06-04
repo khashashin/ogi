@@ -152,6 +152,12 @@ async def install_transform(
         files = await installer.install(slug)
     except InstallError as exc:
         raise HTTPException(400, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(
+            500,
+            "Plugin directory is not writable by the backend process. Ensure the "
+            f"plugins volume is owned by the runtime user. ({exc})",
+        )
 
     meta = registry.get_transform(slug)
     version = meta.get("version", "") if meta else ""
