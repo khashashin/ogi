@@ -39,8 +39,8 @@ def upgrade() -> None:
     # 1. Seed the Community account that inherits orphaned public projects.
     op.execute(
         f"""
-        INSERT INTO profiles (id, email, display_name)
-        VALUES ('{COMMUNITY_USER_ID}', 'community@localhost', 'Community')
+        INSERT INTO profiles (id, email, display_name, avatar_url)
+        VALUES ('{COMMUNITY_USER_ID}', 'community@localhost', 'Community', '')
         ON CONFLICT (id) DO NOTHING
         """
     )
