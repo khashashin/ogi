@@ -19,6 +19,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml ./
 RUN printf "# OGI backend image\n" > README.md
 
+# Install browsers into a shared location (not root's home) so a non-root
+# runtime user can find them. Must be set before `playwright install`.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+
 # Install Playwright package first so browser binaries can be cached separately
 # from application source changes.
 RUN uv pip install "playwright>=1.58.0"
@@ -36,8 +40,19 @@ COPY alembic.ini .
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Default plugins directory (populated via volume mount at runtime)
-RUN mkdir -p plugins
+# Default runtime directories (populated via volume mount at runtime)
+RUN mkdir -p plugins media
+
+# Run as an unprivileged user. Chromium's sandbox is disabled under root, and a
+# plugin/dependency RCE here would otherwise have host-root blast radius, so the
+# worker/agent-worker (which run third-party plugin code and headless Chromium)
+# drop to this account too. HOME is set explicitly so uv's boot-time plugin
+# install has a writable cache; /opt/venv and /opt/playwright are chowned so the
+# venv and browser binaries remain usable after the switch.
+ENV HOME=/home/ogi
+RUN groupadd -r ogi && useradd -r -g ogi -d /home/ogi -m ogi \
+    && chown -R ogi:ogi /app /opt/venv /opt/playwright /home/ogi
+USER ogi
 
 EXPOSE 8000
 
