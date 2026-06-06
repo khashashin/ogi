@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuthStore } from "../stores/authStore";
 import { Loader2 } from "lucide-react";
 import { Seo } from "./Seo";
+import { getEnv } from "../lib/env";
+import { Turnstile, type TurnstileHandle } from "./Turnstile";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthFeedback =
@@ -23,29 +25,41 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [feedback, setFeedback] = useState<AuthFeedback | null>(null);
   const currentFeedback = feedback?.mode === mode ? feedback : null;
 
+  const turnstileSiteKey = getEnv("VITE_TURNSTILE_SITE_KEY");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const turnstileRef = useRef<TurnstileHandle>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
-    setBusy(true);
 
-    if (mode === "forgot") {
-      const err = await resetPassword(email);
-      setBusy(false);
-      if (err) {
-        setFeedback({ mode, type: "error", message: err });
-      } else {
-        setFeedback({ mode, type: "reset-sent" });
-      }
+    if (turnstileSiteKey && !captchaToken) {
+      setFeedback({ mode, type: "error", message: "Please complete the verification." });
       return;
     }
 
-    const err =
-      mode === "signin"
-        ? await signIn(email, password)
-        : await signUp(email, password);
+    setBusy(true);
+
+    let err: string | null;
+    if (mode === "forgot") {
+      err = await resetPassword(email, captchaToken || undefined);
+    } else if (mode === "signin") {
+      err = await signIn(email, password, captchaToken || undefined);
+    } else {
+      err = await signUp(email, password, captchaToken || undefined);
+    }
     setBusy(false);
+
+    // Turnstile tokens are single-use; refresh for the next attempt.
+    if (turnstileSiteKey) {
+      setCaptchaToken("");
+      turnstileRef.current?.reset();
+    }
+
     if (err) {
       setFeedback({ mode, type: "error", message: err });
+    } else if (mode === "forgot") {
+      setFeedback({ mode, type: "reset-sent" });
     } else if (mode === "signup") {
       setFeedback({ mode, type: "signup-success" });
     } else {
@@ -113,6 +127,13 @@ export function AuthPage({ mode }: AuthPageProps) {
                   className="px-3 py-2 text-sm bg-bg border border-border rounded text-text focus:outline-none focus:border-accent"
                 />
               )}
+              {turnstileSiteKey && (
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={turnstileSiteKey}
+                  onToken={setCaptchaToken}
+                />
+              )}
               {currentFeedback?.type === "error" && (
                 <p className="text-xs text-danger">{currentFeedback.message}</p>
               )}
@@ -131,7 +152,7 @@ export function AuthPage({ mode }: AuthPageProps) {
               )}
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || (!!turnstileSiteKey && !captchaToken)}
                 className="flex items-center justify-center gap-2 px-4 py-2 text-sm bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-50"
               >
                 {busy && <Loader2 size={14} className="animate-spin" />}
