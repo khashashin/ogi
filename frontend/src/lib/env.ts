@@ -3,6 +3,7 @@ type RuntimeEnv = {
   VITE_SUPABASE_ANON_KEY?: string;
   VITE_SUPABASE_REDIRECT_URL?: string;
   VITE_GA_MEASUREMENT_ID?: string;
+  VITE_TURNSTILE_SITE_KEY?: string;
 };
 
 declare global {

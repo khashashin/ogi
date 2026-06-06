@@ -13,10 +13,10 @@ interface AuthState {
   isRecovery: boolean;
 
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string) => Promise<string | null>;
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<string | null>;
+  signUp: (email: string, password: string, captchaToken?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<string | null>;
+  resetPassword: (email: string, captchaToken?: string) => Promise<string | null>;
   updatePassword: (newPassword: string) => Promise<string | null>;
   updateProfile: (displayName: string) => Promise<string | null>;
   clearRecovery: () => void;
@@ -52,13 +52,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, captchaToken) => {
     if (!supabase) return "Auth not configured";
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: captchaToken ? { captchaToken } : undefined,
+    });
     return error ? error.message : null;
   },
 
-  signUp: async (email, password) => {
+  signUp: async (email, password, captchaToken) => {
     if (!supabase) return "Auth not configured";
     const redirectUrl = getEnv("VITE_SUPABASE_REDIRECT_URL") || window.location.origin;
     const { error } = await supabase.auth.signUp({
@@ -66,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       password,
       options: {
         emailRedirectTo: redirectUrl,
+        captchaToken,
       },
     });
     return error ? error.message : null;
@@ -77,11 +82,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, session: null, isRecovery: false });
   },
 
-  resetPassword: async (email) => {
+  resetPassword: async (email, captchaToken) => {
     if (!supabase) return "Auth not configured";
     const redirectUrl = getEnv("VITE_SUPABASE_REDIRECT_URL") || window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirectUrl,
+      captchaToken,
     });
     return error ? error.message : null;
   },

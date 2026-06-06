@@ -101,7 +101,7 @@ describe("AuthPage", () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    expect(authState.signIn).toHaveBeenCalledWith("user@example.com", "secret123");
+    expect(authState.signIn).toHaveBeenCalledWith("user@example.com", "secret123", undefined);
     expect(container.textContent).toContain("PROJECTS");
     unmount();
   });
@@ -133,7 +133,7 @@ describe("AuthPage", () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    expect(authState.resetPassword).toHaveBeenCalledWith("user@example.com");
+    expect(authState.resetPassword).toHaveBeenCalledWith("user@example.com", undefined);
     expect(container.textContent).toContain("Check your email for a password reset link.");
     unmount();
   });
@@ -150,7 +150,7 @@ describe("AuthPage", () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    expect(authState.signUp).toHaveBeenCalledWith("new-user@example.com", "secret123");
+    expect(authState.signUp).toHaveBeenCalledWith("new-user@example.com", "secret123", undefined);
     expect(container.textContent).toContain("Check your email to confirm your account, then sign in.");
 
     const signInLink = Array.from(container.querySelectorAll("a")).find(
