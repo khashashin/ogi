@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up a venv since python 3.14 marks itself as externally managed
@@ -52,8 +53,10 @@ RUN mkdir -p plugins media
 ENV HOME=/home/ogi
 RUN groupadd -r ogi && useradd -r -g ogi -d /home/ogi -m ogi \
     && chown -R ogi:ogi /app /opt/venv /opt/playwright /home/ogi
-USER ogi
 
+# NOTE: the container intentionally starts as root so entrypoint.sh can repair
+# ownership of mounted volumes (/app/plugins, /app/media); it then drops to the
+# unprivileged "ogi" user via gosu before running the app.
 EXPOSE 8000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
