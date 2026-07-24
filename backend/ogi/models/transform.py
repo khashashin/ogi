@@ -65,3 +65,32 @@ class TransformInfo(SQLModel):
     plugin_permissions: dict[str, bool] = Field(default_factory=dict)
     plugin_source: str | None = None
     settings: list[dict[str, object]] = Field(default_factory=list)
+
+
+class TransformDocumentation(SQLModel):
+    """Long-form docs for a single transform, served on demand.
+
+    Kept out of :class:`TransformInfo` so the per-entity transform list stays
+    small; the README alone can be several KB per plugin.
+    """
+
+    name: str
+    display_name: str
+    description: str
+    long_description: str = ""
+    when_to_use: str = ""
+    limitations: str = ""
+    example_use_cases: list[str] = Field(default_factory=list)
+    input_types: list[EntityType] = Field(default_factory=list)
+    output_types: list[EntityType] = Field(default_factory=list)
+    category: str = ""
+    api_key_services: list[str] = Field(default_factory=list)
+    setting_names: list[str] = Field(default_factory=list)
+    source: str = "builtin"  # builtin | plugin
+    plugin_name: str | None = None
+    plugin_version: str = ""
+    plugin_author: str = ""
+    plugin_verification_tier: str | None = None
+    plugin_homepage: str = ""
+    plugin_repository: str = ""
+    readme: str = ""
