@@ -11,6 +11,40 @@ class HashLookup(BaseTransform):
     input_types = [EntityType.HASH]
     output_types = [EntityType.HASH]
     category = "Hash"
+    long_description = (
+        "Queries the VirusTotal v3 file endpoint for the hash using the API key stored "
+        "in this transform's settings, with a 10 second timeout, and enriches the "
+        "existing Hash entity instead of creating new ones. From the response it reads "
+        "last_analysis_stats to build a detection ratio of malicious verdicts over the "
+        "total number of engines that ran, and takes type_description, size, "
+        "first_submission_date and last_analysis_date, then returns a copy of the entity "
+        "with detection_ratio, file_type, file_size, first_seen and last_seen added to "
+        "its properties. No edges are produced. A missing API key, an unknown hash "
+        "(HTTP 404), an invalid key (401) and rate limiting (429) each return an "
+        "explanatory message and no entity."
+    )
+    when_to_use = (
+        "Use this when a file hash appears in an investigation, whether it came from "
+        "Content to IOCs, an import or manual entry, and you need to know if it is known "
+        "malware, how widely it is detected, what kind of file it is and how long it has "
+        "been circulating. The submission dates help place a sample on the incident "
+        "timeline."
+    )
+    limitations = (
+        "Requires your own VirusTotal API key; the public tier allows roughly four "
+        "requests per minute against a daily quota, and exceeding it returns a "
+        "rate-limit message with no data. Only samples already submitted to VirusTotal "
+        "are found, so genuine malware that was never uploaded comes back as a 404. "
+        "Engine verdicts are not ground truth: vendors disagree, and a low ratio can "
+        "mean either a clean file or a sample too fresh to be flagged. first_seen and "
+        "last_seen are stored as raw Unix timestamps. Because the entity is enriched in "
+        "place, no new nodes or edges appear on the graph."
+    )
+    example_use_cases = [
+        "Confirm whether a hash from a report is known malware and how widely detected",
+        "Read the first submission date to bound the start of an intrusion timeline",
+        "Triage a list of hashes to decide which samples deserve deeper analysis",
+    ]
     settings = [
         TransformSetting(
             name="virustotal_api_key",

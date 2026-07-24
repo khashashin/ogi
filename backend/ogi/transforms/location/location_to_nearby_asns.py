@@ -15,6 +15,47 @@ class LocationToNearbyASNs(BaseTransform):
     input_types = [EntityType.LOCATION]
     output_types = [EntityType.AS_NUMBER, EntityType.NETWORK]
     category = "Location"
+    long_description = (
+        "Reads the lat and lon properties of a Location entity, then queries PeeringDB for "
+        "colocation facilities registered in the same city or country, measures the "
+        "great-circle distance from the entity's coordinates to each facility, and keeps "
+        "those inside the configured radius. For the nearest facilities it pulls the "
+        "networks present there and creates an ASNumber entity per distinct ASN, plus a "
+        "Network entity when PeeringDB knows the operator's name. Both are linked to the "
+        "location with a 'nearby_network' edge recording the ASN, the nearest facility "
+        "name and distance, and the radius used; the entity properties also carry the "
+        "presence and facility counts and the list of nearby facility names. If the entity "
+        "has no city or country property, the transform geocodes its value through "
+        "Nominatim first to obtain that context. Facility lists, per-facility presences "
+        "and network names are cached in memory for thirty minutes. Settings cover the "
+        "radius, the provider timeout, an optional PeeringDB API key for higher query "
+        "limits, and a target date/time that is only echoed into the run messages because "
+        "the underlying data is current-state."
+    )
+    when_to_use = (
+        "Use this when you need to know which networks and autonomous systems have a "
+        "physical footprint near a place, for example when assessing whether a claimed "
+        "hosting location could realistically be served from there, or which carriers an "
+        "operation in that city would plausibly use. Compare the ASNumber entities it "
+        "produces with those already in the graph from IP to ASN. Run Location to Geocode "
+        "first if the location has no coordinates."
+    )
+    limitations = (
+        "PeeringDB lists interconnection facilities that operators choose to register, so "
+        "it covers carrier hotels and exchange points rather than every data centre, and "
+        "regions with little PeeringDB participation return nothing. The facility search "
+        "is filtered by the city or country string, so a facility just across an "
+        "administrative border can be missed even when it sits inside the radius. Only the "
+        "ten nearest facilities are expanded and only thirty ASNs have their names "
+        "resolved, so dense metros return a truncated view, and the radius is capped at "
+        "100 km. Presence records are current registrations, never historical ones, and "
+        "PeeringDB rate limits trigger a two-minute cooldown."
+    )
+    example_use_cases = [
+        "Check which carriers have facility presence near a claimed office or data centre",
+        "Assess whether an ASN seen in traffic plausibly serves the city under scrutiny",
+        "Map the interconnection landscape around a target city before deeper analysis",
+    ]
     settings = [
         TransformSetting(
             name="radius_km",

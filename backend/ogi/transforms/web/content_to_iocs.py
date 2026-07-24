@@ -30,6 +30,40 @@ class ContentToIOCs(BaseTransform):
         EntityType.HASH,
     ]
     category = "Web"
+    long_description = (
+        "Reads the content property of a Document entity, falling back to the entity "
+        "value, and pulls indicators out of that text. It first tries the iocsearcher "
+        "library and maps its url, fqdn, domain, email, IPv4, IPv6, md5, sha1 and sha256 "
+        "findings onto OGI entities; if that library is missing or raises, it falls back "
+        "to built-in regular expressions covering URLs, email addresses, IPv4 addresses, "
+        "32, 40 and 64 character hex hashes, and dotted domain names. The messages state "
+        "which backend ran. Each indicator, deduplicated case-insensitively per type, "
+        "becomes a URL, EmailAddress, IPAddress, Hash or Domain entity with "
+        "extracted_from set to document_content, linked back to the document by a "
+        "'mentions' edge for URLs, domains and emails, a 'resolves to' edge for IP "
+        "addresses and a 'contains hash' edge for hashes."
+    )
+    when_to_use = (
+        "Run this on a Document produced by URL to Content, or on any document whose "
+        "text you want mined for pivot points, such as a threat report, a paste or a "
+        "captured page body. Take the results onward with Domain to IP Address, IP to "
+        "ASN, Email to Domain or Hash Lookup."
+    )
+    limitations = (
+        "This is pattern matching over text with no validation, so false positives are "
+        "common: version strings and dotted identifiers match the domain pattern, "
+        "filenames whose extension resembles a TLD are picked up, and any 32, 40 or 64 "
+        "character hex string is treated as a file hash. Defanged indicators such as "
+        "hxxp:// or 1.1.1[.]1 are not recognised by the regex fallback. The two backends "
+        "do not return identical sets, so results vary with what is installed. Only text "
+        "already stored on the document is searched, so anything lost to the content cap "
+        "in URL to Content cannot be recovered here."
+    )
+    example_use_cases = [
+        "Mine a captured threat report for domains, IP addresses and file hashes",
+        "Pull contact addresses and outbound links out of a scraped page body",
+        "Turn a pasted incident writeup into pivotable entities on the graph",
+    ]
 
     async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         text = str(entity.properties.get("content") or entity.value or "").strip()

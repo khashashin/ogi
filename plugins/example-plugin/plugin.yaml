@@ -2,6 +2,19 @@ name: example-plugin
 version: "1.0.0"
 display_name: "Example Plugin"
 description: "A sample plugin demonstrating the OGI plugin system"
+long_description: >
+  A minimal reference plugin that shows how a transform is packaged: a manifest,
+  a transforms package, and a README. It emits a single Document entity so you
+  can confirm the plugin pipeline works end to end.
+when_to_use: >
+  Use this only when verifying that plugin discovery and loading work in a new
+  deployment. It produces no real intelligence, so it has no place in an actual
+  investigation.
+limitations: >
+  Returns static placeholder output and performs no network calls.
+example_use_cases:
+  - "Confirm plugin discovery works after changing plugin_dirs"
+  - "Use as a starting point when writing your own transform"
 author: "OGI Team"
 license: "AGPL-3.0"
 category: "example"

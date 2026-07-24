@@ -11,6 +11,39 @@ class DomainToURLs(BaseTransform):
     input_types = [EntityType.DOMAIN]
     output_types = [EntityType.URL]
     category = "Web"
+    long_description = (
+        "Requests https://<domain>/robots.txt with a 10 second timeout, following "
+        "redirects, and parses the response line by line while skipping blanks and "
+        "comments. A Sitemap: directive contributes its URL exactly as written, and a "
+        "Disallow: directive is turned into https://<domain> plus the path, ignoring a "
+        "bare '/'. Any status other than HTTP 200 ends the run with a message and no "
+        "entities. Duplicates are dropped, order of appearance is preserved and the list "
+        "is capped at 50 URLs by default, a limit the server can change through its "
+        "transform setting maximum overrides; the messages report both the total number "
+        "found and whether truncation happened. Every surviving path becomes a URL "
+        "entity with source_file set to robots.txt, joined to the domain by a 'hosts' "
+        "edge."
+    )
+    when_to_use = (
+        "Use this early in web reconnaissance to surface the paths a site owner asked "
+        "crawlers to stay away from, which often point at admin panels, staging areas "
+        "and internal endpoints, along with the sitemap files that enumerate the rest of "
+        "the site. Follow interesting paths with URL to HTTP Headers or URL to Content."
+    )
+    limitations = (
+        "Only HTTPS on the bare domain is tried, so a site serving robots.txt over plain "
+        "http, on www, or on a non-standard port yields nothing. Disallow entries are "
+        "frequently wildcards or path prefixes such as /admin/* or /*?s=, and these are "
+        "recorded verbatim as URLs even though they are not directly fetchable. A path "
+        "appearing in robots.txt is no proof that it exists or is reachable. Sitemap "
+        "URLs are captured but never fetched or expanded, and long robots.txt files are "
+        "cut at the result cap."
+    )
+    example_use_cases = [
+        "Enumerate disallowed paths that hint at admin or staging areas",
+        "Locate a site's sitemap files before planning a deeper crawl",
+        "Compare robots.txt entries across related domains to spot shared tooling",
+    ]
 
     async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         domain = entity.value

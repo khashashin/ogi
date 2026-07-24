@@ -26,6 +26,42 @@ class PersonToUsernames(BaseTransform):
     input_types = [EntityType.PERSON]
     output_types = [EntityType.USERNAME]
     category = "People"
+    long_description = (
+        "Generates candidate usernames offline from the name data already held on the Person "
+        "entity; it makes no network calls. It collects the entity value plus the "
+        "display_name, first_name with last_name, and any aliases properties, splits each on "
+        "whitespace, dots, underscores and hyphens, and normalizes the tokens to lowercase "
+        "ASCII, folding away accents and dropping any remaining non-alphanumeric characters. "
+        "For multi-token names it builds firstlast, first.last, first_last, flast, lastf, "
+        "firstl and the fully joined form, adding an initial-plus-middle-initial-plus-last "
+        "variant when a middle name is present. A single-token name yields only that token. "
+        "Candidates shorter than three characters are dropped. Each pattern carries a fixed "
+        "confidence between 0.5 and 0.62; duplicates keep the highest score, and the best ten "
+        "by confidence then alphabetical order become Username entities with username, "
+        "confidence and rationale properties, each linked to the person by a 'possible "
+        "username' edge."
+    )
+    when_to_use = (
+        "Use it when you have a real name but no handle and need a starting set of handles to "
+        "test. Feed the results directly into Username Search to see which of them exist on "
+        "social and developer platforms, and discard the rest. The same list is useful for "
+        "checking against breach data or for guessing corporate email address patterns."
+    )
+    limitations = (
+        "Every result is a guess derived from spelling, not evidence that an account exists or "
+        "belongs to the person. Common names generate handles owned by unrelated people, so "
+        "false positives are the normal outcome and each hit needs independent confirmation. "
+        "Only name-based patterns are produced: nicknames, gamer tags, numeric suffixes and "
+        "handles unrelated to the real name never appear. Names written in non-Latin scripts "
+        "are reduced to nothing by the ASCII normalization, and the output is capped at ten "
+        "candidates, so rarer variants are cut. The confidence values are fixed pattern "
+        "weights, not a measured likelihood."
+    )
+    example_use_cases = [
+        "Build a handle list for a named person before running Username Search",
+        "Generate probable corporate account names from a first and last name",
+        "Expand known aliases on a person entity into testable username variants",
+    ]
 
     def _candidate_names(self, entity: Entity) -> list[tuple[str, str]]:
         props = entity.properties or {}

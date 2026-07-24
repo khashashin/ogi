@@ -63,6 +63,47 @@ class UsernameSearch(BaseTransform):
     input_types = [EntityType.SOCIAL_MEDIA, EntityType.USERNAME]
     output_types = [EntityType.SOCIAL_MEDIA, EntityType.URL]
     category = "Social Media"
+    long_description = (
+        "Checks whether a username exists across a catalog of sites. The catalog is downloaded "
+        "from the WhatsMyName project on GitHub and cached in memory for 24 hours; if that "
+        "download fails it falls back to a built-in list of GitHub, Reddit and Keybase. Before "
+        "scanning, the catalog is validated by probing it with a random 12-character username "
+        "and discarding any site that reports that account as existing, which removes sites "
+        "that answer positively for everything; the trusted list is cached for 72 hours. Input "
+        "may be a Username entity or a SocialMedia entity, in which case its username property "
+        "is used. Usernames below the minimum length and generic values such as admin, info or "
+        "support are skipped. Each site is requested by GET, or POST when the catalog defines a "
+        "body, and a hit requires the expected status code, the expected match string, the "
+        "absence of the missing-string marker and, when Require Username On Page is enabled, "
+        "the username in the page text. Every hit produces a SocialMedia entity named "
+        "username@Platform linked by 'has account', or 'similar account' for a permutation "
+        "match, plus a URL entity for the profile linked from it. Max Sites, Concurrency, "
+        "Minimum Username Length, Require Username On Page and Scan Similar Usernames control "
+        "the run; permutations add leetspeak and separator variants, with all candidates capped "
+        "at six."
+    )
+    when_to_use = (
+        "Use it to confirm which candidate handles are real accounts, typically right after "
+        "Person to Usernames, or to map the platform footprint of a handle you already know. "
+        "The SocialMedia and URL entities it produces are the entry point for reading the "
+        "profiles themselves and pulling further identifiers such as real names, linked email "
+        "addresses or other handles."
+    )
+    limitations = (
+        "Only the first Max Sites entries of the catalog are scanned, 25 by default out of "
+        "thousands, so a negative result is not evidence that an account does not exist. Sites "
+        "that soft-404, rate limit, require a login or sit behind bot protection produce false "
+        "negatives, and stale catalog entries cause both misses and false hits. The same handle "
+        "on two platforms is not proof of the same person, since common handles are reused "
+        "widely. Permutation results are labelled 'similar account' precisely because they are "
+        "a different string and usually a different owner. Requests originate from the OGI host "
+        "with an identifying user agent, so the scan is visible to the sites checked."
+    )
+    example_use_cases = [
+        "Verify which generated handles for a person resolve to live accounts",
+        "Map the platform footprint of a known handle across social and developer sites",
+        "Collect profile URLs to review for further identifiers such as email or real name",
+    ]
     settings = [
         TransformSetting(
             name="min_username_length",

@@ -34,6 +34,45 @@ class DomainToCerts(BaseTransform):
     input_types = [EntityType.DOMAIN]
     output_types = [EntityType.SSL_CERTIFICATE, EntityType.ORGANIZATION]
     category = "Certificate"
+    long_description = (
+        "Opens a TLS connection to the domain on port 443 over IPv4 with a ten "
+        "second timeout and reads the certificate the server presents. The "
+        "connection uses Python's default verifying SSL context, so the certificate "
+        "must chain to a trusted root and match the requested host name. From the "
+        "parsed certificate it creates a single SSLCertificate entity whose value is "
+        "the subject common name, falling back to the domain itself, carrying the "
+        "issuer and subject common names, their organisation names, the serial "
+        "number, the notBefore and notAfter validity dates, and the full list of "
+        "subject alternative names joined into one 'sans' property. The domain is "
+        "linked to it with a 'secured by' edge. When the issuer's organisation name "
+        "is present, an Organization entity is also created for the certificate "
+        "authority and linked from the certificate with an 'issued by' edge. "
+        "Timeouts, name resolution failures, refused connections and SSL errors are "
+        "reported as result messages and return no entities."
+    )
+    when_to_use = (
+        "Use to confirm what is actually being served on a host and who vouches for "
+        "it. The subject and SAN list show which other names the same certificate "
+        "covers, and the validity dates give a rough age for the deployment. Run "
+        "Certificate Transparency Lookup alongside it to see historically issued "
+        "certificates that a live connection cannot show, and take names from the "
+        "SAN property forward with Domain to IP Address."
+    )
+    limitations = (
+        "Because the default verifying context is used, self-signed, expired, "
+        "hostname-mismatched or otherwise untrusted certificates raise an SSL error "
+        "and produce no entity at all, which is often exactly the case an "
+        "investigator cares about. Only the leaf certificate is captured, with no "
+        "chain, public key or fingerprint. Connections are IPv4 and port 443 only, "
+        "so IPv6-only hosts and TLS on other ports are invisible, and a host behind "
+        "a CDN returns the CDN's certificate rather than the origin's. SANs are "
+        "stored as one comma-joined string, not as separate entities."
+    )
+    example_use_cases = [
+        "Check which other host names a target's live certificate covers via its SANs",
+        "Identify the certificate authority an organisation uses across its estate",
+        "Read certificate validity dates to estimate when a service was last redeployed",
+    ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         domain = entity.value
