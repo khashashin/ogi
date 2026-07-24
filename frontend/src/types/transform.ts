@@ -16,6 +16,29 @@ export interface TransformInfo {
   settings: TransformSettingSchema[];
 }
 
+export interface TransformDocumentation {
+  name: string;
+  display_name: string;
+  description: string;
+  long_description: string;
+  when_to_use: string;
+  limitations: string;
+  example_use_cases: string[];
+  input_types: EntityType[];
+  output_types: EntityType[];
+  category: string;
+  api_key_services: string[];
+  setting_names: string[];
+  source: "builtin" | "plugin";
+  plugin_name: string | null;
+  plugin_version: string;
+  plugin_author: string;
+  plugin_verification_tier: string | null;
+  plugin_homepage: string;
+  plugin_repository: string;
+  readme: string;
+}
+
 export interface TransformSettingSchema {
   name: string;
   display_name: string;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Play, Loader2, Square, Settings } from "lucide-react";
+import { Play, Loader2, Square, Settings, Info } from "lucide-react";
 import { toast } from "sonner";
 import type { TransformInfo } from "../types/transform";
 import { useGraphStore } from "../stores/graphStore";
@@ -9,6 +9,7 @@ import type { TransformJob } from "../stores/transformJobStore";
 import { api } from "../api/client";
 import { TransformResults } from "./TransformResults";
 import { TransformSettingsDialog } from "./TransformSettingsDialog";
+import { TransformInfoDialog } from "./TransformInfoDialog";
 import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
 import { openBillingCooldownDialog } from "../lib/billingCooldownDialog";
 
@@ -21,6 +22,7 @@ function hasVisibleSettings(transform: TransformInfo): boolean {
 export function TransformPanel() {
   const [transforms, setTransforms] = useState<TransformInfo[]>([]);
   const [settingsTransform, setSettingsTransform] = useState<TransformInfo | null>(null);
+  const [infoTransform, setInfoTransform] = useState<TransformInfo | null>(null);
   const { selectedNodeId, entities } = useGraphStore();
   const { currentProject } = useProjectStore();
   const { activeJobs, submitJob, recentCompleted } = useTransformJobStore();
@@ -116,17 +118,18 @@ export function TransformPanel() {
               const active = isTransformActive(t.name);
               return (
                 <div key={t.name}>
+                  <div className="flex items-start">
                   <button
                     onClick={() => handleRun(t.name)}
                     disabled={active}
-                    className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
+                    className="flex-1 min-w-0 flex items-center gap-2 px-2 py-2 rounded text-xs text-text hover:bg-surface-hover disabled:opacity-50"
                   >
                     {active ? (
                       <Loader2 size={12} className="animate-spin text-accent shrink-0" />
                     ) : (
                       <Play size={12} className="text-accent shrink-0" />
                     )}
-                    <div className="text-left">
+                    <div className="text-left min-w-0">
                       <p className="font-medium">{t.display_name}</p>
                       <p className="text-[10px] text-text-muted">{t.description}</p>
                       {t.api_key_services.length > 0 && (
@@ -146,6 +149,15 @@ export function TransformPanel() {
                       )}
                     </div>
                   </button>
+                  <button
+                    onClick={() => setInfoTransform(t)}
+                    className="mt-2 mr-1 p-1 rounded text-text-muted hover:text-text hover:bg-surface-hover shrink-0"
+                    title={`What ${t.display_name} does and when to use it`}
+                    aria-label={`About ${t.display_name}`}
+                  >
+                    <Info size={12} />
+                  </button>
+                  </div>
                   <div className="px-2 pb-2">
                     {hasVisibleSettings(t) && (
                       <button
@@ -177,6 +189,12 @@ export function TransformPanel() {
         open={settingsTransform !== null}
         transform={settingsTransform}
         onClose={() => setSettingsTransform(null)}
+      />
+      <TransformInfoDialog
+        key={infoTransform?.name ?? "none"}
+        open={infoTransform !== null}
+        transform={infoTransform}
+        onClose={() => setInfoTransform(null)}
       />
     </div>
   );

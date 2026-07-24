@@ -1,8 +1,8 @@
 import type { Project, ProjectCreate, ProjectUpdate } from "../types/project";
-import type { Entity, EntityCreate, EntityUpdate, EntityTypeMeta } from "../types/entity";
+import type { Entity, EntityCreate, EntityUpdate, EntityTypeDocumentation, EntityTypeMeta } from "../types/entity";
 import type { Edge, EdgeCreate, EdgeUpdate } from "../types/edge";
 import type { GraphData } from "../types/graph";
-import type { TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
+import type { TransformDocumentation, TransformInfo, TransformRun, TransformConfig, TransformSettingsResponse } from "../types/transform";
 import type { RegistryIndex, RegistryTransform, PluginInfo, PluginApiKeyUsageReportItem, UpdateCheckItem } from "../types/registry";
 import type { AuditLogEntry, LocationAggregate, ProjectEventsResponse } from "../types/eventing";
 import type { TimelineResponse } from "../types/timeline";
@@ -445,6 +445,10 @@ export const api = {
   transforms: {
     list: () => request<TransformInfo[]>("/transforms"),
     entityTypes: () => request<EntityTypeMeta[]>("/transforms/entity-types"),
+    entityTypeDocumentation: (entityType: string) =>
+      request<EntityTypeDocumentation>(
+        `/transforms/entity-types/${encodeURIComponent(entityType)}/documentation`,
+      ),
     forEntity: (entityId: string) =>
       request<TransformInfo[]>(`/transforms/for-entity/${entityId}`),
     run: (name: string, entityId: string, projectId: string, config?: TransformConfig) =>
@@ -456,6 +460,8 @@ export const api = {
           config: config ?? { settings: {} },
         }),
       }),
+    getDocumentation: (name: string) =>
+      request<TransformDocumentation>(`/transforms/${name}/documentation`),
     getSettings: (name: string) =>
       request<TransformSettingsResponse>(`/transforms/${name}/settings`),
     saveUserSettings: (name: string, settings: Record<string, string>) =>

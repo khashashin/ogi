@@ -25,6 +25,42 @@ class URLToContent(BaseTransform):
     input_types = [EntityType.URL]
     output_types = [EntityType.DOCUMENT]
     category = "Web"
+    long_description = (
+        "Opens the URL in a headless Chromium browser driven by Playwright, waits for "
+        "the network to go idle with a 20 second ceiling and captures the rendered HTML, "
+        "so text produced by JavaScript is included. Only http and https URLs are "
+        "accepted, and unless Allow Local Network is enabled the transform refuses hosts "
+        "that are localhost, end in .local, or are literal private, loopback, link-local, "
+        "reserved or multicast addresses. Responses with a status of 400 or above, or a "
+        "content type outside text/*, JSON, XML, XHTML and JavaScript, are rejected. "
+        "Script and style blocks are stripped, remaining tags removed, HTML entities "
+        "unescaped and whitespace collapsed, then the text is truncated to Max Content "
+        "Chars (12000 by default, allowed range 1000 to 200000). The result is one "
+        "Document entity valued with the page title, or the final hostname when there is "
+        "no title, carrying url, content, content_type, title and content_length, linked "
+        "from the URL by a 'has content' edge."
+    )
+    when_to_use = (
+        "Use this when you need the actual readable text of a page: a paste site, a "
+        "forum thread, a published report, or any JavaScript-heavy application that a "
+        "plain HTTP fetch returns empty. The Document it produces is the direct input "
+        "for Content to IOCs, which mines the captured text for indicators."
+    )
+    limitations = (
+        "Playwright and a Chromium install must be present in the backend environment; "
+        "without them the run fails with an error message. Driving a full browser is "
+        "slow and heavy compared with a plain fetch, and pages that never reach network "
+        "idle hit the 20 second timeout. Text is cut at Max Content Chars and the "
+        "underlying HTML is read only up to four times that many characters, so long "
+        "pages lose their tail. Sites behind logins, bot detection or CAPTCHAs yield the "
+        "block page rather than the content. Layout is discarded, so tables and lists "
+        "arrive as a single run of text."
+    )
+    example_use_cases = [
+        "Capture the text of a paste site or leak post before it is taken down",
+        "Extract readable content from a JavaScript-rendered single page application",
+        "Pull an article body into the graph so indicators can be mined from it",
+    ]
     settings = [
         TransformSetting(
             name="max_content_chars",

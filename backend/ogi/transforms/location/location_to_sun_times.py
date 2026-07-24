@@ -15,6 +15,44 @@ class LocationToSunTimes(BaseTransform):
     input_types = [EntityType.LOCATION]
     output_types = [EntityType.LOCATION]
     category = "Location"
+    long_description = (
+        "Computes sunrise, sunset and civil twilight for a Location entity's coordinates "
+        "on the date of a reference moment, calculated locally with the astral library "
+        "rather than fetched from any external service. The reference moment is the Target "
+        "Date/Time setting when supplied, otherwise the entity's observed_at property, "
+        "otherwise the current UTC time. The timezone is taken from the entity's timezone "
+        "property or, failing that, from a timezonefinder lookup on the coordinates, and "
+        "times are written in local form when a zone is known and in UTC when it is not. "
+        "Emits a single Location entity that adds daylight_at_reference_time, derived from "
+        "the sun's elevation at the exact reference instant, together with sun_timezone, "
+        "the sunrise and sunset values, the civil twilight begin and end values, and "
+        "sun_polar_note when an event does not occur on that date. No edges are created "
+        "and nothing is cached, because the calculation is deterministic."
+    )
+    when_to_use = (
+        "Use this to test whether a claim or an image is consistent with the light at a "
+        "place and time: whether a photo showing daylight could have been taken at the "
+        "stated hour, whether a witness could have recognised a face at dusk, or whether "
+        "an event described as after dark really was. Set Target Date/Time to the moment "
+        "in question. Run Location to Geocode first for coordinates and Location to "
+        "Timezone to pin the local clock, then pair this with Location to Weather Snapshot "
+        "to check cloud cover and visibility at the same moment."
+    )
+    limitations = (
+        "The result describes the geometric position of the sun for an observer at sea "
+        "level, so terrain, buildings and altitude change the light actually seen, "
+        "sometimes by many minutes in a valley or a dense city. Above the polar circles "
+        "the sun may not rise or set on the date at all, in which case those fields are "
+        "absent and sun_polar_note explains why. Events are computed for the local "
+        "calendar date of the reference moment, so a time just after local midnight is "
+        "measured against the new date. Coordinates are required: this transform does not "
+        "geocode the entity value for you."
+    )
+    example_use_cases = [
+        "Test whether a photo said to be shot in daylight at 19:00 is plausible for a date",
+        "Check whether an incident described as after dark fell before or after civil dusk",
+        "Establish the light conditions at a meeting point at the claimed meeting time",
+    ]
     settings = [
         TransformSetting(
             name="target_datetime",

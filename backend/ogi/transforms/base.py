@@ -32,6 +32,14 @@ class BaseTransform(ABC):
     category: str = "General"
     settings: list[TransformSetting] = []
 
+    # Optional long-form documentation surfaced in the transform info dialog.
+    # Plugin transforms may declare these in plugin.yaml instead; values set
+    # here take precedence over the manifest.
+    long_description: str = ""
+    when_to_use: str = ""
+    limitations: str = ""
+    example_use_cases: list[str] = []
+
     @abstractmethod
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         ...

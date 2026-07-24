@@ -15,6 +15,44 @@ class WebsiteToPeople(BaseTransform):
     input_types = [EntityType.DOMAIN, EntityType.URL]
     output_types = [EntityType.PERSON]
     category = "People"
+    long_description = (
+        "Discovers staff pages on a website and extracts the people named on them using an "
+        "OpenAI model. The input Domain or URL is reduced to a scheme and host, taken from the "
+        "website, url or homepage property when present and otherwise from the entity value. "
+        "Seven common paths such as /team, /about, /people and /leadership are probed, and the "
+        "homepage HTML is scanned for same-host links whose address contains team, about, "
+        "people, leadership, staff or company. Up to eight of the resulting pages are fetched, "
+        "stripped of script, style and markup down to plain text, and truncated to 8000 "
+        "characters each. The combined text, capped at 60000 characters, is sent to the OpenAI "
+        "Responses API with a prompt requesting strict JSON listing name, role and profile_url "
+        "per person and excluding advisors, investors and companies. Each returned name becomes "
+        "a Person entity carrying the website, role and profile_url as properties and linked to "
+        "the input entity by a 'listed_on_website' edge. Names are deduplicated "
+        "case-insensitively and limited by Max People. An OpenAI API key is required and the "
+        "model is selectable."
+    )
+    when_to_use = (
+        "Use it at the start of an organizational investigation, when you have a company domain "
+        "and need the names of the people behind it. The Person entities it creates feed "
+        "directly into Person to Usernames and from there into Username Search, and the roles "
+        "it captures help decide which individuals are worth pursuing first."
+    )
+    limitations = (
+        "It reads static HTML only: team pages rendered by JavaScript, loaded from an API or "
+        "guarded by bot protection return nothing usable. Discovery is limited to eight "
+        "same-host pages found from a fixed path list plus homepage links, so staff listed "
+        "elsewhere on the site are missed, and each page is truncated to 8000 characters, "
+        "cutting long directories short. Extraction is performed by a language model, so names, "
+        "roles and profile URLs can be misread or invented and must be confirmed against the "
+        "page itself. The transform needs your own OpenAI API key and sends the page text to "
+        "OpenAI, which costs money per run and reveals the target to a third party. Only "
+        "currently listed people appear; there is no historical coverage."
+    )
+    example_use_cases = [
+        "Build a list of a company's staff from its public team page",
+        "Identify leadership names and roles before a social media investigation",
+        "Turn a target domain into named individuals for username and email pivoting",
+    ]
     settings = [
         TransformSetting(
             name="openai_api_key",

@@ -19,6 +19,30 @@ class WhoisLookup(BaseTransform):
     input_types = [EntityType.DOMAIN]
     output_types = [EntityType.ORGANIZATION, EntityType.PERSON, EntityType.EMAIL_ADDRESS]
     category = "DNS"
+    long_description = (
+        "Queries WHOIS/RDAP registration data for a domain and extracts the "
+        "registrant organization, contact people, and contact email addresses "
+        "as linked entities. Falls back to the IANA RDAP bootstrap service when "
+        "a direct WHOIS query does not return usable data."
+    )
+    when_to_use = (
+        "Use this to attribute a domain to the organization or person who "
+        "registered it, and to harvest contact addresses worth pivoting on. It "
+        "is most valuable early in an investigation, when you are trying to "
+        "establish who owns a piece of infrastructure."
+    )
+    limitations = (
+        "GDPR and similar privacy regimes mean most registrars now redact "
+        "registrant details for individuals, so many lookups return only the "
+        "registrar and privacy-service placeholders rather than a real name. "
+        "Data quality also varies sharply between TLDs, and some registries "
+        "rate-limit or block automated queries."
+    )
+    example_use_cases = [
+        "Attribute a suspicious domain to a registrant organization",
+        "Collect registrant email addresses to pivot to other domains",
+        "Compare registration dates and registrars across a cluster of domains",
+    ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         domain = entity.value

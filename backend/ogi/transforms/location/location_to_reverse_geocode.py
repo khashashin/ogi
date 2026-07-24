@@ -13,6 +13,40 @@ class LocationToReverseGeocode(BaseTransform):
     input_types = [EntityType.LOCATION]
     output_types = [EntityType.LOCATION]
     category = "Location"
+    long_description = (
+        "Reads the lat and lon properties of a Location entity and asks the location "
+        "search store for the matching address. The store serves an in-memory "
+        "reverse-geocode cache keyed on the coordinates rounded to four decimal places and "
+        "otherwise calls the Nominatim reverse API on OpenStreetMap. Emits a single "
+        "Location entity that keeps the original value but adds the resolved address "
+        "fields: location_label, geo_confidence, road, city, county, region, state, "
+        "country, postcode, and address_hierarchy holding the geocoder's full raw address "
+        "breakdown. No edges are created; the enriched entity supersedes the sparse one. "
+        "Run messages report whether the cache or a live upstream request answered and "
+        "print a short address summary. Missing or unparseable coordinates stop the "
+        "transform, as does an active rate-limit cooldown."
+    )
+    when_to_use = (
+        "Use this when the investigation gives you coordinates, from photo EXIF data, a "
+        "GPS log, a device ping or IP to Geolocation, and you need the human-readable "
+        "address, administrative area or postcode behind them. Run Location to Geocode "
+        "first if the entity has no coordinates yet, and follow with Location to Timezone "
+        "or Location to Nearby ASNs to build context around the resolved place."
+    )
+    limitations = (
+        "Nominatim returns the nearest addressable feature, so coordinates in open "
+        "country, at sea or in sparsely mapped regions can resolve to a road or settlement "
+        "some distance away, and the depth of address detail follows local OpenStreetMap "
+        "coverage. The cache key rounds to four decimals, roughly eleven metres, so points "
+        "inside that cell share one answer. Nominatim's usage policy allows about one "
+        "request per second and the store enters a sixty-second cooldown after an upstream "
+        "rate-limit response, during which only a retry message is returned."
+    )
+    example_use_cases = [
+        "Resolve photo EXIF coordinates to a street address and neighbourhood",
+        "Convert a GPS track point into an administrative area for a jurisdiction question",
+        "Attach postcode and country fields to coordinates from IP to Geolocation",
+    ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         properties = dict(entity.properties or {})

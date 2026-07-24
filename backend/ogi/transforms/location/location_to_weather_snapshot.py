@@ -14,6 +14,44 @@ class LocationToWeatherSnapshot(BaseTransform):
     input_types = [EntityType.LOCATION]
     output_types = [EntityType.LOCATION]
     category = "Location"
+    long_description = (
+        "Fetches weather conditions for a Location entity's coordinates from OpenWeather "
+        "and writes them onto a single new Location entity as weather_condition, "
+        "weather_temp_c, weather_wind_kph, weather_visibility_km and "
+        "weather_source_timestamp. With no timestamp available it calls the current "
+        "weather endpoint; when the Target Date/Time setting or the entity's observed_at "
+        "property supplies a moment, it calls the One Call time-machine endpoint for that "
+        "moment instead, with the setting taking priority over the property. An "
+        "OpenWeather API key is required and is supplied as a transform setting. Wind is "
+        "converted to kilometres per hour and visibility to kilometres. Results are held "
+        "in an in-memory cache keyed on the coordinates rounded to two decimals and the "
+        "hour of the requested time, and the run messages state whether the cache or the "
+        "provider answered. No edges are created."
+    )
+    when_to_use = (
+        "Use this to corroborate or challenge an account of what happened at a place and "
+        "time: whether a photo showing wet streets or clear skies matches the conditions "
+        "recorded there, whether a claimed sighting was possible in the visibility of that "
+        "moment, or whether the weather supports an alibi. Set Target Date/Time to the "
+        "moment in question. Run Location to Geocode first if the entity lacks "
+        "coordinates, and pair this with Location to Sun Times to establish the light as "
+        "well as the weather."
+    )
+    limitations = (
+        "Historical lookups use the One Call time-machine endpoint, which free OpenWeather "
+        "plans do not include; without a suitable subscription the transform reports that "
+        "history is unavailable for the key or plan, and coverage thins out for older "
+        "dates and remote areas. Readings are modelled or interpolated from nearby "
+        "stations rather than measured at the exact point. Both the provider data and the "
+        "cache bucket resolve to the hour, so short showers and minute-level changes do "
+        "not show. The cache also rounds coordinates to two decimals, so points within "
+        "about a kilometre share one snapshot."
+    )
+    example_use_cases = [
+        "Check whether the weather in a photo matches the claimed place and time",
+        "Test an alibi that depends on a storm, fog or snowfall at a specific location",
+        "Establish visibility at the time a witness claims to have seen something",
+    ]
     settings = [
         TransformSetting(
             name="openweather_api_key",

@@ -5,7 +5,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ogi.config import settings
-from ogi.models import TransformInfo, TransformRun, TransformStatus, TransformJobMessage, UserProfile
+from ogi.models import (
+    ENTITY_TYPE_DOCS,
+    ENTITY_TYPE_META,
+    EntityType,
+    EntityTypeDocumentation,
+    EntityTypeTransformRef,
+    TransformDocumentation,
+    TransformInfo,
+    TransformRun,
+    TransformStatus,
+    TransformJobMessage,
+    UserProfile,
+)
 from ogi.transforms.base import TransformConfig
 from ogi.api.auth import get_current_user, require_project_viewer, require_admin_user
 from ogi.api.dependencies import (
@@ -20,6 +32,7 @@ from ogi.api.dependencies import (
     get_user_plugin_preference_store,
     get_transform_settings_store,
 )
+from ogi.engine.transform_engine import _api_key_services
 from ogi.engine.transform_execution_service import (
     TransformExecutionService,
     reject_managed_api_key_settings,
@@ -82,6 +95,62 @@ def _enrich_transform_info(transform: TransformInfo) -> TransformInfo:
             "plugin_source": plugin.source or "local",
         }
     )
+
+
+@router.get("/{name}/documentation", response_model=TransformDocumentation)
+async def get_transform_documentation(
+    name: str,
+    current_user: UserProfile = Depends(get_current_user),
+) -> TransformDocumentation:
+    """Long-form docs for one transform, assembled from every source available.
+
+    Class attributes win over the plugin manifest, which wins over nothing at
+    all; the plugin README is returned alongside as supplementary material.
+    """
+    transform = get_transform_engine().get_transform(name)
+    if transform is None:
+        raise HTTPException(status_code=404, detail=f"Transform '{name}' not found")
+
+    doc = TransformDocumentation(
+        name=transform.name,
+        display_name=transform.display_name,
+        description=transform.description,
+        long_description=getattr(transform, "long_description", "") or "",
+        when_to_use=getattr(transform, "when_to_use", "") or "",
+        limitations=getattr(transform, "limitations", "") or "",
+        example_use_cases=list(getattr(transform, "example_use_cases", []) or []),
+        input_types=transform.input_types,
+        output_types=transform.output_types,
+        category=transform.category,
+        api_key_services=_api_key_services(transform),
+        setting_names=[s.display_name or s.name for s in transform.effective_settings()],
+    )
+
+    plugin_engine = get_plugin_engine()
+    plugin_name = plugin_engine.get_plugin_for_transform(transform.name)
+    if plugin_name is None:
+        return doc
+
+    doc.source = "plugin"
+    doc.plugin_name = plugin_name
+    doc.readme = plugin_engine.get_plugin_readme(plugin_name)
+
+    manifest_docs = plugin_engine.get_plugin_documentation(plugin_name)
+    if manifest_docs is not None:
+        doc.long_description = doc.long_description or manifest_docs.long_description
+        doc.when_to_use = doc.when_to_use or manifest_docs.when_to_use
+        doc.limitations = doc.limitations or manifest_docs.limitations
+        doc.example_use_cases = doc.example_use_cases or manifest_docs.example_use_cases
+
+    plugin = plugin_engine.get_plugin(plugin_name)
+    if plugin is not None:
+        doc.plugin_version = plugin.version
+        doc.plugin_author = plugin.author
+        doc.plugin_verification_tier = plugin.verification_tier or "community"
+        doc.plugin_homepage = plugin.homepage
+        doc.plugin_repository = plugin.repository
+
+    return doc
 
 
 @router.get("", response_model=list[TransformInfo])
@@ -189,6 +258,57 @@ async def list_entity_types(
 ) -> list[dict[str, str]]:
     registry = get_entity_registry()
     return registry.list_types_dict()
+
+
+@router.get("/entity-types/{entity_type}/documentation", response_model=EntityTypeDocumentation)
+async def get_entity_type_documentation(
+    entity_type: EntityType,
+    current_user: UserProfile = Depends(get_current_user),
+    preferences: UserPluginPreferenceStore = Depends(get_user_plugin_preference_store),
+) -> EntityTypeDocumentation:
+    """Explain an entity type and list the transforms wired to it.
+
+    ``consumed_by`` is what you can run on one; ``produced_by`` is how one gets
+    discovered in the first place.
+    """
+    meta = ENTITY_TYPE_META.get(entity_type, {})
+    docs = ENTITY_TYPE_DOCS.get(entity_type, {})
+
+    engine = get_transform_engine()
+    enabled_by_plugin = await preferences.list_for_user(current_user.id)
+    plugin_engine = get_plugin_engine()
+
+    def _ref(transform: TransformInfo) -> EntityTypeTransformRef:
+        return EntityTypeTransformRef(
+            name=transform.name,
+            display_name=transform.display_name,
+            description=transform.description,
+            category=transform.category,
+            api_key_services=transform.api_key_services,
+            plugin_name=plugin_engine.get_plugin_for_transform(transform.name),
+        )
+
+    consumed_by: list[EntityTypeTransformRef] = []
+    produced_by: list[EntityTypeTransformRef] = []
+    for transform in engine.list_transforms():
+        if not _transform_visible_to_user(transform.name, enabled_by_plugin):
+            continue
+        if entity_type in transform.input_types:
+            consumed_by.append(_ref(transform))
+        if entity_type in transform.output_types:
+            produced_by.append(_ref(transform))
+
+    sort_key = lambda ref: ref.display_name.lower()  # noqa: E731
+    return EntityTypeDocumentation(
+        type=entity_type,
+        category=str(meta.get("category", "")),
+        icon=str(meta.get("icon", "")),
+        color=str(meta.get("color", "")),
+        description=str(docs.get("description", "")),
+        usage=str(docs.get("usage", "")),
+        consumed_by=sorted(consumed_by, key=sort_key),
+        produced_by=sorted(produced_by, key=sort_key),
+    )
 
 
 @router.get("/for-entity/{entity_id}", response_model=list[TransformInfo])

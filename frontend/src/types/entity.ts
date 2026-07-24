@@ -38,6 +38,26 @@ export interface EntityTypeMeta {
   category: string;
 }
 
+export interface EntityTypeTransformRef {
+  name: string;
+  display_name: string;
+  description: string;
+  category: string;
+  api_key_services: string[];
+  plugin_name: string | null;
+}
+
+export interface EntityTypeDocumentation {
+  type: EntityType;
+  category: string;
+  icon: string;
+  color: string;
+  description: string;
+  usage: string;
+  consumed_by: EntityTypeTransformRef[];
+  produced_by: EntityTypeTransformRef[];
+}
+
 export const ENTITY_TYPE_META: Record<EntityType, EntityTypeMeta> = {
   [EntityType.Person]: { type: EntityType.Person, icon: "user", color: "#6366f1", category: "People" },
   [EntityType.Username]: { type: EntityType.Username, icon: "at-sign", color: "#ec4899", category: "People" },

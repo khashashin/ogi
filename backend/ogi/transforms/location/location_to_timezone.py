@@ -15,6 +15,41 @@ class LocationToTimezone(BaseTransform):
     input_types = [EntityType.LOCATION]
     output_types = [EntityType.LOCATION]
     category = "Location"
+    long_description = (
+        "Determines the IANA timezone for a Location entity's coordinates using the local "
+        "timezonefinder database, backed by an in-memory cell cache keyed on the "
+        "coordinates rounded to two decimal places. If the entity has no usable lat and "
+        "lon, it first geocodes the entity value through Nominatim and keeps the "
+        "coordinates it finds. Emits a single Location entity carrying the original value "
+        "plus timezone, utc_offset and dst_active for the current moment. When the entity "
+        "has an observed_at, valid_from or timestamp property, the offset and "
+        "daylight-saving state in force at that moment are added as observed_utc_offset "
+        "and observed_dst_active, which is what you need when the offset today differs "
+        "from the offset on the date of interest. No edges are created, and apart from the "
+        "optional geocoding step the lookup runs offline with no timezone service call."
+    )
+    when_to_use = (
+        "Use this to move timestamps between a target's local clock and UTC when reading "
+        "posting times, CCTV clocks, log entries or travel schedules, and to establish the "
+        "timezone that Location to Sun Times needs when the entity does not already carry "
+        "one. Run Location to Geocode first if you want control over which place the "
+        "coordinates come from rather than relying on the built-in fallback lookup."
+    )
+    limitations = (
+        "The cell cache rounds coordinates to two decimals, roughly one kilometre, so two "
+        "points either side of a timezone boundary within that cell receive the same "
+        "answer. Coordinates over open ocean or in some disputed areas have no timezone "
+        "polygon and return nothing. Offsets come from the system zoneinfo database, so "
+        "historical offsets outside its coverage, or rule changes announced after the "
+        "installed database was built, can be wrong. If the timezonefinder package is "
+        "absent from the worker environment, the transform reports that instead of a "
+        "result."
+    )
+    example_use_cases = [
+        "Convert local posting times on a target's account into UTC for a timeline",
+        "Check the UTC offset that applied at a place on the incident date, not today",
+        "Supply timezone context before running sun-time or weather checks on a location",
+    ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         properties = dict(entity.properties or {})

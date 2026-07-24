@@ -12,6 +12,38 @@ class IPToASN(BaseTransform):
     input_types = [EntityType.IP_ADDRESS]
     output_types = [EntityType.AS_NUMBER, EntityType.ORGANIZATION]
     category = "IP Intelligence"
+    long_description = (
+        "Performs Team Cymru's DNS-based IP-to-ASN lookup. The IPv4 address is reversed and "
+        "queried as a TXT record under origin.asn.cymru.com, which returns the announcing AS "
+        "number together with the covering prefix, country, registry and allocation date. Only "
+        "the first TXT answer is used. An ASNumber entity is created from it, carrying those "
+        "fields as properties and linked to the IP with a 'belongs to ASN' edge. The transform "
+        "then queries AS<number>.asn.cymru.com for the AS name and, when one comes back, "
+        "creates an Organization entity holding the ASN, country and registry, linked to the IP "
+        "with an 'operated by' edge. Everything runs over ordinary DNS resolution, so no API "
+        "key or account is required."
+    )
+    when_to_use = (
+        "Use it to establish which network actually announces an address, the most dependable "
+        "ownership signal available for infrastructure. Run it on addresses produced by Domain "
+        "to IP when you need to tell a target's own network apart from shared hosting or cloud "
+        "ranges, and pair it with IP to Geolocation for a physical estimate. The Organization "
+        "entity is a useful pivot for grouping unrelated-looking addresses under one operator."
+    )
+    limitations = (
+        "IPv4 only: the input is split on dots and anything that is not four octets is "
+        "rejected, so IPv6 addresses yield nothing. Only the first TXT answer is processed, so "
+        "an address covered by more than one announcement shows a single ASN. The AS holder is "
+        "the network announcing the prefix, not necessarily the party using the address, so "
+        "cloud, CDN and hosting ranges name the provider rather than the tenant. Registry data "
+        "lags reassignments, and the lookup depends on Team Cymru's DNS service being reachable "
+        "from the resolver in use."
+    )
+    example_use_cases = [
+        "Determine whether a set of IP addresses belongs to one operator or several",
+        "Attribute a suspicious address to a hosting provider or abuse-tolerant network",
+        "Separate a target's own netblock from generic cloud infrastructure",
+    ]
 
     async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
         ip = entity.value

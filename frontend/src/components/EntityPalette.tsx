@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   Hash,
+  Info,
   Search,
 } from "lucide-react";
 import { EntityType, ENTITY_TYPE_META } from "../types/entity";
@@ -12,6 +13,7 @@ import { useGraphStore } from "../stores/graphStore";
 import { useIsViewer } from "../hooks/useIsViewer";
 import type { LocationSuggestion } from "../types/location";
 import { getEntityIconComponent, isCustomSvgIcon } from "../lib/entityIconRegistry";
+import { EntityInfoDialog } from "./EntityInfoDialog";
 
 const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
   [EntityType.Person]: "Enter first and last name",
@@ -40,6 +42,7 @@ export function EntityPalette() {
   const appVersion = __APP_VERSION__;
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<EntityType | null>(null);
+  const [infoType, setInfoType] = useState<EntityType | null>(null);
   const [value, setValue] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<
     LocationSuggestion[]
@@ -256,33 +259,50 @@ export function EntityPalette() {
               const isCustomSvg = isCustomSvgIcon(meta.icon);
               const IconComponent = getEntityIconComponent(meta.icon) ?? Hash;
               return (
-                <button
-                  key={meta.type}
-                  onClick={isViewer ? undefined : () => setAdding(meta.type)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text transition-colors ${isViewer ? "cursor-default" : "hover:bg-surface-hover"}`}
-                >
-                  {isCustomSvg ? (
-                    <img
-                      src={`/icons/${meta.icon}.svg`}
-                      alt={meta.type}
-                      width={14}
-                      height={14}
-                      className="shrink-0 invert"
-                    />
-                  ) : (
-                    <IconComponent
-                      size={14}
-                      className="shrink-0"
-                      style={{ color: meta.color }}
-                    />
-                  )}
-                  <span>{meta.type}</span>
-                </button>
+                <div key={meta.type} className="group flex items-center">
+                  <button
+                    onClick={isViewer ? undefined : () => setAdding(meta.type)}
+                    className={`flex-1 min-w-0 flex items-center gap-2 px-2 py-1.5 rounded text-sm text-text transition-colors ${isViewer ? "cursor-default" : "hover:bg-surface-hover"}`}
+                  >
+                    {isCustomSvg ? (
+                      <img
+                        src={`/icons/${meta.icon}.svg`}
+                        alt={meta.type}
+                        width={14}
+                        height={14}
+                        className="shrink-0 invert"
+                      />
+                    ) : (
+                      <IconComponent
+                        size={14}
+                        className="shrink-0"
+                        style={{ color: meta.color }}
+                      />
+                    )}
+                    <span className="truncate">{meta.type}</span>
+                  </button>
+                  <button
+                    onClick={() => setInfoType(meta.type)}
+                    className="shrink-0 p-1 rounded text-text-muted opacity-0 transition-opacity hover:bg-surface-hover hover:text-text focus:opacity-100 group-hover:opacity-100"
+                    title={`What ${meta.type} is for, and which transforms use it`}
+                    aria-label={`About ${meta.type}`}
+                  >
+                    <Info size={12} />
+                  </button>
+                </div>
               );
             })}
           </div>
         ))}
       </div>
+
+      <EntityInfoDialog
+        key={infoType ?? "none"}
+        open={infoType !== null}
+        entityType={infoType}
+        valueHint={infoType ? ENTITY_VALUE_PLACEHOLDERS[infoType] : undefined}
+        onClose={() => setInfoType(null)}
+      />
 
       <div className="sticky bottom-0 border-t border-border bg-surface/95 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center justify-between text-[10px] text-text-muted">

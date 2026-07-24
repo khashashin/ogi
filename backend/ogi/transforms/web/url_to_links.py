@@ -21,6 +21,39 @@ class URLToLinks(BaseTransform):
     input_types = [EntityType.URL]
     output_types = [EntityType.URL, EntityType.DOMAIN]
     category = "Web"
+    long_description = (
+        "Fetches the page with an HTTP GET (10 second timeout, redirects followed, a "
+        "Mozilla/5.0 User-Agent) and scans the returned HTML with a regular expression "
+        "over href attributes of <a> tags. Fragment, javascript:, mailto: and tel: "
+        "targets are skipped; the rest are resolved against the final URL after "
+        "redirects and kept only when they are http or https and have a hostname. Each "
+        "unique link becomes a URL entity carrying source_page and is joined to the "
+        "input URL by a 'links to' edge, while each distinct hostname is also emitted as "
+        "a Domain entity with a discovered_from property but no edge. Collection stops "
+        "at 100 links by default, a cap the server can raise or lower through its "
+        "transform setting maximum overrides."
+    )
+    when_to_use = (
+        "Use this to expand a single page into the pages and sites it references, "
+        "whether you are mapping a site's structure, tracing outbound referrals from a "
+        "landing page, or spotting third-party hosts embedded in the markup. The Domain "
+        "entities it emits feed straight into Domain to IP Address, WHOIS Lookup or "
+        "Domain to SSL Certificates."
+    )
+    limitations = (
+        "Reads only the HTML the server returns, so links written into the page by "
+        "JavaScript after load are never seen; use URL to Content when the page is "
+        "rendered client-side. Extraction is regex-based over <a> tags, so hrefs inside "
+        "commented-out markup can be picked up and links carried by other elements such "
+        "as iframe, script or link are ignored. The cap is applied while parsing, so a "
+        "truncated result is whatever appeared first in the document rather than a "
+        "ranked selection. Domain entities are created unconnected to the source page."
+    )
+    example_use_cases = [
+        "Map the outbound link graph of a suspicious landing page",
+        "Collect the third-party domains embedded in a target website",
+        "Gather sibling pages to feed into URL to Content for text extraction",
+    ]
 
     async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         source_url = entity.value.strip()

@@ -64,6 +64,8 @@ backend/plugins/*
 !backend/plugins/.gitkeep
 plugins/*
 !plugins/.gitkeep
+# The example plugin is a checked-in reference template, not a runtime install.
+!plugins/example-plugin/
 
 # Uploaded media / protected local storage
 media/

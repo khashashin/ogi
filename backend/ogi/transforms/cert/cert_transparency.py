@@ -11,6 +11,43 @@ class CertTransparency(BaseTransform):
     input_types = [EntityType.DOMAIN]
     output_types = [EntityType.SUBDOMAIN]
     category = "Certificate"
+    long_description = (
+        "Queries the public crt.sh Certificate Transparency database with a wildcard "
+        "search for certificates issued under the domain, then turns the answers "
+        "into Subdomain entities. Each JSON record's common_name field is lowercased "
+        "and kept only if it is a strict child of the queried domain; blanks, "
+        "wildcard entries and the domain itself are discarded, and what remains is "
+        "deduplicated and sorted. Every surviving name becomes a Subdomain entity "
+        "carrying the parent domain and a source of 'crt.sh', joined to the domain "
+        "by a 'subdomain of' edge pointing from the subdomain up to the parent. The "
+        "number of entities is capped by the max_results setting, which defaults to "
+        "500, and a message reports the true count whenever the cap truncates the "
+        "list. The HTTP request has a thirty second timeout; timeouts, HTTP error "
+        "statuses and parse failures are reported as messages with an empty result."
+    )
+    when_to_use = (
+        "Use early when scoping a target's attack surface. Certificate Transparency "
+        "is entirely passive, requires no contact with the target, and routinely "
+        "exposes internal-sounding hosts such as staging, vpn and mail gateways that "
+        "never appear in public links. Feed the discovered names into Domain to IP "
+        "Address to see which still resolve, then use Domain to SSL Certificates or "
+        "IP to ASN on the ones that look interesting."
+    )
+    limitations = (
+        "Only the common_name field of each record is read, so names that appear "
+        "solely in a certificate's subject alternative names are missed, which can "
+        "be a large share of results for multi-domain certificates. Wildcard entries "
+        "are dropped rather than expanded. CT logs record issuance, not deployment: "
+        "many returned hosts expired long ago or never went live, so each name needs "
+        "a resolution check before use. crt.sh is a free service that is frequently "
+        "slow or briefly unavailable, and a timeout returns an empty result with a "
+        "message rather than an error."
+    )
+    example_use_cases = [
+        "Enumerate a target's subdomains passively before any active scanning",
+        "Surface staging, admin and VPN hosts that are not linked from the public site",
+        "Compare subdomain lists for two organisations suspected of sharing infrastructure",
+    ]
 
     async def run(self, entity: Entity, _config: TransformConfig) -> TransformResult:
         domain = entity.value

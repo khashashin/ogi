@@ -517,6 +517,164 @@ async def test_list_transforms_includes_plugin_metadata(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_transform_documentation_for_builtin(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms/domain_to_ip/documentation")
+    assert resp.status_code == 200
+    doc = resp.json()
+
+    assert doc["name"] == "domain_to_ip"
+    assert doc["source"] == "builtin"
+    assert doc["plugin_name"] is None
+    assert doc["readme"] == ""
+    assert "A (IPv4)" in doc["long_description"]
+    assert doc["when_to_use"]
+    assert doc["limitations"]
+    assert len(doc["example_use_cases"]) >= 1
+    assert doc["input_types"] == ["Domain"]
+    assert doc["output_types"] == ["IPAddress"]
+
+
+@pytest.mark.asyncio
+async def test_transform_documentation_falls_back_to_manifest_and_readme(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms/hello_world/documentation")
+    assert resp.status_code == 200
+    doc = resp.json()
+
+    assert doc["source"] == "plugin"
+    assert doc["plugin_name"] == "example-plugin"
+    assert doc["plugin_version"] == "1.0.0"
+    assert doc["plugin_verification_tier"] == "community"
+    # The transform class declares none of these, so they come from plugin.yaml.
+    assert "reference plugin" in doc["long_description"]
+    assert "verifying that plugin discovery" in doc["when_to_use"]
+    assert doc["limitations"]
+    assert len(doc["example_use_cases"]) == 2
+    # The plugin ships a README, which is returned as supplementary material.
+    assert doc["readme"].startswith("# Example Plugin")
+
+
+@pytest.mark.asyncio
+async def test_transform_documentation_unknown_transform(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms/does_not_exist/documentation")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_transform_documentation_without_docs_degrades(client: AsyncClient):
+    """A transform that declares no long-form docs still returns a usable payload."""
+    from ogi.api.dependencies import get_transform_engine
+    from ogi.models import Entity, EntityType, TransformResult
+    from ogi.transforms.base import BaseTransform, TransformConfig
+
+    class UndocumentedTransform(BaseTransform):
+        name = "undocumented_probe"
+        display_name = "Undocumented Probe"
+        description = "A transform that ships no long-form documentation"
+        input_types = [EntityType.DOMAIN]
+        output_types = [EntityType.DOMAIN]
+        category = "Test"
+
+        async def run(self, entity: Entity, config: TransformConfig) -> TransformResult:
+            return TransformResult()
+
+    engine = get_transform_engine()
+    engine.register(UndocumentedTransform())
+    try:
+        resp = await client.get("/api/v1/transforms/undocumented_probe/documentation")
+        assert resp.status_code == 200
+        doc = resp.json()
+
+        assert doc["display_name"] == "Undocumented Probe"
+        assert doc["description"] == "A transform that ships no long-form documentation"
+        assert doc["input_types"] == ["Domain"]
+        assert doc["source"] == "builtin"
+        # The dialog falls back to the short description when these are empty.
+        assert doc["long_description"] == ""
+        assert doc["when_to_use"] == ""
+        assert doc["limitations"] == ""
+        assert doc["example_use_cases"] == []
+    finally:
+        engine._transforms.pop("undocumented_probe", None)
+
+
+@pytest.mark.asyncio
+async def test_all_builtin_transforms_are_documented(client: AsyncClient):
+    """Every built-in transform must explain what it does and when to use it."""
+    from ogi.api.dependencies import get_plugin_engine, get_transform_engine
+
+    engine = get_transform_engine()
+    plugin_engine = get_plugin_engine()
+
+    undocumented: list[str] = []
+    for info in engine.list_transforms():
+        if plugin_engine.get_plugin_for_transform(info.name) is not None:
+            continue  # plugin transforms document themselves in plugin.yaml
+        transform = engine.get_transform(info.name)
+        if not all(
+            [
+                getattr(transform, "long_description", ""),
+                getattr(transform, "when_to_use", ""),
+                getattr(transform, "limitations", ""),
+                getattr(transform, "example_use_cases", []),
+            ]
+        ):
+            undocumented.append(info.name)
+
+    assert undocumented == [], f"built-in transforms missing documentation: {undocumented}"
+
+
+@pytest.mark.asyncio
+async def test_entity_type_documentation(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms/entity-types/Domain/documentation")
+    assert resp.status_code == 200
+    doc = resp.json()
+
+    assert doc["type"] == "Domain"
+    assert doc["category"] == "Infrastructure"
+    assert doc["icon"] == "globe"
+    assert doc["color"]
+    assert doc["description"]
+    assert doc["usage"]
+
+    consumed = {t["name"] for t in doc["consumed_by"]}
+    produced = {t["name"] for t in doc["produced_by"]}
+    # Domain is an input to DNS lookups and an output of reverse DNS.
+    assert "domain_to_ip" in consumed
+    assert "whois_lookup" in consumed
+    assert "ip_to_domain" in produced
+    assert "domain_to_ip" not in produced
+
+    # Entries are sorted by display name and carry enough to render a list row.
+    names = [t["display_name"] for t in doc["consumed_by"]]
+    assert names == sorted(names, key=str.lower)
+    assert all(t["description"] for t in doc["consumed_by"])
+
+
+@pytest.mark.asyncio
+async def test_entity_type_documentation_all_types_documented(client: AsyncClient):
+    """Every entity type offered in the palette must explain itself."""
+    from ogi.models import ENTITY_TYPE_META
+
+    undocumented: list[str] = []
+    for entity_type in ENTITY_TYPE_META:
+        resp = await client.get(
+            f"/api/v1/transforms/entity-types/{entity_type.value}/documentation"
+        )
+        assert resp.status_code == 200, entity_type.value
+        doc = resp.json()
+        if not doc["description"] or not doc["usage"]:
+            undocumented.append(entity_type.value)
+
+    assert undocumented == [], f"entity types missing documentation: {undocumented}"
+
+
+@pytest.mark.asyncio
+async def test_entity_type_documentation_rejects_unknown_type(client: AsyncClient):
+    resp = await client.get("/api/v1/transforms/entity-types/NotARealType/documentation")
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_list_entity_types(client: AsyncClient):
     resp = await client.get("/api/v1/transforms/entity-types")
     assert resp.status_code == 200
