@@ -96,6 +96,8 @@ services:
       - VITE_SUPABASE_ANON_KEY=${OGI_SUPABASE_ANON_KEY:-}
       - VITE_SUPABASE_REDIRECT_URL=${OGI_SUPABASE_REDIRECT_URL:-}
       - VITE_GA_MEASUREMENT_ID=${VITE_GA_MEASUREMENT_ID:-}
+      # Required when the Supabase project has captcha protection enabled.
+      - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-}
     ports:
       - "80" # Coolify Traefik proxy will route the configured domain to this port
     depends_on:
