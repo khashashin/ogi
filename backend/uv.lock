@@ -1038,6 +1038,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "redis" },
     { name = "rq" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlmodel" },
     { name = "supabase" },
     { name = "timezonefinder" },
@@ -1086,6 +1087,7 @@ requires-dist = [
     { name = "redis", specifier = ">=7.3.0" },
     { name = "rq", specifier = ">=2.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.5" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.47" },
     { name = "sqlmodel", specifier = ">=0.0.37" },
     { name = "supabase", specifier = ">=2.28.0" },
     { name = "timezonefinder", specifier = ">=8.2.1" },
@@ -1779,6 +1781,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/db/cafdeca5ecdaa3bb0811ba5449501da677ce0d83be8d05c5822da72d2e86/sqlalchemy-2.0.47-cp314-cp314t-win32.whl", hash = "sha256:c200db1128d72a71dc3c31c24b42eb9fd85b2b3e5a3c9ba1e751c11ac31250ff", size = 2147164, upload-time = "2026-02-24T17:14:40.783Z" },
     { url = "https://files.pythonhosted.org/packages/fc/5e/ff41a010e9e0f76418b02ad352060a4341bb15f0af66cedc924ab376c7c6/sqlalchemy-2.0.47-cp314-cp314t-win_amd64.whl", hash = "sha256:669837759b84e575407355dcff912835892058aea9b80bd1cb76d6a151cf37f7", size = 2182154, upload-time = "2026-02-24T17:14:43.205Z" },
     { url = "https://files.pythonhosted.org/packages/15/9f/7c378406b592fcf1fc157248607b495a40e3202ba4a6f1372a2ba6447717/sqlalchemy-2.0.47-py3-none-any.whl", hash = "sha256:e2647043599297a1ef10e720cf310846b7f31b6c841fee093d2b09d81215eb93", size = 1940159, upload-time = "2026-02-24T17:15:07.158Z" },
+]
+
+[package.optional-dependencies]
+asyncio = [
+    { name = "greenlet" },
 ]
 
 [[package]]

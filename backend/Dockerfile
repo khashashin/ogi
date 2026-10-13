@@ -12,28 +12,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up a venv since python 3.14 marks itself as externally managed
+# Set up a venv since python 3.14 marks itself as externally managed.
+# `uv sync` installs into it instead of creating /app/.venv.
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
 # Copy package metadata first so dependency/browser layers survive normal source edits.
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 RUN printf "# OGI backend image\n" > README.md
 
 # Install browsers into a shared location (not root's home) so a non-root
 # runtime user can find them. Must be set before `playwright install`.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
-# Install Playwright package first so browser binaries can be cached separately
-# from application source changes.
-RUN uv pip install "playwright>=1.58.0"
+# Install the locked dependencies (Playwright included) without the project, so
+# the image runs the versions CI tested and browser binaries are cached
+# separately from application source changes.
+RUN uv sync --locked --no-dev --extra web_extract --no-install-project
 
-# Install Playwright browser binaries and required system packages
+# Install browser binaries for the locked Playwright version and required system packages
 RUN playwright install --with-deps chromium
 
-# Copy package source and then install the full project + extras.
+# Copy package source and then install the project itself (editable, as before).
 COPY ogi/ ogi/
-RUN uv pip install -e ".[web_extract]"
+RUN uv sync --locked --no-dev --extra web_extract
 
 # Copy non-package runtime files
 COPY alembic/ alembic/
