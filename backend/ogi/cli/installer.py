@@ -8,6 +8,8 @@ import sys
 from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 
+import yaml
+
 from ogi.cli.lockfile import (
     LockFile,
     add_entry,
@@ -124,16 +126,15 @@ class TransformInstaller:
 
         Returns True if an update was applied.
         """
-        lock = self._lock()
-        entry = lock.get("transforms", {}).get(slug)
-        if entry is None:
+        installed = self._installed_versions().get(slug)
+        if installed is None:
             raise InstallError(f"Transform '{slug}' is not installed")
 
         meta = self.registry.get_transform(slug)
         if meta is None:
             raise InstallError(f"Transform '{slug}' not found in registry")
 
-        if meta.get("version", "") == entry.get("version", ""):
+        if meta.get("version", "") == installed:
             return False
 
         await self.install(slug)
@@ -141,17 +142,43 @@ class TransformInstaller:
 
     async def check_updates(self) -> list[tuple[str, str, str]]:
         """Return list of (slug, installed_version, latest_version) for outdated transforms."""
-        lock = self._lock()
         updates: list[tuple[str, str, str]] = []
-        for slug, entry in lock.get("transforms", {}).items():
+        for slug, installed in self._installed_versions().items():
             meta = self.registry.get_transform(slug)
             if meta is None:
                 continue
             latest = meta.get("version", "")
-            installed = entry.get("version", "")
             if latest and installed and latest != installed:
                 updates.append((slug, installed, latest))
         return updates
+
+    def _installed_versions(self) -> dict[str, str]:
+        """Return slug -> installed version for transforms in the plugins directory.
+
+        Lock entries are authoritative. A plugin directory without one (copied in by
+        hand, or installed before the lock tracked it) counts too when its manifest
+        name matches the directory, so it still gets registry updates; updating it
+        reinstalls it and adds the lock entry.
+        """
+        versions = {
+            slug: entry.get("version", "")
+            for slug, entry in self._lock().get("transforms", {}).items()
+        }
+        if not self.plugins_dir.is_dir():
+            return versions
+
+        for child in sorted(self.plugins_dir.iterdir()):
+            manifest = child / "plugin.yaml"
+            if child.name in versions or not manifest.is_file():
+                continue
+            try:
+                data = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError) as exc:
+                logger.warning("Failed to read plugin manifest %s: %s", manifest, exc)
+                continue
+            if isinstance(data, dict) and data.get("name") == child.name:
+                versions[child.name] = str(data.get("version", ""))
+        return versions
 
     def remove(self, slug: str) -> None:
         """Uninstall a transform."""

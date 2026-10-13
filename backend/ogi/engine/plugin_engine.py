@@ -213,6 +213,39 @@ class PluginEngine:
             self.plugins[plugin_info.name] = plugin_info
             self._plugin_transforms[plugin_info.name] = names
 
+    def reload_plugin(self, name: str, transform_engine: object) -> PluginInfo | None:
+        """Re-read one plugin's manifest and re-register its transforms from disk.
+
+        Returns the refreshed plugin info, or ``None`` when no plugin by that name
+        exists. ``transform_engine`` must be a ``TransformEngine`` instance.
+        """
+        from ogi.engine.transform_engine import TransformEngine
+        if not isinstance(transform_engine, TransformEngine):
+            raise TypeError("transform_engine must be a TransformEngine instance")
+
+        # Refresh the manifest so version, description and documentation match the
+        # files now on disk, e.g. after an install, update or manual edit.
+        plugin = next((p for p in self.discover() if p.name == name), None)
+        if plugin is not None:
+            self.plugins[name] = plugin
+        else:
+            plugin = self.plugins.get(name)
+
+        for transform_name in self._plugin_transforms.get(name, []):
+            transform_engine.unregister(transform_name)
+
+        transforms = self.load_transforms(name)
+        names: list[str] = []
+        for t in transforms:
+            transform_engine.register(t)
+            names.append(t.name)
+        self._plugin_transforms[name] = names
+
+        if plugin is not None:
+            plugin.transform_count = len(transforms)
+            plugin.transform_names = names
+        return plugin
+
     def get_plugin(self, name: str) -> PluginInfo | None:
         return self.plugins.get(name)
 

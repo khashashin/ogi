@@ -36,36 +36,8 @@ class UpdateCheckItem(BaseModel):
 
 def _reload_plugin_runtime(name: str) -> int:
     """Best-effort in-process plugin load so UI reflects install immediately."""
-    plugin_engine = get_plugin_engine()
-    transform_engine = get_transform_engine()
-
-    # Refresh plugin manifest metadata from disk so version/description/input types
-    # reflect the latest installed files after install or update.
-    plugin = None
-    for discovered in plugin_engine.discover():
-        if discovered.name == name:
-            plugin_engine.plugins[name] = discovered
-            plugin = discovered
-            break
-
-    # Remove previously loaded transforms from this plugin.
-    old_names = plugin_engine._plugin_transforms.get(name, [])
-    for transform_name in old_names:
-        transform_engine._transforms.pop(transform_name, None)
-
-    # Load and register current transforms from disk.
-    transforms = plugin_engine.load_transforms(name)
-    new_names: list[str] = []
-    for transform in transforms:
-        transform_engine.register(transform)
-        new_names.append(transform.name)
-    plugin_engine._plugin_transforms[name] = new_names
-
-    if plugin is not None:
-        plugin.transform_count = len(transforms)
-        plugin.transform_names = new_names
-
-    return len(transforms)
+    plugin = get_plugin_engine().reload_plugin(name, get_transform_engine())
+    return plugin.transform_count if plugin is not None else 0
 
 
 # -------------------------------------------------------------------
@@ -83,7 +55,7 @@ async def get_index(
     index = await registry.apply_dynamic_popularity(index)
     can_manage = (
         (not settings.supabase_url or not settings.supabase_anon_key)
-        or current_user.email.lower() in settings.admin_emails
+        or current_user.email.lower() in settings.get_admin_emails()
     )
     payload = dict(index)
     payload["can_manage"] = can_manage

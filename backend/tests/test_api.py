@@ -1634,6 +1634,42 @@ async def test_registry_index_can_manage_flag_respects_admin_list(
 
 
 @pytest.mark.asyncio
+async def test_registry_index_can_manage_matches_whole_admin_emails(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from uuid import uuid4
+
+    from ogi.api.auth import get_current_user
+    from ogi.config import settings
+    from ogi.models import UserProfile
+
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    monkeypatch.setattr(settings, "admin_emails", "Admin@Example.com, ops@example.com")
+
+    def as_user(email: str):
+        def override() -> UserProfile:
+            return UserProfile(id=uuid4(), email=email)
+
+        return override
+
+    # Admin emails compare case-insensitively and as whole addresses, matching
+    # require_admin_user: a suffix of an admin address is not an admin.
+    for email, expected in (
+        ("admin@example.com", True),
+        ("ops@example.com", True),
+        ("s@example.com", False),
+    ):
+        app.dependency_overrides[get_current_user] = as_user(email)
+        try:
+            resp = await client.get("/api/v1/registry/index")
+            assert resp.status_code == 200
+            assert resp.json().get("can_manage") is expected, email
+        finally:
+            app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
 async def test_plugin_reload_requires_admin_when_auth_enabled(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):

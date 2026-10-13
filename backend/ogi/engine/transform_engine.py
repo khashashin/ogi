@@ -30,6 +30,9 @@ class TransformEngine:
     def register(self, transform: BaseTransform) -> None:
         self._transforms[transform.name] = transform
 
+    def unregister(self, name: str) -> None:
+        self._transforms.pop(name, None)
+
     def get_transform(self, name: str) -> BaseTransform | None:
         return self._transforms.get(name)
 

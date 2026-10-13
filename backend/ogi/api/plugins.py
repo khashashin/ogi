@@ -147,28 +147,9 @@ async def reload_plugin(
     current_user: UserProfile = Depends(get_current_user),
     admin_user: UserProfile = Depends(require_admin_user),
 ) -> PluginInfo:
-    """Reload transforms from a plugin's directory."""
-    plugin_engine = get_plugin_engine()
-    transform_engine = get_transform_engine()
-
-    # Remove old transforms from this plugin
-    old_names = plugin_engine._plugin_transforms.get(name, [])
-    for t_name in old_names:
-        transform_engine._transforms.pop(t_name, None)
-
-    # Re-load
-    transforms = plugin_engine.load_transforms(name)
-    new_names: list[str] = []
-    for t in transforms:
-        transform_engine.register(t)
-        new_names.append(t.name)
-
-    plugin = plugin_engine.get_plugin(name)
+    """Re-read a plugin's manifest and reload its transforms from disk."""
+    plugin = get_plugin_engine().reload_plugin(name, get_transform_engine())
     if plugin is None:
         raise HTTPException(status_code=404, detail="Plugin not found")
-
-    plugin.transform_count = len(transforms)
-    plugin.transform_names = new_names
-    plugin_engine._plugin_transforms[name] = new_names
     return plugin
 

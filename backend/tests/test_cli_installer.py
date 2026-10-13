@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 import tomllib
 
-from ogi.cli.installer import TransformInstaller, get_runtime_ogi_version
-from ogi.cli.lockfile import LOCK_FILENAME, LockFile, read_lockfile
+import pytest
+
+from ogi.cli.installer import InstallError, TransformInstaller, get_runtime_ogi_version
+from ogi.cli.lockfile import LOCK_FILENAME, LockFile, read_lockfile, write_lockfile
 
 
 class _DummyRegistry:
@@ -14,12 +16,88 @@ class _DummyRegistry:
         return None
 
 
+class _VersionRegistry:
+    repo = "opengraphintel/ogi-transforms"
+
+    def __init__(self, versions: dict[str, str]) -> None:
+        self.versions = versions
+
+    def get_transform(self, slug: str) -> dict[str, str] | None:
+        version = self.versions.get(slug)
+        return {"slug": slug, "version": version} if version else None
+
+
 def _installer(tmp_path: Path) -> TransformInstaller:
     return TransformInstaller(
         registry=_DummyRegistry(),  # type: ignore[arg-type]
         plugins_dir=tmp_path,
         ogi_version="0.3.0",
     )
+
+
+def _versioned_installer(tmp_path: Path, versions: dict[str, str]) -> TransformInstaller:
+    return TransformInstaller(
+        registry=_VersionRegistry(versions),  # type: ignore[arg-type]
+        plugins_dir=tmp_path,
+        ogi_version="0.3.0",
+    )
+
+
+def _write_manifest(plugins_dir: Path, dir_name: str, name: str, version: str) -> None:
+    plugin_dir = plugins_dir / dir_name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        f'name: {name}\nversion: "{version}"\n', encoding="utf-8"
+    )
+
+
+@pytest.mark.asyncio
+async def test_check_updates_includes_plugins_missing_from_lock(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, "username-maigret", "username-maigret", "1.0.0")
+    # A directory whose manifest names a different plugin is not that registry transform.
+    _write_manifest(tmp_path, "domain-to-ip", "my-custom-plugin", "0.1.0")
+    installer = _versioned_installer(
+        tmp_path, {"username-maigret": "1.3.0", "domain-to-ip": "2.0.0"}
+    )
+
+    assert await installer.check_updates() == [("username-maigret", "1.0.0", "1.3.0")]
+
+
+@pytest.mark.asyncio
+async def test_check_updates_prefers_lock_version_over_manifest(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, "username-maigret", "username-maigret", "1.0.0")
+    installer = _versioned_installer(tmp_path, {"username-maigret": "1.3.0"})
+    lock = installer._lock()
+    lock["transforms"] = {"username-maigret": {"version": "1.2.0"}}
+    write_lockfile(tmp_path, lock)
+
+    assert await installer.check_updates() == [("username-maigret", "1.2.0", "1.3.0")]
+
+
+@pytest.mark.asyncio
+async def test_update_reinstalls_plugin_missing_from_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_manifest(tmp_path, "username-maigret", "username-maigret", "1.0.0")
+    installer = _versioned_installer(tmp_path, {"username-maigret": "1.3.0"})
+    installed: list[str] = []
+
+    async def fake_install(slug: str) -> list[str]:
+        installed.append(slug)
+        return []
+
+    monkeypatch.setattr(installer, "install", fake_install)
+
+    assert await installer.update("username-maigret") is True
+    assert installed == ["username-maigret"]
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_transform_that_is_not_installed(tmp_path: Path) -> None:
+    installer = _versioned_installer(tmp_path, {"username-maigret": "1.3.0"})
+
+    with pytest.raises(InstallError, match="not installed"):
+        await installer.update("username-maigret")
 
 
 def test_sync_boot_requirements_writes_unique_sorted_dependencies(tmp_path: Path) -> None:
