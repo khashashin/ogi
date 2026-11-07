@@ -24,6 +24,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { ProfileDialog } from "./ProfileDialog";
+import { ThemeToggle } from "./ThemeToggle";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
@@ -750,6 +751,7 @@ export function Toolbar() {
       </button>
 
       <div className="w-px h-4 bg-border" />
+      <ThemeToggle />
       {/* User profile */}
       <button
         onClick={() => setShowProfile(true)}

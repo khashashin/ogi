@@ -22,6 +22,17 @@
     <meta name="author" content="OpenGraph Intel" />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#0f1117" />
+    <script>
+      // Apply the saved theme before first paint so light-mode users don't see a dark flash.
+      // Keep in sync with src/stores/themeStore.ts.
+      try {
+        var ogiTheme = localStorage.getItem("ogi-theme");
+        if (ogiTheme === "system") {
+          ogiTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        if (ogiTheme === "light") document.documentElement.dataset.theme = "light";
+      } catch (e) {}
+    </script>
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />

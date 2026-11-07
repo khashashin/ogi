@@ -3,6 +3,7 @@ import Graph from "graphology";
 import type { Entity } from "../types/entity";
 import type { Edge } from "../types/edge";
 import type { EdgeUpdate } from "../types/edge";
+import { BASE_EDGE_COLOR } from "../lib/graphTheme";
 import { ENTITY_TYPE_META } from "../types/entity";
 import { api } from "../api/client";
 import { useUndoStore } from "./undoStore";
@@ -532,7 +533,7 @@ function ensureEdgeMaterialized(graph: Graph, edge: Edge) {
     graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
       label: edge.label,
       size: 3,
-      color: "#4b5563",
+      color: BASE_EDGE_COLOR,
     });
   }
 }
@@ -608,7 +609,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
             label: edge.label,
             size: 3,
-            color: "#4b5563",
+            color: BASE_EDGE_COLOR,
           });
           edges.set(edge.id, edge);
         }
@@ -688,7 +689,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
             label: edge.label,
             size: 3,
-            color: "#4b5563",
+            color: BASE_EDGE_COLOR,
           });
           edges.set(edge.id, edge);
         }
@@ -1018,7 +1019,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   addEdge: (projectId, edge) => {
-    const edgeAttrs = { label: edge.label, size: 3, color: "#4b5563" };
+    const edgeAttrs = { label: edge.label, size: 3, color: BASE_EDGE_COLOR };
     get().upsertEdges(projectId, [edge]);
     useUndoStore.getState().push({ type: "add_edge", edge, edgeAttrs });
   },
@@ -1758,7 +1759,7 @@ async function applyReverse(
             });
           } catch { /* skip if entities changed */ }
           if (!graph.hasEdge(edge.id)) {
-            const attrs = action.edgeAttrs[edge.id] ?? { label: edge.label, size: 2, color: "#4b5563" };
+            const attrs = action.edgeAttrs[edge.id] ?? { label: edge.label, size: 2, color: BASE_EDGE_COLOR };
             graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, attrs);
           }
           edges.set(edge.id, edge);

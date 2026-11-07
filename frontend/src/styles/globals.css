@@ -15,7 +15,48 @@
   --color-overlay: rgba(15, 17, 23, 0.75);
 }
 
+/*
+ * Theme overrides. The theme store sets data-theme on <html>; a subtree can pin its own
+ * theme with the same attribute (public marketing pages pin data-theme="dark").
+ * Unlayered so these win over the @theme defaults above.
+ */
+[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f5f6fa;
+  --color-surface: #ffffff;
+  --color-surface-hover: #eceef5;
+  --color-border: #d8dbe5;
+  --color-text: #1a1d27;
+  --color-text-muted: #5f6478;
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-overlay: rgba(15, 17, 23, 0.4);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-hover: #242837;
+  --color-border: #2e3348;
+  --color-text: #e1e4ed;
+  --color-text-muted: #8b8fa3;
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-overlay: rgba(15, 17, 23, 0.75);
+}
+
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
   body {
     background-color: var(--color-bg);
     color: var(--color-text);
