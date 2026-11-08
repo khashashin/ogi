@@ -21,7 +21,6 @@ import { useGraphStore } from "./stores/graphStore";
 import { useAuthStore } from "./stores/authStore";
 import { useThemeStore } from "./stores/themeStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
-import { useAnalytics } from "./hooks/useAnalytics";
 
 function WorkspaceView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -104,7 +103,6 @@ function HashScrollHandler() {
 }
 
 function App() {
-  useAnalytics();
   const initialize = useAuthStore((state) => state.initialize);
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
 

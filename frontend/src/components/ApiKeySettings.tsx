@@ -55,6 +55,20 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
     normalizedNewService && newKey.trim() && !duplicateService,
   );
 
+  const loadKeys = async () => {
+    setLoading(true);
+    try {
+      const data = await api.apiKeys.list();
+      setServices([
+        ...new Set(data.map((d) => normalizeServiceName(d.service_name)).filter(Boolean)),
+      ]);
+    } catch {
+      setServices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (open) loadKeys();
   }, [open]);
@@ -71,20 +85,6 @@ export function ApiKeySettings({ open, onClose, initialService = null }: ApiKeyS
       setCustomService(normalized);
     }
   }, [initialService, open]);
-
-  const loadKeys = async () => {
-    setLoading(true);
-    try {
-      const data = await api.apiKeys.list();
-      setServices([
-        ...new Set(data.map((d) => normalizeServiceName(d.service_name)).filter(Boolean)),
-      ]);
-    } catch {
-      setServices([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
