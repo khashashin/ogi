@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, MapPin, RefreshCcw, X } from "lucide-react";
-import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { api } from "../api/client";
@@ -17,6 +20,9 @@ const CLUSTER_SOURCE_ID = "ogi-clusters";
 const ROUTE_SOURCE_ID = "ogi-routes";
 const ADD_LOCATION_CURSOR =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%23ff0000' d='M29.603361,0 V29.603361 H0 v0.793233 h29.603361 v29.603362 h0.793233 V30.396594 H59.999956 V29.603361 H30.396594 V0 Z'/%3E%3C/svg%3E\") 30 30, crosshair";
+
+// maplibre-gl 6 can't find its worker inside a bundle, so Vite emits it and we pass the URL.
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 const BASEMAP_OPTIONS = getBasemapOptions(getEnv("VITE_CARTO_API_KEY"));
 
@@ -57,6 +63,7 @@ export function MapView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addLocationMode, setAddLocationMode] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PendingLocationDraft | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
@@ -148,8 +155,6 @@ export function MapView() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
 
     map.on("load", () => {
-      // The theme may have changed while the style was loading.
-      showBasemap(map, basemapRef.current);
       map.addSource(ROUTE_SOURCE_ID, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -288,6 +293,10 @@ export function MapView() {
       map.on("mouseleave", "ogi-clusters-layer", () => {
         syncCursor();
       });
+
+      // The project's points can arrive before the style has loaded; this re-runs the
+      // effects that fill the sources and set layer visibility.
+      setMapReady(true);
     });
 
     map.on("zoomend", () => {
@@ -298,12 +307,13 @@ export function MapView() {
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, [selectEdge, selectNode]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady) return;
 
     const pointFeatures = points.map((point) => ({
       type: "Feature",
@@ -344,15 +354,15 @@ export function MapView() {
     const clusterSource = map.getSource(CLUSTER_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     const routeSource = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
 
-    pointSource?.setData({ type: "FeatureCollection", features: pointFeatures } as GeoJSON.FeatureCollection);
-    clusterSource?.setData({ type: "FeatureCollection", features: cluster ? clusterFeatures : [] } as GeoJSON.FeatureCollection);
-    routeSource?.setData({ type: "FeatureCollection", features: routeFeatures } as GeoJSON.FeatureCollection);
-  }, [points, clusters, routes, selectedNodeId, selectedEdgeId, cluster]);
+    pointSource?.setData({ type: "FeatureCollection", features: pointFeatures } as FeatureCollection);
+    clusterSource?.setData({ type: "FeatureCollection", features: cluster ? clusterFeatures : [] } as FeatureCollection);
+    routeSource?.setData({ type: "FeatureCollection", features: routeFeatures } as FeatureCollection);
+  }, [points, clusters, routes, selectedNodeId, selectedEdgeId, cluster, mapReady]);
 
   useEffect(() => {
     basemapRef.current = basemap;
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady) return;
     const setVis = (layerId: string, visible: boolean) => {
       if (map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
@@ -364,11 +374,11 @@ export function MapView() {
     setVis("ogi-routes-layer", showRoutes);
     setVis("ogi-clusters-layer", cluster);
     setVis("ogi-clusters-count", cluster);
-  }, [basemap, showPoints, showRoutes, cluster]);
+  }, [basemap, showPoints, showRoutes, cluster, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady) return;
 
     const key = JSON.stringify(points.map((p) => [p.entity_id, p.lat, p.lon]));
     if (key === fitKeyRef.current) return;
@@ -381,7 +391,7 @@ export function MapView() {
     } else {
       map.flyTo({ center: [center.lon, center.lat], zoom: 2, duration: 300 });
     }
-  }, [points, center]);
+  }, [points, center, mapReady]);
 
   if (!projectId) {
     return <div className="h-full p-3 text-xs text-text-muted">Select a project to view map.</div>;
