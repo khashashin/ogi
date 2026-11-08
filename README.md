@@ -104,12 +104,12 @@ The toggle in the toolbar switches between dark, light, and your system setting.
 
 ### Prerequisites
 
-| Tool                             | Version          |
-| -------------------------------- | ---------------- |
-| [Python](https://www.python.org) | 3.14+            |
-| [uv](https://docs.astral.sh/uv/) | latest           |
-| [Node.js](https://nodejs.org)    | 20.19+ or 22.12+ |
-| [pnpm](https://pnpm.io)          | 10.x             |
+| Tool                             | Version                    |
+| -------------------------------- | -------------------------- |
+| [Python](https://www.python.org) | 3.14+                      |
+| [uv](https://docs.astral.sh/uv/) | latest                     |
+| [Node.js](https://nodejs.org)    | 24 LTS (22.12+ also works) |
+| [pnpm](https://pnpm.io)          | 10.x                       |
 
 ### Backend
 
@@ -228,7 +228,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.9.1`). Defaults to `latest`, the newest release. The `edge` tag follows the `main` branch.
 
-`docker-compose.prod.yml` forwards only the variables listed under each service's `environment:` key. Values in `.env` fill in those entries, but other variables in `.env` don't reach the containers. To set more, such as `OGI_API_KEY_ENCRYPTION_KEY` or `OGI_ADMIN_EMAILS`, add them to the service's `environment:` list or let your hosting platform inject them.
+The production compose file reads `.env` into the backend and both workers, so create it from `.env.example` first. Set at least `OGI_DATABASE_URL`, `OGI_API_KEY_ENCRYPTION_KEY`, and, with sign-in enabled, `OGI_ADMIN_EMAILS`. Values written under a service's `environment:` key take precedence over `.env`, so the in-stack Redis URL and the migration settings stay as the compose file defines them.
 
 ### Hetzner Cloud
 
