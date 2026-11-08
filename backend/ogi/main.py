@@ -83,6 +83,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup DB connection
     await init_db()
 
+    from ogi.api.auth import auth_enabled
+
+    if not auth_enabled():
+        logger.warning(
+            "Authentication is disabled (OGI_SUPABASE_URL / OGI_SUPABASE_ANON_KEY are not set): "
+            "every request runs as one local user with admin rights, including installing plugins. "
+            "Only run this mode on a machine or network you trust."
+        )
+
     registry = EntityRegistry.instance()
     init_entity_registry(registry)
 
