@@ -4,6 +4,8 @@ import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { api } from "../api/client";
+import { basemapLayerId, getBasemapOptions, type Basemap } from "../lib/basemaps";
+import { getEnv } from "../lib/env";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
 import type { MapCluster, MapPoint, MapRoute } from "../types/map";
@@ -12,16 +14,11 @@ import { useIsViewer } from "../hooks/useIsViewer";
 const POINT_SOURCE_ID = "ogi-points";
 const CLUSTER_SOURCE_ID = "ogi-clusters";
 const ROUTE_SOURCE_ID = "ogi-routes";
-const BASE_LAYER_DARK = "basemap-dark";
-const BASE_LAYER_DARK_GRAY = "basemap-dark-gray";
-const BASE_LAYER_DARK_MINIMAL = "basemap-dark-minimal";
-const BASE_LAYER_LIGHT = "basemap-light";
-const BASE_LAYER_LIGHT_DETAIL = "basemap-light-detail";
-const BASE_LAYER_SAT = "basemap-sat";
 const ADD_LOCATION_CURSOR =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%23ff0000' d='M29.603361,0 V29.603361 H0 v0.793233 h29.603361 v29.603362 h0.793233 V30.396594 H59.999956 V29.603361 H30.396594 V0 Z'/%3E%3C/svg%3E\") 30 30, crosshair";
 
-type Basemap = "dark" | "darkGray" | "darkMinimal" | "light" | "lightDetail" | "sat";
+const BASEMAP_OPTIONS = getBasemapOptions(getEnv("VITE_CARTO_API_KEY"));
+const DEFAULT_BASEMAP: Basemap = BASEMAP_OPTIONS[0].id;
 
 interface PendingLocationDraft {
   lat: number;
@@ -42,7 +39,7 @@ export function MapView() {
   const [routes, setRoutes] = useState<MapRoute[]>([]);
   const [zoom, setZoom] = useState(2);
   const [cluster, setCluster] = useState(true);
-  const [basemap, setBasemap] = useState<Basemap>("dark");
+  const [basemap, setBasemap] = useState<Basemap>(DEFAULT_BASEMAP);
   const [showPoints, setShowPoints] = useState(true);
   const [showRoutes, setShowRoutes] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -123,63 +120,13 @@ export function MapView() {
       container: mapContainerRef.current,
       style: {
         version: 8,
-        sources: {
-          "base-dark": {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-              "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-            ],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap Contributors, &copy; CARTO",
-          },
-          "base-dark-gray": {
-            type: "raster",
-            tiles: [
-              "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-            ],
-            tileSize: 256,
-            attribution: "Tiles &copy; Esri",
-          },
-          "base-dark-minimal": {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-              "https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-            ],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap Contributors, &copy; CARTO",
-          },
-          "base-light": {
-            type: "raster",
-            tiles: [
-              "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            ],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap Contributors",
-          },
-          "base-light-detail": {
-            type: "raster",
-            tiles: ["https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap Contributors, Humanitarian OpenStreetMap Team",
-          },
-          "base-sat": {
-            type: "raster",
-            tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-            tileSize: 256,
-            attribution: "Tiles &copy; Esri",
-          },
-        },
-        layers: [
-          { id: BASE_LAYER_DARK, type: "raster", source: "base-dark" },
-          { id: BASE_LAYER_DARK_GRAY, type: "raster", source: "base-dark-gray", layout: { visibility: "none" } },
-          { id: BASE_LAYER_DARK_MINIMAL, type: "raster", source: "base-dark-minimal", layout: { visibility: "none" } },
-          { id: BASE_LAYER_LIGHT, type: "raster", source: "base-light", layout: { visibility: "none" } },
-          { id: BASE_LAYER_LIGHT_DETAIL, type: "raster", source: "base-light-detail", layout: { visibility: "none" } },
-          { id: BASE_LAYER_SAT, type: "raster", source: "base-sat", layout: { visibility: "none" } },
-        ],
+        sources: Object.fromEntries(BASEMAP_OPTIONS.map((option) => [basemapLayerId(option.id), option.source])),
+        layers: BASEMAP_OPTIONS.map((option) => ({
+          id: basemapLayerId(option.id),
+          type: "raster" as const,
+          source: basemapLayerId(option.id),
+          layout: { visibility: option.id === DEFAULT_BASEMAP ? ("visible" as const) : ("none" as const) },
+        })),
       },
       center: [8.5417, 47.3769],
       zoom: 2,
@@ -396,12 +343,7 @@ export function MapView() {
       }
     };
 
-    setVis(BASE_LAYER_DARK, basemap === "dark");
-    setVis(BASE_LAYER_DARK_GRAY, basemap === "darkGray");
-    setVis(BASE_LAYER_DARK_MINIMAL, basemap === "darkMinimal");
-    setVis(BASE_LAYER_LIGHT, basemap === "light");
-    setVis(BASE_LAYER_LIGHT_DETAIL, basemap === "lightDetail");
-    setVis(BASE_LAYER_SAT, basemap === "sat");
+    BASEMAP_OPTIONS.forEach((option) => setVis(basemapLayerId(option.id), option.id === basemap));
     setVis("ogi-points-layer", showPoints);
     setVis("ogi-routes-layer", showRoutes);
     setVis("ogi-clusters-layer", cluster);
@@ -478,12 +420,11 @@ export function MapView() {
               onChange={(e) => setBasemap(e.target.value as Basemap)}
               className="rounded border border-border bg-surface px-2 py-1 text-xs text-text"
             >
-              <option value="dark">CARTO Dark</option>
-              <option value="darkGray">Esri Dark Gray</option>
-              <option value="darkMinimal">CARTO Dark Minimal</option>
-              <option value="light">OSM Standard</option>
-              <option value="lightDetail">OSM Humanitarian</option>
-              <option value="sat">Satellite (Esri)</option>
+              {BASEMAP_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
           <div className="flex items-center gap-2 rounded border border-border px-2 py-1">
