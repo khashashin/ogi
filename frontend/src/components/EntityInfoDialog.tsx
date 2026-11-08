@@ -8,6 +8,8 @@ import type {
 } from "../types/entity";
 import { api } from "../api/client";
 import { getEntityIconComponent, isCustomSvgIcon } from "../lib/entityIconRegistry";
+import { themedEntityColor } from "../lib/graphTheme";
+import { useThemeStore } from "../stores/themeStore";
 
 interface EntityInfoDialogProps {
   open: boolean;
@@ -17,16 +19,17 @@ interface EntityInfoDialogProps {
 }
 
 function EntityTypeIcon({ icon, color }: { icon: string; color: string }) {
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   if (!icon) return null;
   if (isCustomSvgIcon(icon)) {
     return (
-      <img src={`/icons/${icon}.svg`} alt="" width={16} height={16} className="shrink-0 invert" />
+      <img src={`/icons/${icon}.svg`} alt="" width={16} height={16} className="shrink-0 dark:invert" />
     );
   }
   return createElement(getEntityIconComponent(icon) ?? Hash, {
     size: 16,
     className: "shrink-0",
-    style: { color },
+    style: { color: themedEntityColor(color, resolvedTheme) },
   });
 }
 

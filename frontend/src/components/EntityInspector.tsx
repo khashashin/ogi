@@ -10,8 +10,11 @@ import { api } from "../api/client";
 import { useIsViewer } from "../hooks/useIsViewer";
 import { buildRunRiskWarning, isUnverifiedTier } from "../lib/pluginRisk";
 import { openBillingCooldownDialog } from "../lib/billingCooldownDialog";
+import { themedEntityColor } from "../lib/graphTheme";
+import { useThemeStore } from "../stores/themeStore";
 
 export function EntityInspector() {
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const {
     selectedNodeId,
     selectedEdgeId,
@@ -327,7 +330,10 @@ export function EntityInspector() {
       <div className="p-3 border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: meta?.color }} />
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: meta ? themedEntityColor(meta.color, resolvedTheme) : undefined }}
+            />
             <span className="text-xs text-text-muted">{entity.type}</span>
           </div>
           {!isViewer && (

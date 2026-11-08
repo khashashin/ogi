@@ -19,6 +19,7 @@ import { BillingCooldownDialog } from "./components/BillingCooldownDialog";
 import { useProjectStore } from "./stores/projectStore";
 import { useGraphStore } from "./stores/graphStore";
 import { useAuthStore } from "./stores/authStore";
+import { useThemeStore } from "./stores/themeStore";
 import { useRealtimeSync } from "./hooks/useRealtimeSync";
 import { useAnalytics } from "./hooks/useAnalytics";
 
@@ -105,6 +106,7 @@ function HashScrollHandler() {
 function App() {
   useAnalytics();
   const initialize = useAuthStore((state) => state.initialize);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
   useEffect(() => {
     initialize();
@@ -133,13 +135,13 @@ function App() {
       <BetaNoticeDialog />
       <CookieConsentBanner />
       <Toaster
-        theme="dark"
+        theme={resolvedTheme}
         position="bottom-right"
         toastOptions={{
           style: {
-            background: "#1a1d27",
-            border: "1px solid #2e3348",
-            color: "#e1e4ed",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            color: "var(--color-text)",
           },
         }}
       />

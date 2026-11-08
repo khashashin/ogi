@@ -13,6 +13,8 @@ import { useGraphStore } from "../stores/graphStore";
 import { useIsViewer } from "../hooks/useIsViewer";
 import type { LocationSuggestion } from "../types/location";
 import { getEntityIconComponent, isCustomSvgIcon } from "../lib/entityIconRegistry";
+import { themedEntityColor } from "../lib/graphTheme";
+import { useThemeStore } from "../stores/themeStore";
 import { EntityInfoDialog } from "./EntityInfoDialog";
 
 const ENTITY_VALUE_PLACEHOLDERS: Partial<Record<EntityType, string>> = {
@@ -55,6 +57,7 @@ export function EntityPalette() {
   const { currentProject } = useProjectStore();
   const { addEntity } = useGraphStore();
   const isViewer = useIsViewer();
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isLocationMode = adding === EntityType.Location;
   const valuePlaceholder = adding
     ? isLocationMode
@@ -270,13 +273,13 @@ export function EntityPalette() {
                         alt={meta.type}
                         width={14}
                         height={14}
-                        className="shrink-0 invert"
+                        className="shrink-0 dark:invert"
                       />
                     ) : (
                       <IconComponent
                         size={14}
                         className="shrink-0"
-                        style={{ color: meta.color }}
+                        style={{ color: themedEntityColor(meta.color, resolvedTheme) }}
                       />
                     )}
                     <span className="truncate">{meta.type}</span>

@@ -16,7 +16,7 @@ interface LandingPageStaticProps {
 export function LandingPageStatic({ primaryHref, primaryLabel, siteUrl }: LandingPageStaticProps) {
   return (
     <>
-      <div className="min-h-screen bg-bg text-text">
+      <div data-theme="dark" className="min-h-screen bg-bg text-text">
         <header className="sticky top-0 z-20 border-b border-white/10 bg-bg/80 backdrop-blur">
           <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6">
             <div className="flex items-center justify-between gap-4">

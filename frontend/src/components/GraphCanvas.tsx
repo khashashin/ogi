@@ -9,13 +9,14 @@ import { ENTITY_TYPE_META } from "../types/entity";
 import { isCustomSvgIcon, resolveEntityIconName } from "../lib/entityIconRegistry";
 import { LazyLucideIcon } from "./LazyLucideIcon";
 import { ProtectedMediaImage } from "./ProtectedMediaImage";
-
-const SELECTED_LABEL_COLOR = "#111827";
-const SELECTED_LABEL_BG = "#f3f4f6";
-const PINNED_LABEL_COLOR = "#dbeafe";
-const PINNED_LABEL_BG = "#1e3a8a";
-const CONNECTION_LABEL_COLOR = "#fef3c7";
-const CONNECTION_LABEL_BG = "#92400e";
+import { useThemeStore } from "../stores/themeStore";
+import {
+  BASE_EDGE_COLOR,
+  getGraphPalette,
+  themedEdgeColor,
+  themedEntityColor,
+  type LabelStyle,
+} from "../lib/graphTheme";
 
 type NodeVisualOverlay =
   | { id: string; x: number; y: number; size: number; kind: "icon"; icon: string; color: string }
@@ -52,22 +53,33 @@ function getPersonNodeImage(
   return trimmed || null;
 }
 
+interface HoverNodeData {
+  x: number;
+  y: number;
+  size: number;
+  label?: string | null;
+  color?: string;
+  highlightedLabelColor?: string;
+  highlightedLabelBackground?: string;
+}
+
+interface HoverLabelSettings {
+  labelSize: number;
+  labelFont: string;
+  labelWeight?: string | number;
+}
+
+/** Hover drawer for the current theme; nodes without their own label style use `fallback`. */
+function createNodeHoverDrawer(fallback: LabelStyle) {
+  return (context: CanvasRenderingContext2D, data: HoverNodeData, settings: HoverLabelSettings) =>
+    drawHighlightedNodeHover(context, data, settings, fallback);
+}
+
 function drawHighlightedNodeHover(
   context: CanvasRenderingContext2D,
-  data: {
-    x: number;
-    y: number;
-    size: number;
-    label?: string | null;
-    color?: string;
-    highlightedLabelColor?: string;
-    highlightedLabelBackground?: string;
-  },
-  settings: {
-    labelSize: number;
-    labelFont: string;
-    labelWeight?: string | number;
-  },
+  data: HoverNodeData,
+  settings: HoverLabelSettings,
+  fallback: LabelStyle,
 ) {
   if (!data.label) return;
 
@@ -117,7 +129,7 @@ function drawHighlightedNodeHover(
   context.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
   context.closePath();
 
-  context.fillStyle = data.highlightedLabelBackground ?? SELECTED_LABEL_BG;
+  context.fillStyle = data.highlightedLabelBackground ?? fallback.background;
   context.shadowColor = "rgba(15, 23, 42, 0.25)";
   context.shadowBlur = 12;
   context.shadowOffsetY = 2;
@@ -125,7 +137,7 @@ function drawHighlightedNodeHover(
 
   context.shadowBlur = 0;
   context.shadowOffsetY = 0;
-  context.fillStyle = data.highlightedLabelColor ?? SELECTED_LABEL_COLOR;
+  context.fillStyle = data.highlightedLabelColor ?? fallback.color;
   context.fillText(label, textX, textY);
   context.restore();
 }
@@ -152,6 +164,7 @@ export function GraphCanvas() {
     connectionDraft,
   } = useGraphStore();
   const { currentProject } = useProjectStore();
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [nodeVisualOverlays, setNodeVisualOverlays] = useState<NodeVisualOverlay[]>([]);
   const [selectionBox, setSelectionBox] = useState<null | {
@@ -210,13 +223,15 @@ export function GraphCanvas() {
       sigmaRef.current = null;
     }
 
+    // Initial colours only; the reducer effect below re-applies them when the theme changes.
+    const palette = getGraphPalette(useThemeStore.getState().resolvedTheme);
     const renderer = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: true,
       defaultEdgeType: "arrow",
-      defaultDrawNodeHover: drawHighlightedNodeHover,
+      defaultDrawNodeHover: createNodeHoverDrawer(palette.selectedLabel),
       defaultNodeColor: "#6366f1",
-      defaultEdgeColor: "#4b5563",
-      labelColor: { color: "#e1e4ed" },
+      defaultEdgeColor: BASE_EDGE_COLOR,
+      labelColor: { color: palette.label },
       labelSize: 12,
       labelRenderedSizeThreshold: 6,
       enableEdgeEvents: true,
@@ -455,8 +470,13 @@ export function GraphCanvas() {
   useEffect(() => {
     if (!sigmaRef.current) return;
     const renderer = sigmaRef.current;
+    const palette = getGraphPalette(resolvedTheme);
+    renderer.setSetting("labelColor", { color: palette.label });
+    renderer.setSetting("defaultDrawNodeHover", createNodeHoverDrawer(palette.selectedLabel));
 
-    renderer.setSetting("nodeReducer", (node, data) => {
+    renderer.setSetting("nodeReducer", (node, storedData) => {
+      const themedColor = storedData.color ? themedEntityColor(storedData.color, palette.theme) : storedData.color;
+      let data = themedColor === storedData.color ? storedData : { ...storedData, color: themedColor };
       if (hiddenNodeIds.has(node)) {
         return { ...data, hidden: true, label: "" };
       }
@@ -466,8 +486,8 @@ export function GraphCanvas() {
           ...data,
           zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 1),
           highlighted: true,
-          highlightedLabelColor: PINNED_LABEL_COLOR,
-          highlightedLabelBackground: PINNED_LABEL_BG,
+          highlightedLabelColor: palette.pinnedLabel.color,
+          highlightedLabelBackground: palette.pinnedLabel.background,
         };
       }
 
@@ -476,8 +496,8 @@ export function GraphCanvas() {
           ...data,
           zIndex: Math.max((data.zIndex as number | undefined) ?? 0, 2),
           highlighted: true,
-          highlightedLabelColor: CONNECTION_LABEL_COLOR,
-          highlightedLabelBackground: CONNECTION_LABEL_BG,
+          highlightedLabelColor: palette.connectionLabel.color,
+          highlightedLabelBackground: palette.connectionLabel.background,
         };
       }
 
@@ -491,8 +511,8 @@ export function GraphCanvas() {
                 highlighted: true,
                 zIndex: 2,
                 size: (data.size ?? 8) + 4,
-                highlightedLabelColor: SELECTED_LABEL_COLOR,
-                highlightedLabelBackground: SELECTED_LABEL_BG,
+                highlightedLabelColor: palette.selectedLabel.color,
+                highlightedLabelBackground: palette.selectedLabel.background,
               };
             }
             if (nodeOverlay.matchIds.has(node)) {
@@ -500,8 +520,8 @@ export function GraphCanvas() {
                 ...data,
                 highlighted: true,
                 zIndex: 1,
-                highlightedLabelColor: SELECTED_LABEL_COLOR,
-                highlightedLabelBackground: SELECTED_LABEL_BG,
+                highlightedLabelColor: palette.selectedLabel.color,
+                highlightedLabelBackground: palette.selectedLabel.background,
               };
             }
             return { ...data, color: `${data.color}22`, label: "" };
@@ -526,8 +546,8 @@ export function GraphCanvas() {
             highlighted: true,
             size: (data.size ?? 8) + 3,
             zIndex: 2,
-            highlightedLabelColor: SELECTED_LABEL_COLOR,
-            highlightedLabelBackground: SELECTED_LABEL_BG,
+            highlightedLabelColor: palette.selectedLabel.color,
+            highlightedLabelBackground: palette.selectedLabel.background,
           };
         }
         if (declutterState.fadeUnselected) {
@@ -556,7 +576,7 @@ export function GraphCanvas() {
       if (selectedEdgeId && edge === selectedEdgeId) {
         return {
           ...data,
-          color: "#60a5fa",
+          color: palette.selectedEdge,
           size: Math.max((data.size ?? 2) * 2.2, 4),
           zIndex: 3,
         };
@@ -565,7 +585,7 @@ export function GraphCanvas() {
       if (hoveredEdgeId && edge === hoveredEdgeId) {
         return {
           ...data,
-          color: "#93c5fd",
+          color: palette.hoveredEdge,
           size: Math.max((data.size ?? 2) * 2, 3.5),
           zIndex: 2,
         };
@@ -582,7 +602,8 @@ export function GraphCanvas() {
           return { ...data, hidden: true };
         }
       }
-      return data;
+      const color = themedEdgeColor(data.color, palette);
+      return color === data.color ? data : { ...data, color };
     });
 
     renderer.refresh();
@@ -597,6 +618,7 @@ export function GraphCanvas() {
     declutterState,
     graph,
     connectionDraft,
+    resolvedTheme,
   ]);
 
   // Expose sigma ref for zoom controls and context menu
@@ -617,6 +639,7 @@ export function GraphCanvas() {
       hiddenEdgeIds,
       projectName: currentProject?.name ?? "graph",
       backgroundColor,
+      palette: getGraphPalette(useThemeStore.getState().resolvedTheme),
     });
   }, [currentProject?.name, entities, graph, hiddenEdgeIds, hiddenNodeIds]);
 
@@ -685,7 +708,9 @@ export function GraphCanvas() {
         size: Math.max(10, nodeSize * 1.35),
         kind: "icon",
         icon: customIcon!,
-        color: getContrastIconColor(String(attrs.color ?? "")),
+        color: getContrastIconColor(
+          themedEntityColor(String(attrs.color ?? ""), useThemeStore.getState().resolvedTheme),
+        ),
       });
     });
 

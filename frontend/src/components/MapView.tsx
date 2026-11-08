@@ -4,10 +4,11 @@ import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { api } from "../api/client";
-import { basemapLayerId, getBasemapOptions, type Basemap } from "../lib/basemaps";
+import { basemapLayerId, defaultBasemap, getBasemapOptions, type Basemap } from "../lib/basemaps";
 import { getEnv } from "../lib/env";
 import { useProjectStore } from "../stores/projectStore";
 import { useGraphStore } from "../stores/graphStore";
+import { useThemeStore } from "../stores/themeStore";
 import type { MapCluster, MapPoint, MapRoute } from "../types/map";
 import { useIsViewer } from "../hooks/useIsViewer";
 
@@ -18,7 +19,15 @@ const ADD_LOCATION_CURSOR =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%23ff0000' d='M29.603361,0 V29.603361 H0 v0.793233 h29.603361 v29.603362 h0.793233 V30.396594 H59.999956 V29.603361 H30.396594 V0 Z'/%3E%3C/svg%3E\") 30 30, crosshair";
 
 const BASEMAP_OPTIONS = getBasemapOptions(getEnv("VITE_CARTO_API_KEY"));
-const DEFAULT_BASEMAP: Basemap = BASEMAP_OPTIONS[0].id;
+
+function showBasemap(map: MapLibreMap, basemap: Basemap): void {
+  BASEMAP_OPTIONS.forEach((option) => {
+    const layerId = basemapLayerId(option.id);
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, "visibility", option.id === basemap ? "visible" : "none");
+    }
+  });
+}
 
 interface PendingLocationDraft {
   lat: number;
@@ -39,7 +48,10 @@ export function MapView() {
   const [routes, setRoutes] = useState<MapRoute[]>([]);
   const [zoom, setZoom] = useState(2);
   const [cluster, setCluster] = useState(true);
-  const [basemap, setBasemap] = useState<Basemap>(DEFAULT_BASEMAP);
+  // The basemap follows the theme until the user picks one.
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const [chosenBasemap, setChosenBasemap] = useState<Basemap | null>(null);
+  const basemap = chosenBasemap ?? defaultBasemap(BASEMAP_OPTIONS, resolvedTheme);
   const [showPoints, setShowPoints] = useState(true);
   const [showRoutes, setShowRoutes] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -53,6 +65,7 @@ export function MapView() {
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const basemapRef = useRef(basemap);
   const fitKeyRef = useRef<string>("");
   const addLocationModeRef = useRef(addLocationMode);
   const isViewerRef = useRef(isViewer);
@@ -125,7 +138,7 @@ export function MapView() {
           id: basemapLayerId(option.id),
           type: "raster" as const,
           source: basemapLayerId(option.id),
-          layout: { visibility: option.id === DEFAULT_BASEMAP ? ("visible" as const) : ("none" as const) },
+          layout: { visibility: option.id === basemapRef.current ? ("visible" as const) : ("none" as const) },
         })),
       },
       center: [8.5417, 47.3769],
@@ -135,6 +148,8 @@ export function MapView() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
 
     map.on("load", () => {
+      // The theme may have changed while the style was loading.
+      showBasemap(map, basemapRef.current);
       map.addSource(ROUTE_SOURCE_ID, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -335,6 +350,7 @@ export function MapView() {
   }, [points, clusters, routes, selectedNodeId, selectedEdgeId, cluster]);
 
   useEffect(() => {
+    basemapRef.current = basemap;
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const setVis = (layerId: string, visible: boolean) => {
@@ -343,7 +359,7 @@ export function MapView() {
       }
     };
 
-    BASEMAP_OPTIONS.forEach((option) => setVis(basemapLayerId(option.id), option.id === basemap));
+    showBasemap(map, basemap);
     setVis("ogi-points-layer", showPoints);
     setVis("ogi-routes-layer", showRoutes);
     setVis("ogi-clusters-layer", cluster);
@@ -417,7 +433,7 @@ export function MapView() {
             Basemap
             <select
               value={basemap}
-              onChange={(e) => setBasemap(e.target.value as Basemap)}
+              onChange={(e) => setChosenBasemap(e.target.value as Basemap)}
               className="rounded border border-border bg-surface px-2 py-1 text-xs text-text"
             >
               {BASEMAP_OPTIONS.map((option) => (

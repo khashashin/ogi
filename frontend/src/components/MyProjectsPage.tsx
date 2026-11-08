@@ -6,6 +6,7 @@ import type { CapabilitiesResponse, MyProjectItem } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
 import { useProjectStore } from "../stores/projectStore";
 import { ProfileDialog } from "./ProfileDialog";
+import { ThemeToggle } from "./ThemeToggle";
 import { ApiKeySettings } from "./ApiKeySettings";
 import { PluginManager } from "./PluginManager";
 import { Seo } from "./Seo";
@@ -132,6 +133,9 @@ export function MyProjectsPage() {
           </Link>
         </nav>
         <div className="flex-1" />
+        <div className="mr-3">
+          <ThemeToggle />
+        </div>
         {authEnabled && user ? (
           <button
             onClick={() => setShowProfile(true)}

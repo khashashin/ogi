@@ -10,6 +10,7 @@ import {
   isCustomSvgIcon,
   resolveEntityIconName,
 } from "./entityIconRegistry";
+import { themedEdgeColor, themedEntityColor, type GraphPalette } from "./graphTheme";
 
 const EXPORT_MAX_DIMENSION = 2800;
 const EXPORT_MIN_DIMENSION = 1200;
@@ -37,6 +38,7 @@ interface ExportGraphImageOptions {
   hiddenEdgeIds: Set<string>;
   projectName: string;
   backgroundColor: string;
+  palette: GraphPalette;
 }
 
 interface VisibleNodeInfo {
@@ -293,6 +295,7 @@ async function drawImageOverlay(
   context: CanvasRenderingContext2D,
   overlay: Extract<Overlay, { kind: "image" }>,
   entity: Entity,
+  ringColor: string,
 ): Promise<void> {
   const image = await loadProtectedPersonImage(entity, overlay.imageUrl);
   if (!image) return;
@@ -313,7 +316,7 @@ async function drawImageOverlay(
   context.restore();
 
   context.save();
-  context.strokeStyle = "rgba(255,255,255,0.2)";
+  context.strokeStyle = ringColor;
   context.lineWidth = Math.max(1, overlay.size * 0.035);
   context.beginPath();
   context.arc(overlay.x, overlay.y, radius - context.lineWidth / 2, 0, Math.PI * 2);
@@ -325,6 +328,7 @@ async function composeOverlays(
   exportCanvas: HTMLCanvasElement,
   renderer: Sigma,
   entities: Map<string, Entity>,
+  palette: GraphPalette,
 ): Promise<void> {
   const context = exportCanvas.getContext("2d");
   if (!context) return;
@@ -363,7 +367,7 @@ async function composeOverlays(
         y: point.y,
         size: Math.max(10, scaledSize * 1.35),
         icon: customIcon,
-        color: getContrastIconColor(String(attrs.color ?? "")),
+        color: getContrastIconColor(themedEntityColor(String(attrs.color ?? ""), palette.theme)),
       });
     }
   });
@@ -374,7 +378,7 @@ async function composeOverlays(
     if (overlay.kind === "icon") {
       await drawIconOverlay(context, overlay);
     } else {
-      await drawImageOverlay(context, overlay, entity);
+      await drawImageOverlay(context, overlay, entity, palette.imageRing);
     }
   }
 }
@@ -386,6 +390,7 @@ export async function exportGraphImage({
   hiddenEdgeIds,
   projectName,
   backgroundColor,
+  palette,
 }: ExportGraphImageOptions): Promise<void> {
   const { graph: exportGraph, visibleNodes } = buildVisibleGraph({
     graph,
@@ -412,8 +417,11 @@ export async function exportGraphImage({
       renderEdgeLabels: true,
       defaultEdgeType: "arrow",
       defaultNodeColor: "#6366f1",
-      defaultEdgeColor: "#4b5563",
-      labelColor: { color: "#e1e4ed" },
+      defaultEdgeColor: palette.edge,
+      labelColor: { color: palette.label },
+      nodeReducer: (_node, data) =>
+        data.color ? { ...data, color: themedEntityColor(data.color, palette.theme) } : data,
+      edgeReducer: (_edge, data) => ({ ...data, color: themedEdgeColor(data.color, palette) }),
       labelSize: 12,
       labelRenderedSizeThreshold: 6,
       enableEdgeEvents: false,
@@ -442,7 +450,7 @@ export async function exportGraphImage({
       context.drawImage(canvas, 0, 0, width, height);
     }
 
-    await composeOverlays(exportCanvas, renderer, entities);
+    await composeOverlays(exportCanvas, renderer, entities, palette);
 
     const blob = await new Promise<Blob>((resolve, reject) => {
       exportCanvas.toBlob((value) => {
