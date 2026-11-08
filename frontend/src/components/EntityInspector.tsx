@@ -255,10 +255,10 @@ export function EntityInspector() {
           {Object.keys(edgePropsDraft).length > 0 ? (
             <div className="space-y-1 mb-2">
               {Object.entries(edgePropsDraft).map(([key, val]) => (
-                <div key={key} className="flex items-center justify-between text-xs group">
-                  <span className="text-text-muted">{key}</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-text">{formatPropertyValue(val)}</span>
+                <div key={key} className="flex flex-wrap items-start justify-between gap-x-2 text-xs group">
+                  <span className="min-w-0 max-w-full text-text-muted break-words">{key}</span>
+                  <div className="ml-auto flex min-w-0 max-w-full items-center gap-1">
+                    <span className="min-w-0 text-text text-right break-words">{formatPropertyValue(val)}</span>
                     {!isViewer && (
                       <button
                         onClick={() => removeEdgeProperty(key)}
@@ -375,10 +375,11 @@ export function EntityInspector() {
         {Object.keys(entity.properties).length > 0 && (
           <div className="space-y-1 mb-2">
             {Object.entries(entity.properties).map(([key, val]) => (
-              <div key={key} className="flex items-center justify-between text-xs group">
-                <span className="text-text-muted">{key}</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-text whitespace-pre-wrap text-right max-w-[14rem] break-words">
+              <div key={key} className="flex flex-wrap items-start justify-between gap-x-2 text-xs group">
+                {/* The value drops below its key when both don't fit side by side in a narrow panel. */}
+                <span className="min-w-0 max-w-full text-text-muted break-words">{key}</span>
+                <div className="ml-auto flex min-w-0 max-w-full items-center gap-1">
+                  <span className="min-w-0 text-text whitespace-pre-wrap text-right max-w-[14rem] break-words">
                     {formatPropertyValue(val)}
                   </span>
                   {!isViewer && (
