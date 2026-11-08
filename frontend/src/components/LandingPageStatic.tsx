@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Blocks, Github, Globe, Network, Search, ShieldCheck } from "lucide-react";
+import { ArrowRight, Blocks, Globe, Network, Search, ShieldCheck } from "lucide-react";
+import { GithubMark } from "./GithubMark";
 import {
   createLandingStructuredData,
   FEATURED_TRANSFORMS,
@@ -54,7 +55,7 @@ export function LandingPageStatic({ primaryHref, primaryLabel, siteUrl }: Landin
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-text-muted hover:text-text"
                 >
-                  <Github size={14} />
+                  <GithubMark size={14} />
                   GitHub
                 </a>
                 <a
@@ -112,7 +113,7 @@ export function LandingPageStatic({ primaryHref, primaryLabel, siteUrl }: Landin
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-5 py-3 text-sm font-medium text-text-muted hover:border-accent/50 hover:text-text"
                   >
-                    <Github size={16} />
+                    <GithubMark size={16} />
                     GitHub
                   </a>
                   <a

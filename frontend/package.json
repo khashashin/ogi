@@ -11,18 +11,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-sigma/core": "^5.0.6",
     "@supabase/supabase-js": "^2.119.0",
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
-    "lucide-react": "^0.575.0",
+    "lucide-react": "^1.70.0",
     "maplibre-gl": "^6.17.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-ga4": "^2.1.0",
+    "react-ga4": "^3.0.1",
     "react-resizable-panels": "^4.20.0",
-    "react-router": "^7.18.5",
+    "react-router": "^8.5.1",
     "sigma": "^3.0.3",
     "sonner": "^2.0.8",
     "zustand": "^5.1.0"
