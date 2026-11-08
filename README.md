@@ -145,6 +145,8 @@ If you see `Job queue not available` or `Redis not available`, verify that:
 
 If you run the backend against PostgreSQL (`OGI_USE_SQLITE=false`), startup will automatically apply Alembic migrations before serving requests. Docker deployments do the same in the backend container entrypoint.
 
+Without `OGI_SUPABASE_URL` and `OGI_SUPABASE_ANON_KEY`, OGI runs without sign-in: every request acts as one local user with admin rights, including installing plugins. That suits a single-user machine. For an instance other people can reach, configure Supabase auth.
+
 AI Investigator runs are processed by another separate worker:
 
 ```bash

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import Request, HTTPException, Path, Depends
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ogi.config import settings
@@ -42,6 +43,32 @@ def get_supabase_client() -> Client | None:
     return _supabase_client
 
 
+def auth_enabled() -> bool:
+    """Whether requests are authenticated through Supabase (otherwise everyone is the anonymous user)."""
+    return bool(settings.supabase_url and settings.supabase_anon_key)
+
+
+async def _ensure_anonymous_profile(session: AsyncSession) -> None:
+    """Store the anonymous profile so rows that reference profiles.id can point at it.
+
+    PostgreSQL enforces those foreign keys (projects.owner_id, project_members, api_keys, ...),
+    so without the row a no-auth install could not create a project. This runs only in
+    no-auth mode; with Supabase configured the anonymous user is never used. A cloud deployment
+    without Supabase is a misconfiguration, so it is left as it was instead of starting to
+    store data for an unauthenticated user.
+    """
+    if settings.deployment_mode.strip().lower() == "cloud":
+        return
+    if await session.get(UserProfile, _ANON_USER.id) is not None:
+        return
+    session.add(UserProfile(id=_ANON_USER.id, email=_ANON_USER.email))
+    try:
+        await session.commit()
+    except IntegrityError:
+        # A concurrent request stored it first.
+        await session.rollback()
+
+
 def _detach_profile(profile: UserProfile) -> UserProfile:
     """Return a plain profile snapshot detached from the active ORM session."""
     return UserProfile(
@@ -61,7 +88,8 @@ async def get_current_user(
 
     If Supabase credentials are not configured (local dev mode), returns a fixed anonymous profile.
     """
-    if not settings.supabase_url or not settings.supabase_anon_key:
+    if not auth_enabled():
+        await _ensure_anonymous_profile(session)
         return _ANON_USER
 
     auth_header = request.headers.get("Authorization", "")
