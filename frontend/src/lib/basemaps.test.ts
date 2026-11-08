@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getBasemapOptions } from "./basemaps";
+import { defaultBasemap, getBasemapOptions } from "./basemaps";
 
 function allTileUrls(cartoApiKey: string | undefined): string[] {
   return getBasemapOptions(cartoApiKey).flatMap((option) => option.source.tiles ?? []);
@@ -23,6 +23,16 @@ describe("getBasemapOptions", () => {
     expect(options.map((option) => option.id)).toContain("darkMinimal");
     expect(cartoUrls.length).toBeGreaterThan(0);
     cartoUrls.forEach((url) => expect(url.endsWith("?key=abc%20123%26x")).toBe(true));
+  });
+
+  it("opens on a basemap that matches the theme", () => {
+    const keyless = getBasemapOptions(undefined);
+    const withKey = getBasemapOptions("k");
+
+    expect(defaultBasemap(keyless, "dark")).toBe("darkGray");
+    expect(defaultBasemap(keyless, "light")).toBe("light");
+    expect(defaultBasemap(withKey, "dark")).toBe("dark");
+    expect(defaultBasemap(withKey, "light")).toBe("cartoLight");
   });
 
   it("never sends the CARTO key to other providers", () => {

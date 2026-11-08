@@ -1,6 +1,8 @@
 import type { RasterSourceSpecification } from "maplibre-gl";
 
-export type Basemap = "dark" | "darkGray" | "darkMinimal" | "light" | "lightDetail" | "sat";
+import type { ResolvedTheme } from "../stores/themeStore";
+
+export type Basemap = "dark" | "darkGray" | "darkMinimal" | "cartoLight" | "light" | "lightDetail" | "sat";
 
 export interface BasemapOption {
   id: Basemap;
@@ -62,8 +64,20 @@ export function getBasemapOptions(cartoApiKey: string | undefined): BasemapOptio
     { id: "dark", label: "CARTO Dark", source: cartoSource("dark_all", cartoApiKey) },
     esriDarkGray,
     { id: "darkMinimal", label: "CARTO Dark Minimal", source: cartoSource("dark_nolabels", cartoApiKey) },
+    { id: "cartoLight", label: "CARTO Light", source: cartoSource("light_all", cartoApiKey) },
     ...others,
   ];
+}
+
+const PREFERRED_BASEMAPS: Record<ResolvedTheme, Basemap[]> = {
+  dark: ["dark", "darkGray"],
+  light: ["cartoLight", "light"],
+};
+
+/** The basemap the map opens on for a theme, out of the ones on offer. */
+export function defaultBasemap(options: BasemapOption[], theme: ResolvedTheme): Basemap {
+  const available = new Set(options.map((option) => option.id));
+  return PREFERRED_BASEMAPS[theme].find((id) => available.has(id)) ?? options[0].id;
 }
 
 export function basemapLayerId(id: Basemap): string {
