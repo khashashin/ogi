@@ -48,8 +48,8 @@ The screenshots follow your GitHub theme. They show an investigation of the publ
 
 <table>
   <tr>
-    <th>Graph investigation</th>
-    <th>Map view</th>
+    <th width="50%">Graph investigation</th>
+    <th width="50%">Map view</th>
   </tr>
   <tr>
     <td>
@@ -66,8 +66,8 @@ The screenshots follow your GitHub theme. They show an investigation of the publ
     </td>
   </tr>
   <tr>
-    <th>Transform Hub</th>
-    <th>Graph analysis</th>
+    <th width="50%">Transform Hub</th>
+    <th width="50%">Graph analysis</th>
   </tr>
   <tr>
     <td>
@@ -91,8 +91,8 @@ The toggle in the toolbar switches between dark, light, and your system setting.
 
 <table>
   <tr>
-    <th>Dark</th>
-    <th>Light</th>
+    <th width="50%">Dark</th>
+    <th width="50%">Light</th>
   </tr>
   <tr>
     <td><img src="docs/images/graph-dark.png" alt="The graph workspace in the dark theme" /></td>
