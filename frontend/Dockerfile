@@ -1,10 +1,12 @@
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
-RUN npm install -g pnpm
-
 COPY package.json pnpm-lock.yaml ./
+# Install the pnpm version package.json pins (packageManager), the one CI and the lockfile use,
+# rather than whatever is newest on npm.
+RUN npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1].split('+')[0]")" \
+    && pnpm --version
 RUN pnpm install --frozen-lockfile
 
 COPY . .
