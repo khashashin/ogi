@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* dark: follows the theme store's data-theme attribute (and pinned subtrees), not the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   --color-bg: #0f1117;
   --color-surface: #1a1d27;

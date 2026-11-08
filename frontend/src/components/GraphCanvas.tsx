@@ -14,6 +14,7 @@ import {
   BASE_EDGE_COLOR,
   getGraphPalette,
   themedEdgeColor,
+  themedEntityColor,
   type LabelStyle,
 } from "../lib/graphTheme";
 
@@ -473,7 +474,9 @@ export function GraphCanvas() {
     renderer.setSetting("labelColor", { color: palette.label });
     renderer.setSetting("defaultDrawNodeHover", createNodeHoverDrawer(palette.selectedLabel));
 
-    renderer.setSetting("nodeReducer", (node, data) => {
+    renderer.setSetting("nodeReducer", (node, storedData) => {
+      const themedColor = storedData.color ? themedEntityColor(storedData.color, palette.theme) : storedData.color;
+      let data = themedColor === storedData.color ? storedData : { ...storedData, color: themedColor };
       if (hiddenNodeIds.has(node)) {
         return { ...data, hidden: true, label: "" };
       }
@@ -705,7 +708,9 @@ export function GraphCanvas() {
         size: Math.max(10, nodeSize * 1.35),
         kind: "icon",
         icon: customIcon!,
-        color: getContrastIconColor(String(attrs.color ?? "")),
+        color: getContrastIconColor(
+          themedEntityColor(String(attrs.color ?? ""), useThemeStore.getState().resolvedTheme),
+        ),
       });
     });
 

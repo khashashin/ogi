@@ -1,12 +1,15 @@
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import type { TransformRun } from "../types/transform";
 import { ENTITY_TYPE_META } from "../types/entity";
+import { themedEntityColor } from "../lib/graphTheme";
+import { useThemeStore } from "../stores/themeStore";
 
 interface TransformResultsProps {
   run: TransformRun;
 }
 
 export function TransformResults({ run }: TransformResultsProps) {
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const statusIcon = {
     completed: <CheckCircle2 size={14} className="text-success" />,
     failed: <XCircle size={14} className="text-danger" />,
@@ -71,7 +74,7 @@ export function TransformResults({ run }: TransformResultsProps) {
                           <td className="px-2 py-1">
                             <span
                               className="inline-block w-2 h-2 rounded-full mr-1.5"
-                              style={{ backgroundColor: meta?.color }}
+                              style={{ backgroundColor: meta ? themedEntityColor(meta.color, resolvedTheme) : undefined }}
                             />
                             {entity.type}
                           </td>

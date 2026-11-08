@@ -10,7 +10,7 @@ import {
   isCustomSvgIcon,
   resolveEntityIconName,
 } from "./entityIconRegistry";
-import { themedEdgeColor, type GraphPalette } from "./graphTheme";
+import { themedEdgeColor, themedEntityColor, type GraphPalette } from "./graphTheme";
 
 const EXPORT_MAX_DIMENSION = 2800;
 const EXPORT_MIN_DIMENSION = 1200;
@@ -367,7 +367,7 @@ async function composeOverlays(
         y: point.y,
         size: Math.max(10, scaledSize * 1.35),
         icon: customIcon,
-        color: getContrastIconColor(String(attrs.color ?? "")),
+        color: getContrastIconColor(themedEntityColor(String(attrs.color ?? ""), palette.theme)),
       });
     }
   });
@@ -419,6 +419,8 @@ export async function exportGraphImage({
       defaultNodeColor: "#6366f1",
       defaultEdgeColor: palette.edge,
       labelColor: { color: palette.label },
+      nodeReducer: (_node, data) =>
+        data.color ? { ...data, color: themedEntityColor(data.color, palette.theme) } : data,
       edgeReducer: (_edge, data) => ({ ...data, color: themedEdgeColor(data.color, palette) }),
       labelSize: 12,
       labelRenderedSizeThreshold: 6,
