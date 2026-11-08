@@ -13,7 +13,7 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.134-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 ![Version](https://img.shields.io/github/v/release/khashashin/ogi?display_name=tag&color=green)
 
 [Features](#features) &bull; [Screenshots](#screenshots) &bull; [Quick Start](#quick-start) &bull; [Docker](#docker) &bull; [Transform Hub](#transform-hub) &bull; [Architecture](#architecture) &bull; [Contributing](#contributing)
@@ -26,12 +26,15 @@
 
 ## Features
 
-- **Visual graph investigation** — drag-and-drop entities, explore connections interactively
-- **20+ built-in transforms** — DNS, WHOIS, SSL certs, geolocation, web/email/hash/social enrichment, and more
+- **Visual graph investigation** — drag-and-drop entities, explore connections interactively, 14 layout presets
+- **25+ built-in transforms** — DNS, WHOIS, SSL certificates, geolocation, web, email, hash, people, and location enrichment
 - **Transform Hub** — browse and install community transforms from the [registry](https://github.com/opengraphintel/ogi-transforms)
 - **AI Investigator** — prompt-driven agentic investigations that plan transform runs, stream progress live, and summarize findings with auditability
-- **Import / Export** — JSON, CSV, GraphML, and MTGX format import
-- **Graph analysis** — centrality, community detection, shortest paths
+- **Map view** — geolocated entities on an interactive map, with clustering and routes
+- **Timeline and events** — filter the graph by time window and review every transform run in the project's activity log
+- **Import / Export** — import JSON, CSV, GraphML, and MTGX; export JSON, CSV, GraphML, and PNG images of the graph
+- **Graph analysis** — degree, betweenness, and closeness centrality, PageRank, and connected components
+- **Light and dark themes** — pick dark, light, or follow your system setting
 - **Real-time collaboration** — projects, sharing, and live sync via Supabase Realtime
 - **Async transform jobs** — Redis/RQ queue with WebSocket progress updates
 - **Plugin system** — directory-based plugin discovery with YAML manifests
@@ -41,28 +44,72 @@
 
 ## Screenshots
 
-<div align="center">
+The screenshots follow your GitHub theme. They show an investigation of the public `debian.org` infrastructure, built with the built-in transforms.
 
-|              Graph Investigation              |              Entity Enrichment              |
-| :-------------------------------------------: | :-----------------------------------------: |
-| ![Graph Investigation](docs/images/demo1.png) | ![Entity Enrichment](docs/images/demo2.png) |
+<table>
+  <tr>
+    <th width="50%">Graph investigation</th>
+    <th width="50%">Map view</th>
+  </tr>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/graph-dark.png" />
+        <img src="docs/images/graph-light.png" alt="Graph of debian.org with its IP addresses, mail and name servers, subdomains, and mirrors, and the output of a DNS transform" />
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png" />
+        <img src="docs/images/map-light.png" alt="World map with the geolocated Debian mirror servers" />
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <th width="50%">Transform Hub</th>
+    <th width="50%">Graph analysis</th>
+  </tr>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/hub-dark.png" />
+        <img src="docs/images/hub-light.png" alt="Transform Hub catalog with official and community transforms, trust tiers, and permissions" />
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/analysis-dark.png" />
+        <img src="docs/images/analysis-light.png" alt="PageRank results ranking the most important entities in the graph" />
+      </picture>
+    </td>
+  </tr>
+</table>
 
-|              Transform Hub              |             Export / Import             |
-| :-------------------------------------: | :-------------------------------------: |
-| ![Transform Hub](docs/images/demo3.png) | ![Export Import](docs/images/demo4.png) |
+### Light and dark themes
 
-</div>
+The toggle in the toolbar switches between dark, light, and your system setting.
+
+<table>
+  <tr>
+    <th width="50%">Dark</th>
+    <th width="50%">Light</th>
+  </tr>
+  <tr>
+    <td><img src="docs/images/graph-dark.png" alt="The graph workspace in the dark theme" /></td>
+    <td><img src="docs/images/graph-light.png" alt="The graph workspace in the light theme" /></td>
+  </tr>
+</table>
 
 ## Quick Start
 
 ### Prerequisites
 
-| Tool                             | Version |
-| -------------------------------- | ------- |
-| [Python](https://www.python.org) | 3.14+   |
-| [uv](https://docs.astral.sh/uv/) | latest  |
-| [Node.js](https://nodejs.org)    | 20+     |
-| [pnpm](https://pnpm.io)          | latest  |
+| Tool                             | Version                    |
+| -------------------------------- | -------------------------- |
+| [Python](https://www.python.org) | 3.14+                      |
+| [uv](https://docs.astral.sh/uv/) | latest                     |
+| [Node.js](https://nodejs.org)    | 24 LTS (22.12+ also works) |
+| [pnpm](https://pnpm.io)          | 10.x                       |
 
 ### Backend
 
@@ -158,6 +205,8 @@ cp .env.example .env
 docker compose up
 ```
 
+Open http://localhost:3000 (set `OGI_FRONTEND_PORT` to change the port).
+
 ### Production
 
 Use the prebuilt GHCR images.
@@ -177,7 +226,9 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.2.6`). Defaults to `latest`.
+Set `OGI_IMAGE_TAG` in `.env` to pin a specific release image tag (e.g. `v0.9.1`). Defaults to `latest`, the newest release. The `edge` tag follows the `main` branch.
+
+The production compose file reads `.env` into the backend and both workers, so create it from `.env.example` first. Set at least `OGI_DATABASE_URL`, `OGI_API_KEY_ENCRYPTION_KEY`, and, with sign-in enabled, `OGI_ADMIN_EMAILS`. Values written under a service's `environment:` key take precedence over `.env`, so the in-stack Redis URL and the migration settings stay as the compose file defines them.
 
 ### Hetzner Cloud
 
@@ -239,29 +290,29 @@ Telemetry is designed to avoid sending graph contents, entity values, API keys, 
 <details>
 <summary><strong>Development Compose Services</strong></summary>
 
-| Service        | Description                | Port |
-| -------------- | -------------------------- | ---- |
-| `backend`      | FastAPI application server | 8000 |
-| `worker`       | RQ async job worker        | -    |
-| `agent-worker` | AI Investigator worker     | -    |
-| `frontend`     | React app served via nginx | 80   |
-| `db`           | PostgreSQL 16              | 5432 |
-| `redis`        | Redis 7 (job queue)        | 6379 |
+| Service        | Description                | Host port                  |
+| -------------- | -------------------------- | -------------------------- |
+| `backend`      | FastAPI application server | 8000 (`OGI_PORT`)          |
+| `worker`       | RQ async job worker        | -                          |
+| `agent-worker` | AI Investigator worker     | -                          |
+| `frontend`     | React app served via nginx | 3000 (`OGI_FRONTEND_PORT`) |
+| `db`           | PostgreSQL 16              | 5432                       |
+| `redis`        | Redis 7 (job queue)        | 6379                       |
 
 </details>
 
 <details>
 <summary><strong>Production Compose Services</strong></summary>
 
-| Service        | Description                | Port |
-| -------------- | -------------------------- | ---- |
-| `backend`      | FastAPI application server | 8000 |
-| `worker`       | RQ async job worker        | -    |
-| `agent-worker` | AI Investigator worker     | -    |
-| `frontend`     | React app served via nginx | 80   |
-| `redis`        | Redis 7 (job queue)        | 6379 |
+| Service        | Description                | Port                                      |
+| -------------- | -------------------------- | ----------------------------------------- |
+| `backend`      | FastAPI application server | internal only                             |
+| `worker`       | RQ async job worker        | -                                         |
+| `agent-worker` | AI Investigator worker     | -                                         |
+| `frontend`     | React app served via nginx | container port 80, for your reverse proxy |
+| `redis`        | Redis 7 (job queue)        | internal only                             |
 
-`docker-compose.prod.yml` expects an external PostgreSQL database via `OGI_DATABASE_URL`.
+`docker-compose.prod.yml` expects an external PostgreSQL database via `OGI_DATABASE_URL`. The frontend's nginx proxies `/api` to the backend, so only the frontend needs to be reachable.
 
 </details>
 
@@ -300,25 +351,25 @@ OpenGraph Intel has a built-in transform marketplace. Browse, install, and manag
 uv run ogi transform search dns
 
 # Install a transform
-uv run ogi transform install shodan-host-lookup
+uv run ogi transform install ip-to-shodan-host
 ```
 
 ### Built-in Transform Categories
 
-| Category | Examples                              |
-| -------- | ------------------------------------- |
-| DNS      | A, AAAA, MX, NS, CNAME records        |
-| IP & ASN | GeoIP, reverse IP, ASN info           |
-| SSL/TLS  | Certificate transparency, SSL labs    |
-| Email    | Mailserver validation, breach checks  |
-| Web      | WHOIS, domain info, web extraction    |
-| Social   | Username enumeration, social profiles |
-| Hash     | MD5, SHA1, SHA256 lookups             |
-| Location | Geocoding, weather, nearby ASN data   |
+| Category     | Transforms                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| DNS          | A/AAAA, MX, and NS records, reverse DNS, WHOIS                                                     |
+| IP & ASN     | IP geolocation, ASN lookup                                                                         |
+| Certificates | Certificate transparency subdomains (crt.sh), the TLS certificate a domain serves                  |
+| Email        | Email to domain, common addresses for a domain (after an MX check)                                 |
+| Web          | HTTP headers, outbound links, URLs from robots.txt, page content (Playwright), IOCs from documents |
+| People       | Likely usernames for a person, username search across platforms, people on a website (OpenAI)     |
+| Hash         | VirusTotal hash lookup (API key)                                                                   |
+| Location     | Geocoding, reverse geocoding, timezone, sun times, weather snapshot, nearby ASNs                   |
 
 ### Supported Entity Types
 
-`Person` &bull; `Username` &bull; `Domain` &bull; `IPAddress` &bull; `EmailAddress` &bull; `PhoneNumber` &bull; `Organization` &bull; `URL` &bull; `SocialMedia` &bull; `Hash` &bull; `Document` &bull; `Location` &bull; `ASNumber` &bull; `Network` &bull; `MXRecord` &bull; `NSRecord` &bull; `Nameserver` &bull; `SSLCertificate` &bull; `Subdomain` &bull; `HTTPHeader`
+`Person` &bull; `Username` &bull; `Vulnerability` &bull; `Domain` &bull; `IPAddress` &bull; `EmailAddress` &bull; `PhoneNumber` &bull; `Organization` &bull; `URL` &bull; `SocialMedia` &bull; `Hash` &bull; `Document` &bull; `Location` &bull; `ASNumber` &bull; `Network` &bull; `MXRecord` &bull; `NSRecord` &bull; `Nameserver` &bull; `SSLCertificate` &bull; `Subdomain` &bull; `HTTPHeader`
 
 ### Building Your Own Transforms
 
@@ -340,6 +391,7 @@ license: MIT
 category: dns
 input_types: [Domain]
 output_types: [IPAddress]
+min_ogi_version: "0.9.0"
 permissions:
   network: true
   filesystem: false
@@ -354,6 +406,7 @@ permissions:
 | ---------------- | --------------------------------------------------------------------------- |
 | Backend          | Python 3.14+, FastAPI, SQLModel, asyncpg / aiosqlite                        |
 | Frontend         | React 19, TypeScript 5.9, Sigma.js (graphology), Zustand, Tailwind CSS 4    |
+| Maps             | MapLibre GL, with keyless Esri and OpenStreetMap basemaps (CARTO optional)  |
 | Database         | PostgreSQL 16 (primary) / SQLite (local fallback)                           |
 | Auth & Realtime  | Supabase Auth + JWT + Realtime (optional in local mode)                     |
 | Job Queue        | Redis 7 + RQ (async transforms)                                             |
@@ -366,7 +419,10 @@ permissions:
 ```
 ogi/
 ├── backend/
+│   ├── alembic/            # PostgreSQL migrations
+│   ├── tests/              # pytest suite
 │   └── ogi/
+│       ├── agent/          # AI Investigator (planner, LLM providers, worker)
 │       ├── api/            # REST API routes
 │       ├── cli/            # CLI tool (Typer)
 │       ├── db/             # Database layer (asyncpg + aiosqlite)
@@ -374,15 +430,18 @@ ogi/
 │       ├── models/         # SQLModel definitions
 │       ├── store/          # Data stores
 │       ├── transforms/     # Built-in transforms
-│       │   ├── dns/        # DNS resolution transforms
-│       │   ├── cert/       # SSL certificate transforms
+│       │   ├── cert/       # SSL/TLS certificates
+│       │   ├── dns/        # DNS records, reverse DNS, WHOIS
 │       │   ├── email/      # Email enrichment
 │       │   ├── hash/       # Hash lookups
-│       │   ├── ip/         # IP/ASN/geolocation
-│       │   ├── org/        # Organization info
-│       │   ├── social/     # Social media
+│       │   ├── ip/         # IP geolocation and ASN
+│       │   ├── location/   # Geocoding, timezone, weather, nearby ASNs
+│       │   ├── person/     # Username generation
+│       │   ├── social/     # Username search
 │       │   └── web/        # Web scraping/extraction
 │       ├── worker/         # Async job queue (RQ)
+│       ├── billing.py      # Cloud-only Supporter billing
+│       ├── telemetry.py    # Installation telemetry
 │       ├── config.py       # Pydantic settings
 │       └── main.py         # FastAPI entry point
 ├── frontend/
@@ -390,7 +449,9 @@ ogi/
 │       ├── api/            # API client
 │       ├── components/     # React components
 │       ├── hooks/          # Custom hooks (realtime sync, etc.)
+│       ├── lib/            # Graph layouts, theming, basemaps, runtime env
 │       ├── stores/         # Zustand state management
+│       ├── styles/         # Tailwind theme tokens
 │       ├── types/          # TypeScript types
 │       └── App.tsx         # Main application
 ├── plugins/                # Community plugins directory
@@ -424,8 +485,8 @@ List-style settings accept either:
 | `OGI_REDIS_URL`                                 | Redis connection string for RQ/jobs                                                                              | `redis://localhost:6379/0`                          |
 | `OGI_RQ_QUEUE_NAME`                             | Queue name for transform jobs                                                                                    | `transforms`                                        |
 | `OGI_TRANSFORM_TIMEOUT`                         | Per-transform job timeout in seconds                                                                             | `300`                                               |
-| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`            | Poll interval for the AI Investigator worker                                                                     | `2.0`                                               |
-| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                   | Stale-claim timeout for AI Investigator step recovery                                                            | `120`                                               |
+| `OGI_AGENT_WORKER_POLL_INTERVAL_SEC`            | Poll interval for the AI Investigator worker                                                                     | `1.0`                                               |
+| `OGI_AGENT_CLAIM_TIMEOUT_SEC`                   | Stale-claim timeout for AI Investigator step recovery                                                            | `300`                                               |
 | `OGI_AUTO_RUN_MIGRATIONS`                       | Auto-run Alembic on local non-SQLite app startup                                                                 | `true`                                              |
 | `OGI_RUN_DB_MIGRATIONS`                         | Run DB migrations in container entrypoint                                                                        | `false`                                             |
 | `OGI_DB_MIGRATION_RETRIES`                      | Entry-point migration retry count                                                                                | `30`                                                |
@@ -451,7 +512,7 @@ List-style settings accept either:
 | `OGI_SUPABASE_ANON_KEY`                         | Supabase anon/public key                                                                                         | unset                                               |
 | `OGI_SUPABASE_SERVICE_ROLE_KEY`                 | Supabase service-role key                                                                                        | unset                                               |
 | `OGI_SUPABASE_JWT_SECRET`                       | Supabase JWT secret                                                                                              | unset                                               |
-| `OGI_SUPABASE_REDIRECT_URL`                     | Redirect URL used by frontend auth flows                                                                         | unset                                               |
+| `OGI_SUPABASE_REDIRECT_URL`                     | Redirect URL for frontend auth flows (compose passes it to the frontend as `VITE_SUPABASE_REDIRECT_URL`)         | unset                                               |
 | `OGI_ADMIN_EMAILS`                              | Admin users for registry/plugin management                                                                       | unset                                               |
 | `OGI_TELEMETRY_ENABLED`                         | Enable or disable installation-level telemetry                                                                   | `true`                                              |
 | `OGI_TELEMETRY_LEVEL`                           | Telemetry level (`basic` or `full`)                                                                              | `full`                                              |
@@ -461,13 +522,13 @@ List-style settings accept either:
 | `OGI_API_KEY_INJECTION_ALLOWED_TIERS`           | Tiers allowed when trusted-only mode is enabled                                                                  | `official,verified`                                 |
 | `OGI_API_KEY_SERVICE_ALLOWLIST`                 | Optional allowed services for stored key injection                                                               | empty                                               |
 | `OGI_API_KEY_SERVICE_BLOCKLIST`                 | Optional blocked services for stored key injection                                                               | empty                                               |
-| `OGI_LLM_PROVIDER`                              | Default AI Investigator provider fallback                                                                        | `openai`                                            |
-| `OGI_LLM_MODEL`                                 | Default AI Investigator model fallback                                                                           | `gpt-4.1-mini`                                      |
+| `OGI_LLM_PROVIDER`                              | Fallback AI Investigator provider (`openai`, `anthropic`, or `gemini`) when a user has none saved                | unset                                               |
+| `OGI_LLM_MODEL`                                 | Fallback AI Investigator model when a user has none saved                                                        | unset                                               |
+| `OGI_LLM_API_KEY`                               | Fallback provider API key for the AI Investigator                                                                | unset                                               |
 | `OGI_EXPOSE_ERROR_DETAILS`                      | Include internal details in 500 responses                                                                        | `false`                                             |
-| `OGI_SANDBOX_ENABLED`                           | Enable sandbox execution mode                                                                                    | `false`                                             |
-| `OGI_SANDBOX_TIMEOUT`                           | Sandbox timeout in seconds                                                                                       | `30`                                                |
-| `OGI_SANDBOX_MEMORY_MB`                         | Sandbox memory limit in MB                                                                                       | `256`                                               |
-| `OGI_SANDBOX_ALLOWED_TIERS`                     | Allowed tiers in cloud sandbox mode                                                                              | `official,verified`                                 |
+| `OGI_SANDBOX_ALLOWED_TIERS`                     | Verification tiers that can be installed from the Transform Hub in cloud mode                                    | `official,verified`                                 |
+| `OGI_MEDIA_DIR`                                 | Local directory for uploaded media when Supabase Storage is not used                                             | `media`                                             |
+| `OGI_MEDIA_UPLOAD_MAX_BYTES`                    | Maximum size of an uploaded image                                                                                | `5242880`                                           |
 | `OGI_BOOT_REQUIREMENTS_ENABLE`                  | Enable boot-time plugin dependency install                                                                       | `true`                                              |
 | `OGI_BOOT_REQUIREMENTS_FILE`                    | Boot requirements file path                                                                                      | `/app/plugins/requirements.txt`                     |
 | `OGI_BOOT_LOCK_FILE`                            | Boot lock file path                                                                                              | `/app/plugins/ogi-lock.json`                        |
@@ -484,39 +545,59 @@ See [`.env.example`](.env.example) for the full list.
 
 </details>
 
+<details>
+<summary><strong>Frontend runtime variables</strong></summary>
+
+The frontend container writes these into `env.js` when it starts, so changing one needs only a restart, not a rebuild. They reach the browser, so use publishable values only. The compose files fill the Supabase entries from the `OGI_SUPABASE_*` variables.
+
+| Variable                     | Description                                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`          | Supabase project URL. Leave unset to run without sign-in                                        |
+| `VITE_SUPABASE_ANON_KEY`     | Supabase anon/public key                                                                        |
+| `VITE_SUPABASE_REDIRECT_URL` | Redirect URL for auth flows                                                                     |
+| `VITE_TURNSTILE_SITE_KEY`    | Cloudflare Turnstile site key. Required when the Supabase project has captcha protection on     |
+| `VITE_GA_MEASUREMENT_ID`     | Optional Google Analytics measurement ID                                                        |
+| `VITE_CARTO_API_KEY`         | Optional CARTO key. Without it the map offers only the keyless Esri and OpenStreetMap basemaps  |
+
+</details>
+
 ## Development
 
 ### Running Tests
 
+The backend's test and lint tools are in the `dev` extra. The tests configure their own in-memory SQLite database.
+
 ```bash
 # Backend
 cd backend
-OGI_DB_PATH=":memory:" OGI_USE_SQLITE=true uv run pytest
+uv sync --extra dev
+uv run pytest
 
 # Frontend
 cd frontend
-pnpm test
+pnpm test -- --run       # single run; plain `pnpm test` starts watch mode
 ```
 
 ### Linting & Type Checking
 
 ```bash
-# Backend
+# Backend (the files CI checks today)
 cd backend
-uv run ruff check        # Linting
-uv run mypy              # Type checking
+uv run ruff check ogi/api/router.py ogi/main.py ogi/config.py
+uv run mypy --follow-imports=skip ogi/api/router.py
 
 # Frontend
 cd frontend
 pnpm lint                # ESLint
+pnpm build               # TypeScript check + production build
 ```
 
 ### CI Pipeline
 
 The [CI workflow](.github/workflows/ci.yml) runs on every pull request:
 
-- **Backend:** ruff lint, mypy type check, pytest
-- **Frontend:** vitest, eslint, vite build
+- **Backend:** `uv sync --locked`, ruff and mypy on the files above, pytest
+- **Frontend:** vitest, eslint, `pnpm build` (TypeScript and Vite)
 
 ## Contributing
 
