@@ -50,7 +50,7 @@ dev = [
     "mypy>=1.19.1",
 ]
 web_extract = [
-    "iocsearcher>=2.7.2",
+    "iocsearcher>=3.1.1",
     "playwright>=1.58.0",
 ]
 

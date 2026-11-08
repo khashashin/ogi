@@ -836,7 +836,7 @@ wheels = [
 
 [[package]]
 name = "iocsearcher"
-version = "2.9.1"
+version = "3.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "base58" },
@@ -855,9 +855,9 @@ dependencies = [
     { name = "readabilipy" },
     { name = "solders" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/50/be7abab6399a29f19b90e60ba29539650ec1e4a639958d686b2b0e7d0d41/iocsearcher-2.9.1.tar.gz", hash = "sha256:6578043969cae1ddcfb8667062dd0b4fc9616b365efcb68c6fe4a2d5b78d3399", size = 47276, upload-time = "2026-07-09T11:03:47.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/29/22fc2b12f31106ec2c24e3a88d8a90d45ff8648df098dadaf54f8a6be7e0/iocsearcher-3.1.1.tar.gz", hash = "sha256:c20b12458274df5142f9035dfb7f30a3068388a6de05a165c0156d68911695ae", size = 48249, upload-time = "2026-10-30T11:12:49.735Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/12/872bb08c50b50a543c02f630ffcd0de2dd3b927425d15813dc32eb5a3170/iocsearcher-2.9.1-py3-none-any.whl", hash = "sha256:86548e37c928bb99380c950666d563a7fdf2a380f512e401c09baf3d0c4dc289", size = 47315, upload-time = "2026-07-09T11:03:46.527Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/a4/db321556d1ad0296409d21f31bb1f2c3eeca01e9fa5d5794217d674612d3/iocsearcher-3.1.1-py3-none-any.whl", hash = "sha256:59bd517eb8c5f9185379015523c65b9f23e428665d1762569b0c7570abe4915a", size = 48053, upload-time = "2026-10-30T11:12:48.347Z" },
 ]
 
 [[package]]
@@ -1439,7 +1439,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.135.1" },
     { name = "google-genai", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "iocsearcher", marker = "extra == 'web-extract'", specifier = ">=2.7.2" },
+    { name = "iocsearcher", marker = "extra == 'web-extract'", specifier = ">=3.1.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.19.1" },
     { name = "openai", specifier = ">=3.46.0" },
     { name = "playwright", marker = "extra == 'web-extract'", specifier = ">=1.58.0" },
