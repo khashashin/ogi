@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { DiscoverProject } from "../api/client";
 import { useAuthStore } from "../stores/authStore";
 import { Seo } from "./Seo";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function DiscoverPage() {
   const { user, authEnabled } = useAuthStore();
@@ -73,6 +74,9 @@ export function DiscoverPage() {
           <span className="text-sm text-accent font-medium">Discover</span>
         </nav>
         <div className="flex-1" />
+        <div className="mr-3">
+          <ThemeToggle />
+        </div>
         {authEnabled && user ? (
           <div
             className="flex items-center justify-center w-7 h-7 rounded-full bg-accent text-white text-[10px] font-semibold"
