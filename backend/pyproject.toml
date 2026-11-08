@@ -35,7 +35,7 @@ dependencies = [
     "cryptography>=50.0.0",
     "rq>=3.0.0",
     "redis>=8.1.0",
-    "timezonefinder>=8.2.1",
+    "timezonefinder>=9.2.0",
     "astral>=3.2",
 ]
 
