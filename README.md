@@ -108,7 +108,7 @@ The toggle in the toolbar switches between dark, light, and your system setting.
 | -------------------------------- | -------------------------- |
 | [Python](https://www.python.org) | 3.14+                      |
 | [uv](https://docs.astral.sh/uv/) | latest                     |
-| [Node.js](https://nodejs.org)    | 24 LTS (22.12+ also works) |
+| [Node.js](https://nodejs.org)    | 24 LTS (22.22+ also works) |
 | [pnpm](https://pnpm.io)          | 10.x                       |
 
 ### Backend
