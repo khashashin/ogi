@@ -14,10 +14,6 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open) loadPlugins();
-  }, [open]);
-
   const loadPlugins = async () => {
     setLoading(true);
     try {
@@ -29,6 +25,10 @@ export function PluginManager({ open, onClose }: PluginManagerProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (open) loadPlugins();
+  }, [open]);
 
   const handleToggle = async (name: string) => {
     try {

@@ -19,5 +19,12 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // New in eslint-plugin-react-hooks 7.1. It flags effects that set state synchronously,
+      // mostly dialogs that reset their form when opened and loads that set a loading flag
+      // first. Those cost an extra render but aren't bugs; moving them to keyed remounts or
+      // derived state is a refactor of its own, so they stay visible as warnings until then.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])
