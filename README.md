@@ -44,7 +44,7 @@
 
 ## Screenshots
 
-The screenshots follow your GitHub theme. They show an investigation of the public `debian.org` infrastructure, built with the built-in transforms.
+These screenshots show an investigation of the public `debian.org` infrastructure, built with the built-in transforms.
 
 <table>
   <tr>
